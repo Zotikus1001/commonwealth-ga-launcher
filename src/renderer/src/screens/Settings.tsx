@@ -42,7 +42,8 @@ const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: 
   'high-fps-movement-stability': {
     title: 'High-FPS movement stability',
     description:
-      'Fixes teleporting and harsh position corrections caused by running the game at high frame rates.'
+      'Fixes teleporting and harsh position corrections caused by running the game at high frame rates. ' +
+      'Limiting FPS to your monitor refresh rate is still recommended to avoid other potential issues.'
   }
 };
 

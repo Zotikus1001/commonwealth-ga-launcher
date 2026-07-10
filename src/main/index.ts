@@ -53,6 +53,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
     }
   });
@@ -92,18 +93,30 @@ if (!app.requestSingleInstanceLock()) {
     });
     mainWindow.webContents.on('did-finish-load', () => {
       mainWindow?.webContents.setZoomFactor(UI_ZOOM_FACTOR);
+      mainWindow?.show();
     });
-    mainWindow.on('ready-to-show', () => mainWindow?.show());
+    mainWindow.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        if (isMainFrame) {
+          log.error(
+            `launcher window failed to load ${validatedURL}: ${errorDescription} (${errorCode})`
+          );
+        }
+      }
+    );
     mainWindow.on('closed', () => {
       mainWindow = null;
     });
 
     // electron-vite: dev server URL in dev, bundled file in production.
+    let windowLoad: Promise<void>;
     if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-      void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+      windowLoad = mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
     } else {
-      void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+      windowLoad = mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
     }
+    void windowLoad.catch((error) => log.error(`launcher window load rejected: ${error.message}`));
 
     void orchestrator.start();
   });

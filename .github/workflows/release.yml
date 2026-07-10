@@ -25,6 +25,8 @@ jobs:
     outputs:
       value: ${{ steps.next.outputs.value }}
       stable_branch: ${{ steps.config.outputs.stable_branch }}
+      windows_installer_name: ${{ steps.config.outputs.windows_installer_name }}
+      linux_appimage_name: ${{ steps.config.outputs.linux_appimage_name }}
     steps:
       - uses: actions/checkout@v4
       - id: config
@@ -36,6 +38,8 @@ jobs:
             throw 'Launcher stable branch is not configured.'
           }
           "stable_branch=$($config.stableBranch)" >> $env:GITHUB_OUTPUT
+          "windows_installer_name=$($config.windowsInstallerName)" >> $env:GITHUB_OUTPUT
+          "linux_appimage_name=$($config.linuxAppImageName)" >> $env:GITHUB_OUTPUT
       - name: Require stable branch
         shell: pwsh
         env:
@@ -84,46 +88,9 @@ jobs:
           "value=$next" >> $env:GITHUB_OUTPUT
           Write-Host "Release version for $env:GITHUB_REPOSITORY: $next"
 
-  release:
-    needs: version
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Create stable-channel draft release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.version.outputs.value }}
-          STABLE_BRANCH: ${{ needs.version.outputs.stable_branch }}
-        run: |
-          $tag = "v$env:VERSION"
-          $endpoint = "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
-          $existingJson = gh api $endpoint 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            $existing = $existingJson | ConvertFrom-Json
-            if ($existing.target_commitish -ne $env:STABLE_BRANCH) {
-              throw "Existing $tag release targets $($existing.target_commitish), not $env:STABLE_BRANCH."
-            }
-            if (-not $existing.draft) {
-              throw "Existing $tag release is already published."
-            }
-          } else {
-            gh release create $tag `
-              --repo $env:GITHUB_REPOSITORY `
-              --target $env:STABLE_BRANCH `
-              --draft `
-              --title "Commonwealth GA Launcher $tag" `
-              --notes "Windows NSIS installer and Linux AppImage."
-            if ($LASTEXITCODE -ne 0) { throw "Could not create stable-channel draft $tag." }
-          }
-
   build:
-    needs:
-      - version
-      - release
+    needs: version
     strategy:
-      max-parallel: 1
       matrix:
         include:
           - os: windows-latest
@@ -132,7 +99,7 @@ jobs:
             target: linux
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -153,13 +120,30 @@ jobs:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
         run: |
           node scripts/generate-launcher-config.cjs --validate-environment
-      - name: Package and upload ${{ matrix.target }} release
-        run: npx electron-builder --${{ matrix.target }} --config electron-builder.config.cjs --publish always
+      - name: Package ${{ matrix.target }} release
+        run: npx electron-builder --${{ matrix.target }} --config electron-builder.config.cjs --publish never
         env:
-          GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
+      - name: Collect Windows release files
+        if: matrix.target == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows
+          path: |
+            dist/${{ needs.version.outputs.windows_installer_name }}
+            dist/latest.yml
+          if-no-files-found: error
+      - name: Collect Linux release files
+        if: matrix.target == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-linux
+          path: |
+            dist/${{ needs.version.outputs.linux_appimage_name }}
+            dist/latest-linux.yml
+          if-no-files-found: error
 
   publish:
     needs:
@@ -169,14 +153,105 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Publish completed cross-platform release
+      - name: Download cross-platform release files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: launcher-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify release files
+        shell: pwsh
+        env:
+          WINDOWS_INSTALLER: ${{ needs.version.outputs.windows_installer_name }}
+          LINUX_APPIMAGE: ${{ needs.version.outputs.linux_appimage_name }}
+        run: |
+          $required = @(
+            $env:WINDOWS_INSTALLER,
+            'latest.yml',
+            $env:LINUX_APPIMAGE,
+            'latest-linux.yml'
+          )
+          $actual = @(
+            Get-ChildItem -LiteralPath release-assets -File |
+              Select-Object -ExpandProperty Name
+          )
+          $missing = @($required | Where-Object { $_ -notin $actual })
+          $unexpected = @($actual | Where-Object { $_ -notin $required })
+          if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+            throw "Release file mismatch. Missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')"
+          }
+      - name: Publish one cross-platform release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.value }}
-        run: >-
-          gh release edit "v$VERSION"
-          --repo "$GITHUB_REPOSITORY"
-          --draft=false
-          --latest
-          --title "Commonwealth GA Launcher v$VERSION"
-          --notes "Windows NSIS installer and Linux AppImage. The launcher updates itself before starting the game."
+          STABLE_BRANCH: ${{ needs.version.outputs.stable_branch }}
+          WINDOWS_INSTALLER: ${{ needs.version.outputs.windows_installer_name }}
+          LINUX_APPIMAGE: ${{ needs.version.outputs.linux_appimage_name }}
+        run: |
+          $tag = "v$env:VERSION"
+          $releasesJson = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read existing releases.' }
+          $matching = @($releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $tag })
+          if ($matching.Count -gt 1) { throw "More than one release uses $tag." }
+
+          if ($matching.Count -eq 1) {
+            $existing = $matching[0]
+            if ($existing.target_commitish -ne $env:STABLE_BRANCH) {
+              throw "Existing $tag release targets $($existing.target_commitish), not $env:STABLE_BRANCH."
+            }
+            if (-not $existing.draft) { throw "Existing $tag release is already published." }
+          } else {
+            gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" *> $null
+            if ($LASTEXITCODE -eq 0) {
+              gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/tags/$tag"
+              if ($LASTEXITCODE -ne 0) { throw "Could not remove orphaned tag $tag." }
+            }
+            gh release create $tag `
+              --repo $env:GITHUB_REPOSITORY `
+              --target $env:STABLE_BRANCH `
+              --draft `
+              --title "Commonwealth GA Launcher $tag" `
+              --notes "Windows installer and Linux AppImage. The launcher updates itself before starting the game."
+            if ($LASTEXITCODE -ne 0) { throw "Could not create draft release $tag." }
+          }
+
+          $files = @(
+            "release-assets/$env:WINDOWS_INSTALLER",
+            'release-assets/latest.yml',
+            "release-assets/$env:LINUX_APPIMAGE",
+            'release-assets/latest-linux.yml'
+          )
+          gh release upload $tag @files --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload all release files for $tag." }
+          gh release edit $tag `
+            --repo $env:GITHUB_REPOSITORY `
+            --draft=false `
+            --latest `
+            --title "Commonwealth GA Launcher $tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish $tag." }
+      - name: Verify published release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.value }}
+          WINDOWS_INSTALLER: ${{ needs.version.outputs.windows_installer_name }}
+          LINUX_APPIMAGE: ${{ needs.version.outputs.linux_appimage_name }}
+        run: |
+          $tag = "v$env:VERSION"
+          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify published release $tag." }
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.draft -or $release.prerelease) { throw "$tag is not a stable published release." }
+          $required = @(
+            $env:WINDOWS_INSTALLER,
+            'latest.yml',
+            $env:LINUX_APPIMAGE,
+            'latest-linux.yml'
+          )
+          $actual = @($release.assets | ForEach-Object { $_.name })
+          $missing = @($required | Where-Object { $_ -notin $actual })
+          $unexpected = @($actual | Where-Object { $_ -notin $required })
+          if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+            throw "Published asset mismatch. Missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')"
+          }

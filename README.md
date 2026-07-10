@@ -1,25 +1,28 @@
 # Commonwealth GA Launcher
 
+Download the launcher, select your Global Agenda installation, and play.
+
 ## Download and install
 
-- [Download for Windows](../../releases/latest/download/Commonwealth-GA-Setup.exe)
-- [Download for Linux](../../releases/latest/download/Commonwealth-GA.AppImage)
+### Windows
 
-On Windows, download and run the installer, then select `GlobalAgenda.exe` in the launcher.
+**[Download the Windows installer](../../releases/latest/download/Commonwealth-GA-Launcher-Windows-x64-Setup.exe)**
 
-On Linux, make the AppImage executable, open it, then select the game executable and configure your
-Wine runner and prefix in the launcher.
+Run the installer, open the launcher, and select `GlobalAgenda.exe` when prompted.
+
+### Linux
+
+**[Download the Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
+
+Allow the AppImage to run, open it, and select your game executable. The launcher includes settings
+for choosing your Wine runner and prefix.
 
 The launcher checks for updates automatically before starting the game.
-Automatic updates preserve compatible settings. Running the installer manually over an existing
-installation performs a clean reinstall and resets saved launcher settings.
 
-## Developer information
+## Developers
 
 <details>
-<summary>Show development and release instructions</summary>
-
-### Local development
+<summary>Development and release information</summary>
 
 Node.js 22.12 or newer is required.
 
@@ -30,31 +33,13 @@ npm run dev
 npm run typecheck
 ```
 
-Distribution builds are created with `npm run dist:win` or `npm run dist:linux` and written to
-`dist/`.
+Create local packages with `npm run dist:win` or `npm run dist:linux`. Output is written to `dist/`.
 
-Click the About tab ten times within four seconds to unlock the Dev tab. Developer mode supports
-named test servers, repeated game launches, and a separate windowed/resolution-controlled Dev
-Launch action. Untick **Developer mode** and save to disable its features and hide the Dev tab.
+Public settings are stored in `launcher.config.yml`. Local development uses the generated `out/`
+files and does not check online release channels.
 
-### Configuration
-
-Public build settings, including the primary and fallback Live server addresses, live in
-`launcher.config.yml`. Custom test servers are configured in Dev mode.
-
-Development builds use the local `out/` files and do not check online release channels.
-Settings use explicit schema migrations so automatic updates retain compatible values and upgrade
-older settings files. Corrupt or newer incompatible files are preserved as backups before defaults
-are restored.
-
-### Releases
-
-Run the `Release launcher` workflow and select a patch, minor, or major bump. It builds the Windows
-installer and Linux AppImage, publishes their update metadata, and only exposes the release after
-both platforms succeed.
-
-The configured stable branch and update sources are read from `launcher.config.yml`. The launcher
-checks every configured source and selects the most recently published eligible release by date and
-time, independently of version ordering.
+Run the `Release launcher` workflow from the stable branch to publish the Windows installer and
+Linux AppImage. The workflow updates the version automatically and publishes both platforms in one
+release.
 
 </details>

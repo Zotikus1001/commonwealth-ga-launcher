@@ -40,6 +40,7 @@ module.exports = {
   nsis: {
     oneClick: true,
     perMachine: false,
+    differentialPackage: false,
     deleteAppDataOnUninstall: true,
     include: 'build/installer.nsh'
   },

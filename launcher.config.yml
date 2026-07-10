@@ -11,5 +11,5 @@ update_repositories:
 server_history_repository: "commonwealthga/commonwealth-ga-server"
 server_history_branch: "master"
 server_history_count: "5"
-windows_installer_name: "Commonwealth-GA-Setup.exe"
-linux_appimage_name: "Commonwealth-GA.AppImage"
+windows_installer_name: "Commonwealth-GA-Launcher-Windows-x64-Setup.exe"
+linux_appimage_name: "Commonwealth-GA-Launcher-Linux-x64.AppImage"

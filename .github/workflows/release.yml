@@ -144,7 +144,7 @@ jobs:
       - name: Install Electron runtime
         run: npx --no-install install-electron --no
       - name: Inject release version
-        run: npm version ${{ needs.version.outputs.value }} --no-git-tag-version
+        run: npm version ${{ needs.version.outputs.value }} --no-git-tag-version --allow-same-version
       - name: Typecheck and compile
         run: npm run build
       - name: Validate release server address

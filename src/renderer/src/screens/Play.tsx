@@ -171,7 +171,7 @@ export default function Play({
       <div className={styles.grid}>
         <section className={`panel rise ${styles.updates}`} style={{ animationDelay: '100ms' }}>
           <div className={styles.panelHeading}>
-            <div className="panel-title">Updates</div>
+            <div className="panel-title">Server updates</div>
             <span className={`${styles.updateState} ${styles[update.tone]}`}>{update.text}</span>
           </div>
           {state.progress && (

@@ -36,6 +36,9 @@ npm run dev
 npm run typecheck
 ```
 
+To reveal the Dev tab, click the About tab ten times within four seconds. Enable Developer mode
+there to keep the tab available and use its development launch options.
+
 Create local packages with `npm run dist:win` or `npm run dist:linux`. Output is written to `dist/`.
 
 Public settings are stored in `launcher.config.yml`. Local development uses the generated `out/`

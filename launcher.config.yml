@@ -1,0 +1,15 @@
+# Public launcher configuration. Keep string values double-quoted.
+default_server_host: "216.201.76.180"
+fallback_server_host: "commonwealth.ydns.eu"
+default_server_name: "Live"
+discord_invite_url: "https://discord.gg/EdwDCnBG7"
+steam_store_url: "https://store.steampowered.com/app/17020/"
+stable_branch: "master"
+update_repositories:
+  - "Zotikus1001/commonwealth-ga-launcher"
+  - "commonwealthga/commonwealth-ga-launcher"
+server_history_repository: "commonwealthga/commonwealth-ga-server"
+server_history_branch: "master"
+server_history_count: "5"
+windows_installer_name: "Commonwealth-GA-Setup.exe"
+linux_appimage_name: "Commonwealth-GA.AppImage"

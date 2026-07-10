@@ -1,0 +1,98 @@
+import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import type { DeepPartial, Settings } from '@shared/types';
+import { IPC } from '@shared/ipc';
+import type { Orchestrator } from './Orchestrator';
+import type { ConfigStore } from './services/ConfigStore';
+import type { Log } from './services/Log';
+import { listWineRunners, createWinePrefix } from './services/WineEnv';
+import { buildDiagnosticsReport } from './services/Diagnostics';
+import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
+
+export function registerIpc(
+  getWindow: () => BrowserWindow | null,
+  orchestrator: Orchestrator,
+  config: ConfigStore,
+  log: Log
+): void {
+  // main -> renderer pushes
+  orchestrator.setBroadcast((state) => {
+    getWindow()?.webContents.send(IPC.evState, state);
+  });
+  log.onLine((line) => {
+    getWindow()?.webContents.send(IPC.evLog, line);
+  });
+
+  ipcMain.handle(IPC.getState, () => orchestrator.getState());
+  ipcMain.handle(IPC.getSettings, () => config.get());
+
+  ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
+    const updated = await config.update(patch);
+    void orchestrator.settingsChanged();
+    return updated;
+  });
+
+  ipcMain.handle(IPC.browseForGame, async () => {
+    const win = getWindow();
+    if (!win) return null;
+    const res = await dialog.showOpenDialog(win, {
+      title: "Select GlobalAgenda.exe (in the game's Binaries folder)",
+      properties: ['openFile'],
+      filters:
+        process.platform === 'win32'
+          ? [{ name: 'GlobalAgenda.exe', extensions: ['exe'] }]
+          : [{ name: 'GlobalAgenda.exe', extensions: ['exe', '*'] }]
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    const exePath = res.filePaths[0];
+    await config.update({ gameExePath: exePath });
+    void orchestrator.settingsChanged();
+    return exePath;
+  });
+
+  ipcMain.handle(IPC.autoDetectGame, () => orchestrator.autoDetect());
+  ipcMain.handle(IPC.play, () => orchestrator.play());
+  ipcMain.handle(IPC.playDeveloper, () => orchestrator.play(true));
+  ipcMain.handle(IPC.selectDeveloperServer, (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Developer server identifier must be a string.');
+    return orchestrator.selectDeveloperServer(id);
+  });
+  ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
+  ipcMain.handle(IPC.listWineRunners, () => listWineRunners(config.get(), log));
+  ipcMain.handle(IPC.createWinePrefix, () => {
+    const s = config.get();
+    return createWinePrefix(s.linux.winePath, s.linux.winePrefix, log);
+  });
+
+  ipcMain.handle(IPC.openDiscord, async () => {
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.discordInviteUrl);
+      return { ok: true, message: 'Discord invite opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open Discord: ${(error as Error).message}` };
+    }
+  });
+
+  ipcMain.handle(IPC.openSteamStore, async () => {
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.steamStoreUrl);
+      return { ok: true, message: 'Steam page opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open Steam: ${(error as Error).message}` };
+    }
+  });
+
+  ipcMain.handle(IPC.openLauncherLogs, async () => {
+    const error = await shell.openPath(log.logDir);
+    return error
+      ? { ok: false, message: `Could not open logs folder: ${error}` }
+      : { ok: true, message: 'Logs folder opened.' };
+  });
+
+  ipcMain.handle(IPC.copyDiagnostics, () => {
+    const report = buildDiagnosticsReport(orchestrator.getState(), config.get(), log.tail());
+    clipboard.writeText(report);
+    return { ok: true, message: 'Diagnostics copied to clipboard.' };
+  });
+
+  ipcMain.handle(IPC.getLogTail, () => log.tail());
+}

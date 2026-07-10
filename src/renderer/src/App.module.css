@@ -1,0 +1,82 @@
+.boot {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  letter-spacing: 0.4em;
+  color: var(--text-faint);
+}
+
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* single amber hairline across the very top — the one warm line in the frame */
+.topline {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--amber) 18%, var(--amber) 82%, transparent);
+  opacity: 0.85;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(11, 14, 20, 0.6);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--text);
+}
+
+.wordmark::first-letter {
+  color: var(--amber);
+}
+
+.tagline {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  color: var(--text-faint);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.version {
+  color: var(--text-faint);
+}
+
+.updateChip {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.updateChip:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: #8fe4f0;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

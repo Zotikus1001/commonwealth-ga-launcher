@@ -1,0 +1,39 @@
+{
+  "name": "commonwealth-ga-launcher",
+  "productName": "Commonwealth GA Launcher",
+  "version": "0.1.0",
+  "description": "Cross-platform launcher for the Commonwealth Global Agenda private server.",
+  "author": "Commonwealth GA",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "main": "./out/main/index.js",
+  "scripts": {
+    "generate:config": "node scripts/generate-launcher-config.cjs",
+    "predev": "npm run generate:config",
+    "dev": "electron-vite dev",
+    "pretypecheck": "npm run generate:config",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
+    "prebuild": "npm run generate:config",
+    "build": "npm run typecheck && electron-vite build",
+    "dist:win": "npm run build && electron-builder --win --config electron-builder.config.cjs",
+    "dist:linux": "npm run build && electron-builder --linux --config electron-builder.config.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

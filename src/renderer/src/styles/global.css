@@ -1,0 +1,161 @@
+/* Commonwealth GA launcher theme: mission-console industrial.
+   Deep graphite-navy field, hairline panels, condensed uppercase display type, monospace telemetry,
+   ONE amber CTA. Cyan is reserved for data accents, red for faults, green for link-up. */
+
+:root {
+  --bg: #0b0e14;
+  --bg-raise: #0f131c;
+  --panel: #11161f;
+  --panel-raise: #141a25;
+  --line: #222b3a;
+  --line-bright: #33415c;
+  --text: #cdd5e3;
+  --text-dim: #79839a;
+  --text-faint: #545e73;
+  --amber: #f0a63c;
+  --amber-hi: #ffbd57;
+  --amber-dim: #7a5620;
+  --cyan: #45c8da;
+  --green: #46c06d;
+  --red: #e0574f;
+
+  --font-display: 'Bahnschrift', 'DejaVu Sans Condensed', 'Arial Narrow', 'Liberation Sans Narrow', sans-serif;
+  --font-body: 'Segoe UI', 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  user-select: none;
+  /* Layered atmosphere: faint blueprint grid + vignette. No gradients-as-decoration beyond this. */
+  background-image:
+    radial-gradient(ellipse 120% 90% at 50% -20%, rgba(69, 200, 218, 0.05), transparent 55%),
+    radial-gradient(ellipse 140% 110% at 50% 120%, rgba(0, 0, 0, 0.55), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 47px, rgba(51, 65, 92, 0.14) 47px 48px),
+    repeating-linear-gradient(90deg, transparent 0 47px, rgba(51, 65, 92, 0.14) 47px 48px);
+}
+
+::selection {
+  background: var(--amber-dim);
+  color: #fff;
+}
+
+/* ---- shared primitives -------------------------------------------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+button {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--panel-raise);
+  color: var(--text);
+  border: 1px solid var(--line-bright);
+  padding: 7px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--amber);
+  color: var(--amber-hi);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-raise);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  width: 100%;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+input[type='text']:focus,
+input[type='number']:focus,
+select:focus {
+  border-color: var(--amber);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--amber);
+  width: 14px;
+  height: 14px;
+}
+
+label {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* entry animation for panels */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 380ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}

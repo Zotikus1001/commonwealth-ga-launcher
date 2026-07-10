@@ -1,0 +1,414 @@
+.play {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 32px 26px;
+  overflow-y: auto;
+}
+
+.discordWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.discordBanner {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 82px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 13px;
+  border: 1px solid rgba(88, 101, 242, 0.72);
+  border-left: 3px solid #7289da;
+  background:
+    linear-gradient(100deg, rgba(88, 101, 242, 0.14), transparent 52%),
+    rgba(15, 19, 28, 0.74);
+  color: var(--text);
+  text-align: left;
+  transition: border-color 130ms ease, background 130ms ease, transform 130ms ease;
+}
+
+.discordBanner:hover:not(:disabled) {
+  border-color: #8ea1e1;
+  background:
+    linear-gradient(100deg, rgba(88, 101, 242, 0.22), transparent 58%),
+    rgba(18, 23, 35, 0.82);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.discordBadge {
+  color: #aab7ec;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+}
+
+.discordCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.discordCopy strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.discordCopy small {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-family: var(--font-body);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discordJoin {
+  color: #aab7ec;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+}
+
+.discordError {
+  margin: 0;
+  color: var(--red);
+  font-size: 11px;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.updates {
+  min-height: 252px;
+}
+
+.panelHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.updateState {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ok {
+  color: var(--green);
+}
+
+.warn {
+  color: var(--amber-hi);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+.progressWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 2px;
+}
+
+.progressTrack {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-raise);
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 160ms linear;
+}
+
+.progressIndeterminate {
+  width: 30%;
+  animation: slide 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes slide {
+  from { margin-left: 0; }
+  to { margin-left: 70%; }
+}
+
+.progressLabel {
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.historyLabel {
+  margin-top: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.commitList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.commitList li {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 28px;
+  border-bottom: 1px solid rgba(47, 56, 72, 0.55);
+}
+
+.commitMark {
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--cyan);
+  transform: rotate(45deg);
+}
+
+.commitMessage {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitList time {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.historyEmpty {
+  margin: 18px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.server {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.server::before,
+.server::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.server::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--amber);
+  border-left: 2px solid var(--amber);
+}
+
+.server::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 2px solid var(--amber);
+  border-bottom: 2px solid var(--amber);
+}
+
+.serverName {
+  margin: 6px 0 18px;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+
+.serverStatus {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.24em;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.dotOn {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.dotOff {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+.dotUnknown {
+  background: var(--text-faint);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.ctaBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.playControls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+}
+
+.serverPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.serverPicker span {
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.serverPicker select {
+  width: 210px;
+  height: 55px;
+  border-color: var(--cyan);
+  color: var(--text);
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+}
+
+.playButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 280px;
+  height: 55px;
+  padding: 0 46px 0 52px;
+  border: 1px solid var(--amber);
+  background: var(--amber);
+  color: #14100a;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  transition: background 130ms ease, box-shadow 130ms ease;
+}
+
+.devPlayButton {
+  min-width: 190px;
+  height: 55px;
+  padding: 0 20px;
+  border-color: var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.devPlayButton:hover:not(:disabled) {
+  border-color: #8fe4f0;
+  background: rgba(64, 191, 191, 0.09);
+  color: #8fe4f0;
+  box-shadow: 0 0 28px -12px var(--cyan);
+}
+
+.playButton:hover:not(:disabled) {
+  border-color: var(--amber-hi);
+  background: var(--amber-hi);
+  color: #14100a;
+  box-shadow: 0 0 34px -8px var(--amber);
+}
+
+.playButton:disabled {
+  border-color: var(--line-bright);
+  background: transparent;
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+.serverSpinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid rgba(69, 200, 218, 0.28);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: serverSpin 800ms linear infinite;
+}
+
+@keyframes serverSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.statusLine {
+  min-height: 17px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+.errorDetails {
+  max-width: 640px;
+  margin: 0;
+  color: var(--red);
+  font-size: 11px;
+  text-align: center;
+  user-select: text;
+}

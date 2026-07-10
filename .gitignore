@@ -1,0 +1,7 @@
+Memory/
+node_modules/
+out/
+dist/
+windows-launcher-menu.bat
+src/shared/generatedLauncherConfig.ts
+*.tsbuildinfo

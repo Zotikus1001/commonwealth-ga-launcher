@@ -1,0 +1,182 @@
+name: Release launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version component to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      value: ${{ steps.next.outputs.value }}
+      stable_branch: ${{ steps.config.outputs.stable_branch }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: config
+        name: Read launcher configuration
+        shell: pwsh
+        run: |
+          $config = node scripts/generate-launcher-config.cjs --json | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace($config.stableBranch)) {
+            throw 'Launcher stable branch is not configured.'
+          }
+          "stable_branch=$($config.stableBranch)" >> $env:GITHUB_OUTPUT
+      - name: Require stable branch
+        shell: pwsh
+        env:
+          STABLE_BRANCH: ${{ steps.config.outputs.stable_branch }}
+        run: |
+          if ($env:GITHUB_REF_NAME -ne $env:STABLE_BRANCH) {
+            throw "Launcher releases must run from $env:STABLE_BRANCH, not $env:GITHUB_REF_NAME."
+          }
+      - id: next
+        name: Compute release version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump }}
+          STABLE_BRANCH: ${{ steps.config.outputs.stable_branch }}
+        run: |
+          $seed = (Get-Content -LiteralPath package.json -Encoding utf8 | ConvertFrom-Json).version
+          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read existing releases.' }
+          $latest = $releaseJson |
+            ConvertFrom-Json |
+            Where-Object {
+              -not $_.draft -and
+              -not $_.prerelease -and
+              $_.target_commitish -eq $env:STABLE_BRANCH
+            } |
+            Sort-Object { [DateTimeOffset]$_.published_at } |
+            Select-Object -Last 1
+          if (-not $latest) {
+            $next = $seed
+          } else {
+            $latestTag = $latest.tag_name
+            $parts = $latestTag.Trim().TrimStart('v').Split('.')
+            if ($parts.Count -ne 3) { throw "Latest release tag is not semantic: $latestTag" }
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+            $patch = [int]$parts[2]
+            switch ($env:BUMP) {
+              'major' { $major++; $minor = 0; $patch = 0 }
+              'minor' { $minor++; $patch = 0 }
+              'patch' { $patch++ }
+              default { throw "Unsupported version bump: $env:BUMP" }
+            }
+            $next = "$major.$minor.$patch"
+          }
+          "value=$next" >> $env:GITHUB_OUTPUT
+          Write-Host "Release version for $env:GITHUB_REPOSITORY: $next"
+
+  release:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create stable-channel draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.value }}
+          STABLE_BRANCH: ${{ needs.version.outputs.stable_branch }}
+        run: |
+          $tag = "v$env:VERSION"
+          $endpoint = "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          $existingJson = gh api $endpoint 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if ($existing.target_commitish -ne $env:STABLE_BRANCH) {
+              throw "Existing $tag release targets $($existing.target_commitish), not $env:STABLE_BRANCH."
+            }
+            if (-not $existing.draft) {
+              throw "Existing $tag release is already published."
+            }
+          } else {
+            gh release create $tag `
+              --repo $env:GITHUB_REPOSITORY `
+              --target $env:STABLE_BRANCH `
+              --draft `
+              --title "Commonwealth GA Launcher $tag" `
+              --notes "Windows NSIS installer and Linux AppImage."
+            if ($LASTEXITCODE -ne 0) { throw "Could not create stable-channel draft $tag." }
+          }
+
+  build:
+    needs:
+      - version
+      - release
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: ubuntu-latest
+            target: linux
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Electron runtime
+        run: npx --no-install install-electron --no
+      - name: Inject release version
+        run: npm version ${{ needs.version.outputs.value }} --no-git-tag-version
+      - name: Typecheck and compile
+        run: npm run build
+      - name: Validate release server address
+        shell: pwsh
+        env:
+          GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
+        run: |
+          node scripts/generate-launcher-config.cjs --validate-environment
+      - name: Package and upload ${{ matrix.target }} release
+        run: npx electron-builder --${{ matrix.target }} --config electron-builder.config.cjs --publish always
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
+
+  publish:
+    needs:
+      - version
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish completed cross-platform release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.value }}
+        run: >-
+          gh release edit "v$VERSION"
+          --repo "$GITHUB_REPOSITORY"
+          --draft=false
+          --latest
+          --title "Commonwealth GA Launcher v$VERSION"
+          --notes "Windows NSIS installer and Linux AppImage. The launcher updates itself before starting the game."

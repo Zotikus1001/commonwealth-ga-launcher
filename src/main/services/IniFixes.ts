@@ -30,65 +30,99 @@ interface IniPatchOptions {
   suppressOverhealing?: boolean;
 }
 
-function patchEnginePlayerSection(text: string): TextPatchResult {
-  const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const hasTrailingNewline = text.endsWith('\n');
-  const lines = text.split(/\r?\n/);
-  if (hasTrailingNewline) lines.pop();
+function trailingLineEnding(value: string): string {
+  return value.match(/(?:\r\n|\n|\r)$/)?.[0] ?? '';
+}
 
+function patchEnginePlayerSection(text: string): TextPatchResult {
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
   let inEnginePlayer = false;
   let firstSectionStart = -1;
   let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
   const assignments = new Map<NetSpeedKey, number>(NET_SPEED_KEYS.map((key) => [key, 0]));
+  const removals = new Set<NetSpeedKey>();
   let changed = false;
 
   for (let index = 0; index < lines.length; index++) {
-    const section = lines[index].match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       if (inEnginePlayer && firstSectionEnd < 0) firstSectionEnd = index;
       inEnginePlayer = section[1].trim().toLowerCase() === 'engine.player';
-      if (inEnginePlayer && firstSectionStart < 0) firstSectionStart = index;
+      if (inEnginePlayer && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
       continue;
     }
     if (!inEnginePlayer) continue;
 
-    const assignment = lines[index].match(
+    const assignment = line.match(
       /^(\s*)([+.-]?)(ConfiguredInternetSpeed|ConfiguredLanSpeed)(\s*=\s*)([^;#\s]*)(.*)$/i
     );
-    // Unreal -Key lines remove inherited values; changing them would preserve the old limit.
-    if (!assignment || assignment[2] === '-') continue;
-
+    if (!assignment) continue;
     const key = NET_SPEED_KEYS.find((candidate) => candidate.toLowerCase() === assignment[3].toLowerCase());
     if (!key) continue;
+    // Unreal -Key lines remove inherited values; changing them would preserve the old limit.
+    if (assignment[2] === '-') {
+      removals.add(key);
+      continue;
+    }
     assignments.set(key, (assignments.get(key) ?? 0) + 1);
     const replacement = `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}${CLIENT_NET_SPEED}${assignment[6]}`;
-    if (replacement !== lines[index]) {
-      lines[index] = replacement;
+    if (replacement !== line) {
+      lines[index] = replacement + lineEnding;
       changed = true;
     }
   }
 
+  const missing = NET_SPEED_KEYS.filter((key) => (assignments.get(key) ?? 0) === 0);
+  if (missing.length === 0) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignments = missing.map(
+    (key) => `${removals.has(key) ? '+' : ''}${key}=${CLIENT_NET_SPEED}`
+  );
+
   if (firstSectionStart < 0) {
-    if (lines.length > 0 && lines[lines.length - 1].trim() !== '') lines.push('');
-    lines.push('[Engine.Player]');
-    firstSectionStart = lines.length - 1;
-    firstSectionEnd = lines.length;
-    changed = true;
-  } else if (firstSectionEnd < 0) {
-    firstSectionEnd = lines.length;
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    const section =
+      `[Engine.Player]${preferredLineEnding}` + newAssignments.join(preferredLineEnding);
+    return { text: text + separator + section, changed: true };
   }
 
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
   let insertAt = firstSectionEnd;
-  while (insertAt > firstSectionStart + 1 && lines[insertAt - 1].trim() === '') insertAt--;
-  for (const key of NET_SPEED_KEYS) {
-    if ((assignments.get(key) ?? 0) > 0) continue;
-    lines.splice(insertAt, 0, `${key}=${CLIENT_NET_SPEED}`);
-    insertAt++;
-    changed = true;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
   }
-
-  const patched = lines.join(newline) + (hasTrailingNewline ? newline : '');
-  return { text: patched, changed };
+  const previousHasLineEnding =
+    insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  const inserted = newAssignments.map((assignment, index) => {
+    const prefix = index === 0 && !previousHasLineEnding ? preferredLineEnding : '';
+    const isLast = index === newAssignments.length - 1;
+    const suffix = isLast && preserveMissingTrailingNewline ? '' : preferredLineEnding;
+    return prefix + assignment + suffix;
+  });
+  lines.splice(insertAt, 0, ...inserted);
+  return { text: lines.join(''), changed: true };
 }
 
 function verifyEnginePlayerSection(text: string, fileName: string): void {
@@ -318,8 +352,9 @@ async function patchIniFile(
   let patchedText = original;
   let changed = false;
   const apply = (patch: TextPatchResult): void => {
+    if (!patch.changed) return;
     patchedText = patch.text;
-    changed ||= patch.changed;
+    changed = true;
   };
 
   if (options.netSpeed) apply(patchEnginePlayerSection(patchedText));

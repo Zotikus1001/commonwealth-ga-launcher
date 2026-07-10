@@ -12,6 +12,9 @@ Run the installer, open the launcher, and select `GlobalAgenda.exe` when prompte
 
 ### Linux
 
+> [!WARNING]
+> The Linux version is currently untested.
+
 **[Download the Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
 Allow the AppImage to run, open it, and select your game executable. The launcher includes settings

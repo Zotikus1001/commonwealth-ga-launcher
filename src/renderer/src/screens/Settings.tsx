@@ -967,7 +967,15 @@ function DiagnosticsTab({
   const localDevelopment = state.launcherUpdate === 'disabled';
   const updateStatus = localDevelopment
     ? 'local out/ · online checks off'
-    : `${state.launcherUpdate}${state.launcherUpdateVersion ? ` · v${state.launcherUpdateVersion}` : ''}`;
+    : state.launcherUpdate === 'up-to-date'
+      ? `up to date · v${state.launcherVersion}`
+      : `${state.launcherUpdate}${state.launcherUpdateVersion ? ` · v${state.launcherUpdateVersion}` : ''}`;
+  const updateStatusClass =
+    state.launcherUpdate === 'error'
+      ? styles.invalid
+      : localDevelopment || state.launcherUpdate === 'up-to-date'
+        ? styles.valid
+        : undefined;
   const serverAddressStatus = state.resolvedHost ? 'configured' : 'unavailable';
 
   return (
@@ -975,10 +983,8 @@ function DiagnosticsTab({
       <div className="panel-title">Runtime checks</div>
       <dl className={styles.diagnosticGrid}>
         <div>
-          <dt>Launcher source</dt>
-          <dd className={state.launcherUpdate === 'error' ? styles.invalid : localDevelopment ? styles.valid : undefined}>
-            {updateStatus}
-          </dd>
+          <dt>Launcher status</dt>
+          <dd className={updateStatusClass}>{updateStatus}</dd>
         </div>
         <div>
           <dt>Game install</dt>

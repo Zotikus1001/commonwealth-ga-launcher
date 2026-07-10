@@ -139,6 +139,7 @@ export interface LauncherApi {
   autoDetectGame(): Promise<string | null>;
   play(): Promise<void>;
   playDeveloper(): Promise<void>;
+  applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
   selectDeveloperServer(id: string): Promise<void>;
   refresh(): Promise<void>;
   listWineRunners(): Promise<WineRunner[]>;

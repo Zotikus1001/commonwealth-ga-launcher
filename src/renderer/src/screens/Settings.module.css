@@ -260,6 +260,18 @@
   font-size: 18px;
 }
 
+.patchApplyButton {
+  padding: 0;
+  background: rgba(240, 166, 60, 0.08);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.patchApplyButton:hover:not(:disabled) {
+  background: rgba(240, 166, 60, 0.18);
+  color: var(--amber-hi);
+}
+
 .patchApplied .patchIcon,
 .patchApplied .patchState {
   color: var(--green);
@@ -294,6 +306,20 @@
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.patchResultOk,
+.patchResultError {
+  margin: 7px 0 0;
+  font-size: 11px;
+}
+
+.patchResultOk {
+  color: var(--green);
+}
+
+.patchResultError {
+  color: var(--red);
 }
 
 .aboutHero {

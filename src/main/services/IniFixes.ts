@@ -2,7 +2,7 @@ import { constants } from 'fs';
 import { access, copyFile, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, join } from 'path';
 import { isLoginMap, type LoginMap } from '@shared/loginMaps';
-import type { ClientPatchStatus } from '@shared/types';
+import type { ClientPatchId, ClientPatchStatus } from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
@@ -24,10 +24,15 @@ interface TextPatchResult {
   changed: boolean;
 }
 
-interface IniPatchOptions {
-  netSpeed?: boolean;
-  loginMap?: LoginMap;
-  suppressOverhealing?: boolean;
+type IniPatchOptions =
+  | { kind: 'net-speed' }
+  | { kind: 'login-map'; loginMap: LoginMap }
+  | { kind: 'overhealing'; suppressOverhealing: boolean };
+
+interface IniFileEdit {
+  path: string;
+  required: boolean;
+  options: IniPatchOptions;
 }
 
 function trailingLineEnding(value: string): string {
@@ -129,7 +134,7 @@ function verifyEnginePlayerSection(text: string, fileName: string): void {
   let inEnginePlayer = false;
   const values = new Map<NetSpeedKey, number[]>(NET_SPEED_KEYS.map((key) => [key, []]));
 
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.split(/\r\n|\n|\r/)) {
     const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       inEnginePlayer = section[1].trim().toLowerCase() === 'engine.player';
@@ -180,66 +185,96 @@ export async function inspectClientPatches(
 }
 
 function patchUrlSection(text: string, loginMap: LoginMap): TextPatchResult {
-  const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const hasTrailingNewline = text.endsWith('\n');
-  const lines = text.split(/\r?\n/);
-  if (hasTrailingNewline) lines.pop();
-
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
   let inUrl = false;
   let firstSectionStart = -1;
   let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
   const assignments = new Map<LoginMapKey, number>(LOGIN_MAP_KEYS.map((key) => [key, 0]));
+  const removals = new Set<LoginMapKey>();
   let changed = false;
 
   for (let index = 0; index < lines.length; index++) {
-    const section = lines[index].match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       if (inUrl && firstSectionEnd < 0) firstSectionEnd = index;
       inUrl = section[1].trim().toLowerCase() === 'url';
-      if (inUrl && firstSectionStart < 0) firstSectionStart = index;
+      if (inUrl && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
       continue;
     }
     if (!inUrl) continue;
 
-    const assignment = lines[index].match(/^(\s*)([+.-]?)(Map|LocalMap)(\s*=\s*)([^;#\s]*)(.*)$/i);
-    if (!assignment || assignment[2] === '-') continue;
+    const assignment = line.match(/^(\s*)([+.-]?)(Map|LocalMap)(\s*=\s*)([^;#\s]*)(.*)$/i);
+    if (!assignment) continue;
     const key = LOGIN_MAP_KEYS.find((candidate) => candidate.toLowerCase() === assignment[3].toLowerCase());
     if (!key) continue;
+    if (assignment[2] === '-') {
+      removals.add(key);
+      continue;
+    }
     assignments.set(key, (assignments.get(key) ?? 0) + 1);
     const replacement = `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}${loginMap}${assignment[6]}`;
-    if (replacement !== lines[index]) {
-      lines[index] = replacement;
+    if (replacement !== line) {
+      lines[index] = replacement + lineEnding;
       changed = true;
     }
   }
 
+  const missing = LOGIN_MAP_KEYS.filter((key) => (assignments.get(key) ?? 0) === 0);
+  if (missing.length === 0) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignments = missing.map(
+    (key) => `${removals.has(key) ? '+' : ''}${key}=${loginMap}`
+  );
+
   if (firstSectionStart < 0) {
-    if (lines.length > 0 && lines[lines.length - 1].trim() !== '') lines.push('');
-    lines.push('[URL]');
-    firstSectionStart = lines.length - 1;
-    firstSectionEnd = lines.length;
-    changed = true;
-  } else if (firstSectionEnd < 0) {
-    firstSectionEnd = lines.length;
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    const section = `[URL]${preferredLineEnding}` + newAssignments.join(preferredLineEnding);
+    return { text: text + separator + section, changed: true };
   }
 
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
   let insertAt = firstSectionEnd;
-  while (insertAt > firstSectionStart + 1 && lines[insertAt - 1].trim() === '') insertAt--;
-  for (const key of LOGIN_MAP_KEYS) {
-    if ((assignments.get(key) ?? 0) > 0) continue;
-    lines.splice(insertAt, 0, `${key}=${loginMap}`);
-    insertAt++;
-    changed = true;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
   }
-
-  return { text: lines.join(newline) + (hasTrailingNewline ? newline : ''), changed };
+  const previousHasLineEnding = insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  const inserted = newAssignments.map((assignment, index) => {
+    const prefix = index === 0 && !previousHasLineEnding ? preferredLineEnding : '';
+    const isLast = index === newAssignments.length - 1;
+    const suffix = isLast && preserveMissingTrailingNewline ? '' : preferredLineEnding;
+    return prefix + assignment + suffix;
+  });
+  lines.splice(insertAt, 0, ...inserted);
+  return { text: lines.join(''), changed: true };
 }
 
 function verifyUrlSection(text: string, fileName: string, loginMap: LoginMap): void {
   let inUrl = false;
   const values = new Map<LoginMapKey, string[]>(LOGIN_MAP_KEYS.map((key) => [key, []]));
 
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.split(/\r\n|\n|\r/)) {
     const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       inUrl = section[1].trim().toLowerCase() === 'url';
@@ -261,59 +296,88 @@ function verifyUrlSection(text: string, fileName: string, loginMap: LoginMap): v
 }
 
 function patchOverhealingSection(text: string, suppressOverhealing: boolean): TextPatchResult {
-  const newline = text.includes('\r\n') ? '\r\n' : '\n';
-  const hasTrailingNewline = text.endsWith('\n');
-  const lines = text.split(/\r?\n/);
-  if (hasTrailingNewline) lines.pop();
-
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
   const expected = suppressOverhealing ? 'True' : 'False';
   let inPrimaryHud = false;
   let firstSectionStart = -1;
   let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
   let assignments = 0;
+  let hasRemoval = false;
   let changed = false;
 
   for (let index = 0; index < lines.length; index++) {
-    const section = lines[index].match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       if (inPrimaryHud && firstSectionEnd < 0) firstSectionEnd = index;
       inPrimaryHud = section[1].trim().toLowerCase() === 'tgclient.tguiprimaryhud';
-      if (inPrimaryHud && firstSectionStart < 0) firstSectionStart = index;
+      if (inPrimaryHud && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
       continue;
     }
     if (!inPrimaryHud) continue;
 
-    const assignment = lines[index].match(
+    const assignment = line.match(
       /^(\s*)([+.-]?)(m_bSuppressOverhealing)(\s*=\s*)([^;#\s]*)(.*)$/i
     );
-    if (!assignment || assignment[2] === '-') continue;
+    if (!assignment) continue;
+    if (assignment[2] === '-') {
+      hasRemoval = true;
+      continue;
+    }
     assignments++;
     const replacement =
       `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}${expected}${assignment[6]}`;
-    if (replacement !== lines[index]) {
-      lines[index] = replacement;
+    if (replacement !== line) {
+      lines[index] = replacement + lineEnding;
       changed = true;
     }
   }
 
+  if (assignments > 0) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignment = `${hasRemoval ? '+' : ''}m_bSuppressOverhealing=${expected}`;
   if (firstSectionStart < 0) {
-    if (lines.length > 0 && lines[lines.length - 1].trim() !== '') lines.push('');
-    lines.push('[TgClient.TgUIPrimaryHUD]');
-    firstSectionStart = lines.length - 1;
-    firstSectionEnd = lines.length;
-    changed = true;
-  } else if (firstSectionEnd < 0) {
-    firstSectionEnd = lines.length;
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    const section =
+      `[TgClient.TgUIPrimaryHUD]${preferredLineEnding}${newAssignment}`;
+    return { text: text + separator + section, changed: true };
   }
 
-  if (assignments === 0) {
-    let insertAt = firstSectionEnd;
-    while (insertAt > firstSectionStart + 1 && lines[insertAt - 1].trim() === '') insertAt--;
-    lines.splice(insertAt, 0, `m_bSuppressOverhealing=${expected}`);
-    changed = true;
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
+  let insertAt = firstSectionEnd;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
   }
-
-  return { text: lines.join(newline) + (hasTrailingNewline ? newline : ''), changed };
+  const previousHasLineEnding = insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  lines.splice(
+    insertAt,
+    0,
+    `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${
+      preserveMissingTrailingNewline ? '' : preferredLineEnding
+    }`
+  );
+  return { text: lines.join(''), changed: true };
 }
 
 function verifyOverhealingSection(
@@ -325,7 +389,7 @@ function verifyOverhealingSection(
   let inPrimaryHud = false;
   const values: string[] = [];
 
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.split(/\r\n|\n|\r/)) {
     const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (section) {
       inPrimaryHud = section[1].trim().toLowerCase() === 'tgclient.tguiprimaryhud';
@@ -357,17 +421,17 @@ async function patchIniFile(
     changed = true;
   };
 
-  if (options.netSpeed) apply(patchEnginePlayerSection(patchedText));
-  if (options.loginMap) apply(patchUrlSection(patchedText, options.loginMap));
-  if (options.suppressOverhealing !== undefined) {
+  if (options.kind === 'net-speed') apply(patchEnginePlayerSection(patchedText));
+  if (options.kind === 'login-map') apply(patchUrlSection(patchedText, options.loginMap));
+  if (options.kind === 'overhealing') {
     apply(patchOverhealingSection(patchedText, options.suppressOverhealing));
   }
 
   const verify = (text: string): void => {
     const fileName = basename(path);
-    if (options.netSpeed) verifyEnginePlayerSection(text, fileName);
-    if (options.loginMap) verifyUrlSection(text, fileName, options.loginMap);
-    if (options.suppressOverhealing !== undefined) {
+    if (options.kind === 'net-speed') verifyEnginePlayerSection(text, fileName);
+    if (options.kind === 'login-map') verifyUrlSection(text, fileName, options.loginMap);
+    if (options.kind === 'overhealing') {
       verifyOverhealingSection(text, fileName, options.suppressOverhealing);
     }
   };
@@ -399,43 +463,9 @@ async function patchIniFile(
   return { changed: true, backupPath };
 }
 
-/** Verifies the active config and its regeneration source before every game launch. */
-export async function ensureClientConfiguration(
-  install: GameInstall,
-  loginMap: LoginMap,
-  showOverhealing: boolean,
-  log: Log
-): Promise<IniRepairResult> {
-  if (!isLoginMap(loginMap)) throw new Error(`Unsupported login map: ${loginMap}`);
-  if (typeof showOverhealing !== 'boolean') throw new Error('Invalid overhealing setting');
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
-  const suppressOverhealing = !showOverhealing;
+async function applyIniEdits(edits: IniFileEdit[], log: Log): Promise<IniRepairResult> {
   const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
-
-  const files: Array<{ path: string; required: boolean; options: IniPatchOptions }> = [
-    {
-      path: join(configDir, 'TgEngine.ini'),
-      required: true,
-      options: { netSpeed: true, loginMap }
-    },
-    {
-      path: join(configDir, 'DefaultEngine.ini'),
-      required: false,
-      options: { netSpeed: true }
-    },
-    {
-      path: join(configDir, 'TgUI.ini'),
-      required: true,
-      options: { suppressOverhealing }
-    },
-    {
-      path: join(configDir, 'DefaultUI.ini'),
-      required: false,
-      options: { suppressOverhealing }
-    }
-  ];
-
-  for (const { path, required, options } of files) {
+  for (const { path, required, options } of edits) {
     try {
       await access(path, constants.R_OK | constants.W_OK);
     } catch (error) {
@@ -455,6 +485,102 @@ export async function ensureClientConfiguration(
       throw new Error(`Cannot repair ${basename(path)}: ${(error as Error).message}`);
     }
   }
+
+  return result;
+}
+
+function mergeRepairResults(results: IniRepairResult[]): IniRepairResult {
+  return {
+    checkedFiles: [...new Set(results.flatMap((result) => result.checkedFiles))],
+    changedFiles: [...new Set(results.flatMap((result) => result.changedFiles))],
+    backupFiles: [...new Set(results.flatMap((result) => result.backupFiles))]
+  };
+}
+
+export async function applyClientPatch(
+  install: GameInstall,
+  id: ClientPatchId,
+  log: Log
+): Promise<IniRepairResult> {
+  if (id !== 'high-fps-movement-stability') throw new Error(`Unsupported client patch: ${id}`);
+  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const result = await applyIniEdits(
+    [
+      {
+        path: join(configDir, 'TgEngine.ini'),
+        required: true,
+        options: { kind: 'net-speed' }
+      },
+      {
+        path: join(configDir, 'DefaultEngine.ini'),
+        required: false,
+        options: { kind: 'net-speed' }
+      }
+    ],
+    log
+  );
+  log.info(
+    `client patch: ${id} verified in ${result.checkedFiles.length} file(s); ` +
+      `${result.changedFiles.length} changed`
+  );
+  return result;
+}
+
+async function ensureLoginMap(
+  install: GameInstall,
+  loginMap: LoginMap,
+  log: Log
+): Promise<IniRepairResult> {
+  if (!isLoginMap(loginMap)) throw new Error(`Unsupported login map: ${loginMap}`);
+  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  return applyIniEdits(
+    [
+      {
+        path: join(configDir, 'TgEngine.ini'),
+        required: true,
+        options: { kind: 'login-map', loginMap }
+      }
+    ],
+    log
+  );
+}
+
+async function ensureOverhealing(
+  install: GameInstall,
+  showOverhealing: boolean,
+  log: Log
+): Promise<IniRepairResult> {
+  if (typeof showOverhealing !== 'boolean') throw new Error('Invalid overhealing setting');
+  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const suppressOverhealing = !showOverhealing;
+  return applyIniEdits(
+    [
+      {
+        path: join(configDir, 'TgUI.ini'),
+        required: true,
+        options: { kind: 'overhealing', suppressOverhealing }
+      },
+      {
+        path: join(configDir, 'DefaultUI.ini'),
+        required: false,
+        options: { kind: 'overhealing', suppressOverhealing }
+      }
+    ],
+    log
+  );
+}
+
+/** Applies each configured INI setting independently before every game launch. */
+export async function ensureClientConfiguration(
+  install: GameInstall,
+  loginMap: LoginMap,
+  showOverhealing: boolean,
+  log: Log
+): Promise<IniRepairResult> {
+  const networkResult = await applyClientPatch(install, 'high-fps-movement-stability', log);
+  const loginMapResult = await ensureLoginMap(install, loginMap, log);
+  const overhealingResult = await ensureOverhealing(install, showOverhealing, log);
+  const result = mergeRepairResults([networkResult, loginMapResult, overhealingResult]);
 
   log.info(
     `client ini: ${CLIENT_NET_SPEED}/${CLIENT_NET_SPEED}, ${loginMap}, and overhealing ` +

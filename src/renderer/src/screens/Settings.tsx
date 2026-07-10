@@ -456,7 +456,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           </section>
         )}
 
-        {tab === 'patches' && <PatchesTab patches={state.clientPatches} />}
+        {tab === 'patches' && <PatchesTab state={state} />}
 
         {tab === 'launch' && (
           <section className={styles.section}>
@@ -829,7 +829,31 @@ function DeveloperTab({
   );
 }
 
-function PatchesTab({ patches }: { patches: ClientPatchStatus[] }): JSX.Element {
+function PatchesTab({ state }: { state: LauncherState }): JSX.Element {
+  const [applying, setApplying] = useState<ClientPatchStatus['id'] | null>(null);
+  const [result, setResult] = useState<
+    { id: ClientPatchStatus['id']; value: ActionResult } | null
+  >(null);
+
+  const applyPatch = async (id: ClientPatchStatus['id']): Promise<void> => {
+    if (applying) return;
+    setApplying(id);
+    setResult(null);
+    try {
+      setResult({ id, value: await window.api.applyClientPatch(id) });
+    } catch (error) {
+      setResult({
+        id,
+        value: {
+          ok: false,
+          message: `Could not apply patch: ${error instanceof Error ? error.message : String(error)}`
+        }
+      });
+    } finally {
+      setApplying(null);
+    }
+  };
+
   return (
     <section className={styles.section}>
       <div className="panel-title">Client patches</div>
@@ -837,13 +861,18 @@ function PatchesTab({ patches }: { patches: ClientPatchStatus[] }): JSX.Element 
         Verified against the installed game. Required fixes are checked again before every Play.
       </p>
       <div className={styles.patchList}>
-        {patches.map((patch) => {
+        {state.clientPatches.map((patch) => {
           const copy = PATCH_COPY[patch.id];
+          const patchApplying = applying === patch.id;
           const status =
             patch.applied === true
               ? 'Applied'
               : patch.applied === false
-                ? 'Pending — applied on Play'
+                ? patchApplying
+                  ? 'Applying…'
+                  : state.gameRunning
+                    ? 'Close the game to apply'
+                    : 'Ready to apply'
                 : 'Game path required';
           const tone =
             patch.applied === true
@@ -853,13 +882,30 @@ function PatchesTab({ patches }: { patches: ClientPatchStatus[] }): JSX.Element 
                 : styles.patchUnknown;
           return (
             <article key={patch.id} className={`${styles.patchCard} ${tone}`}>
-              <span className={styles.patchIcon} aria-hidden="true">
-                {patch.applied === true ? '✓' : patch.applied === false ? '!' : '—'}
-              </span>
+              {patch.applied === false ? (
+                <button
+                  className={`${styles.patchIcon} ${styles.patchApplyButton}`}
+                  disabled={patchApplying || state.gameRunning}
+                  aria-label={`Apply ${copy.title} patch`}
+                  title={state.gameRunning ? 'Close the game before applying this patch.' : 'Apply patch'}
+                  onClick={() => void applyPatch(patch.id)}
+                >
+                  {patchApplying ? '…' : 'APPLY'}
+                </button>
+              ) : (
+                <span className={styles.patchIcon} aria-hidden="true">
+                  {patch.applied === true ? '✓' : '—'}
+                </span>
+              )}
               <div className={styles.patchBody}>
                 <div className={styles.patchTitle}>{copy.title}</div>
                 <p className={styles.patchDescription}>{copy.description}</p>
                 <span className={styles.patchState}>{status}</span>
+                {result?.id === patch.id && (
+                  <p className={result.value.ok ? styles.patchResultOk : styles.patchResultError}>
+                    {result.value.message}
+                  </p>
+                )}
               </div>
             </article>
           );

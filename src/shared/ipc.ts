@@ -7,6 +7,7 @@ export const IPC = {
   autoDetectGame: 'launcher:auto-detect-game',
   play: 'launcher:play',
   playDeveloper: 'launcher:play-developer',
+  applyClientPatch: 'launcher:apply-client-patch',
   selectDeveloperServer: 'launcher:select-developer-server',
   refresh: 'launcher:refresh',
   listWineRunners: 'launcher:list-wine-runners',

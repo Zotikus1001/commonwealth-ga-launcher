@@ -8,9 +8,15 @@ export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('game');
+  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const settingsRef = useRef<SettingsHandle>(null);
+  const settingsAvailable =
+    state?.launcherUpdate === 'up-to-date' ||
+    state?.launcherUpdate === 'disabled' ||
+    (state?.launcherUpdate === 'checking' && settingsUnlocked);
 
   const openSettings = (tab: SettingsTab): void => {
+    if (!settingsAvailable) return;
     setSettingsTab(tab);
     setView('settings');
   };
@@ -26,6 +32,18 @@ export default function App(): JSX.Element {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (state?.launcherUpdate === 'up-to-date' || state?.launcherUpdate === 'disabled') {
+      setSettingsUnlocked(true);
+    } else if (state?.launcherUpdate !== 'checking') {
+      setSettingsUnlocked(false);
+    }
+  }, [state?.launcherUpdate]);
+
+  useEffect(() => {
+    if (view === 'settings' && !settingsAvailable) setView('play');
+  }, [settingsAvailable, view]);
 
   if (!state) {
     return <div className={styles.boot}>COMMONWEALTH GA</div>;
@@ -44,6 +62,12 @@ export default function App(): JSX.Element {
             v{state.launcherVersion}
           </span>
           <button
+            disabled={view === 'play' && !settingsAvailable}
+            title={
+              view === 'play' && !settingsAvailable
+                ? 'Launcher settings unlock after the update check completes.'
+                : undefined
+            }
             onClick={() => {
               if (view === 'play') openSettings('game');
               else settingsRef.current?.requestBack();

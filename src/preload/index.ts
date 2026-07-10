@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DeepPartial, LauncherApi, LauncherState, Settings } from '@shared/types';
+import type {
+  ClientPatchId,
+  DeepPartial,
+  LauncherApi,
+  LauncherState,
+  Settings
+} from '@shared/types';
 import { IPC } from '@shared/ipc';
 
 // contextIsolation is ON and this preload is sandboxed: the renderer sees ONLY this typed surface,
@@ -13,6 +19,7 @@ const api: LauncherApi = {
   autoDetectGame: () => ipcRenderer.invoke(IPC.autoDetectGame),
   play: () => ipcRenderer.invoke(IPC.play),
   playDeveloper: () => ipcRenderer.invoke(IPC.playDeveloper),
+  applyClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.applyClientPatch, id),
   selectDeveloperServer: (id: string) => ipcRenderer.invoke(IPC.selectDeveloperServer, id),
   refresh: () => ipcRenderer.invoke(IPC.refresh),
   listWineRunners: () => ipcRenderer.invoke(IPC.listWineRunners),

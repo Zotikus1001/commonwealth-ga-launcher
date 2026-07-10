@@ -1,5 +1,7 @@
 import { app } from 'electron';
 import type {
+  ActionResult,
+  ClientPatchId,
   LauncherState,
   LauncherUpdateStatus,
   ServerChoice,
@@ -16,6 +18,7 @@ import { LauncherUpdater } from './services/LauncherUpdater';
 import { fetchServerCommits } from './services/ServerCommits';
 import { validateWineRunner } from './services/WineEnv';
 import {
+  applyClientPatch as applyIniClientPatch,
   ensureClientConfiguration,
   inspectClientPatches,
   unavailableClientPatches
@@ -549,6 +552,53 @@ export class Orchestrator {
         statusLine: `Launch failed: ${message}`,
         errorDetails: message
       });
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async applyClientPatch(id: ClientPatchId): Promise<ActionResult> {
+    if (this.state.launcherUpdate !== 'up-to-date' && this.state.launcherUpdate !== 'disabled') {
+      return { ok: false, message: 'Update the launcher before changing client files.' };
+    }
+    if (this.busy) return { ok: false, message: 'The launcher is busy. Try again shortly.' };
+    this.busy = true;
+    try {
+      if (this.state.gameRunning || (await this.gameLauncher.isGameRunning(PLATFORM))) {
+        return { ok: false, message: 'Close the game before applying client patches.' };
+      }
+      const settings = this.config.get();
+      const install = await validateGameExe(settings.gameExePath);
+      this.install = install;
+      if (!install) {
+        this.patch({
+          gamePathValid: false,
+          validatedGameExePath: settings.gameExePath,
+          clientPatches: unavailableClientPatches()
+        });
+        return { ok: false, message: 'Set a valid Global Agenda install path first.' };
+      }
+
+      const result = await applyIniClientPatch(install, id, this.log);
+      const clientPatches = await inspectClientPatches(install);
+      this.patch({
+        gamePathValid: true,
+        validatedGameExePath: settings.gameExePath,
+        clientPatches
+      });
+      if (!clientPatches.find((patch) => patch.id === id)?.applied) {
+        throw new Error('The patch could not be verified after writing it.');
+      }
+      return {
+        ok: true,
+        message: result.changedFiles.length > 0 ? 'Patch applied.' : 'Patch is already applied.'
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`manual client patch failed: ${message}`);
+      this.patch({ clientPatches: await inspectClientPatches(this.install) });
+      return { ok: false, message: `Could not apply patch: ${message}` };
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();

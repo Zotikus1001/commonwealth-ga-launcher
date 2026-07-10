@@ -47,7 +47,11 @@ export class GameLauncher {
     if (this.children.size > 0) return true;
     try {
       if (platform === 'win32') {
-        const { stdout } = await execFileP('tasklist', ['/FI', 'IMAGENAME eq GlobalAgenda.exe', '/NH', '/FO', 'CSV']);
+        const { stdout } = await execFileP(
+          'tasklist',
+          ['/FI', 'IMAGENAME eq GlobalAgenda.exe', '/NH', '/FO', 'CSV'],
+          { windowsHide: true }
+        );
         return stdout.toLowerCase().includes('globalagenda.exe');
       }
       // Under Wine the process cmdline contains the exe path — pgrep -f matches it.

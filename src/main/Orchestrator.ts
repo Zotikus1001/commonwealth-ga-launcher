@@ -26,6 +26,7 @@ const SERVER_PROBE_REFRESH_MS = 65_000;
 const SERVER_CHECKING_STATUS = 'Checking server availability…';
 const COMMIT_REFRESH_MS = 5 * 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
+const EXTERNAL_GAME_REFRESH_MS = 3_000;
 
 interface ServerSelection {
   id: string;
@@ -49,6 +50,8 @@ export class Orchestrator {
   private commitTimer: NodeJS.Timeout | null = null;
   private commitRefreshInFlight = false;
   private autoCloseTimer: NodeJS.Timeout | null = null;
+  private externalGameTimer: NodeJS.Timeout | null = null;
+  private externalGameRefreshInFlight = false;
 
   constructor(
     private readonly config: ConfigStore,
@@ -190,6 +193,33 @@ export class Orchestrator {
     }
     if (!this.commitTimer) {
       this.commitTimer = setInterval(() => void this.refreshServerCommits(), COMMIT_REFRESH_MS);
+    }
+    if (!this.externalGameTimer) {
+      this.externalGameTimer = setInterval(
+        () => void this.refreshExternalGameProcess(),
+        EXTERNAL_GAME_REFRESH_MS
+      );
+    }
+  }
+
+  private async refreshExternalGameProcess(): Promise<void> {
+    if (
+      this.externalGameRefreshInFlight ||
+      this.busy ||
+      this.state.phase !== 'running' ||
+      this.gameLauncher.activeInstanceCount() > 0
+    ) {
+      return;
+    }
+    this.externalGameRefreshInFlight = true;
+    try {
+      if (await this.gameLauncher.isGameRunning(PLATFORM)) return;
+      this.log.info('external game process no longer detected');
+      await this.refreshRuntimeState(false);
+    } catch (error) {
+      this.log.warn(`external game process refresh failed: ${(error as Error).message}`);
+    } finally {
+      this.externalGameRefreshInFlight = false;
     }
   }
 
@@ -351,7 +381,7 @@ export class Orchestrator {
       activeGameInstances: this.gameLauncher.activeInstanceCount(),
       clientPatches
     });
-    if (preserveGamePhase) return;
+    if (preserveGamePhase && gameRunning) return;
 
     if (!selection.host) {
       this.patch({

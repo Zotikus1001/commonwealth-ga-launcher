@@ -905,7 +905,9 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <span className={styles.aboutMark}>CGA</span>
         <div>
           <div className={styles.aboutTitle}>Commonwealth GA Launcher</div>
-          <p className={styles.aboutTagline}>Private server access, client fixes, and safe updates.</p>
+          <p className={styles.aboutTagline}>
+            Private server access, client fixes, and automatic updates.
+          </p>
         </div>
       </div>
 

@@ -142,7 +142,7 @@ export default function Play({
     setSelectingServer(true);
     setServerSelectionError(null);
     try {
-      await window.api.selectDeveloperServer(id);
+      await window.api.selectServer(id);
     } catch (error) {
       setServerSelectionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -232,9 +232,9 @@ export default function Play({
 
       <div className={`rise ${styles.ctaBlock}`} style={{ animationDelay: '220ms' }}>
         <div className={styles.playControls}>
-          {state.developerMode && (
+          {state.serverChoices.length > 1 && (
             <label className={styles.serverPicker}>
-              <span>Launch server</span>
+              <span>Launch Server</span>
               <select
                 value={state.selectedServerId}
                 disabled={selectingServer || state.phase === 'checking' || state.phase === 'launching'}

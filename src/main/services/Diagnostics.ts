@@ -5,9 +5,9 @@ import type { LauncherState, Settings } from '@shared/types';
 export function buildDiagnosticsReport(state: LauncherState, settings: Settings, logTail: string[]): string {
   const safeSettings: Settings = {
     ...settings,
-    developer: {
-      ...settings.developer,
-      servers: settings.developer.servers.map((server) => ({
+    servers: {
+      ...settings.servers,
+      custom: settings.servers.custom.map((server) => ({
         ...server,
         host: '[redacted]'
       }))

@@ -137,7 +137,11 @@ if (!app.requestSingleInstanceLock()) {
     const log = new Log(app.getPath('userData'));
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
 
-    const config = new ConfigStore(app.getPath('userData'), defaultSettings(), log);
+    const config = new ConfigStore(
+      app.getPath('userData'),
+      defaultSettings(LAUNCHER_CONFIG.defaultServerName),
+      log
+    );
     await config.load();
 
     const defaultServerHosts = await resolveDefaultServerHosts(log);
@@ -145,8 +149,7 @@ if (!app.requestSingleInstanceLock()) {
       config,
       log,
       defaultServerHosts.primary,
-      defaultServerHosts.fallback,
-      LAUNCHER_CONFIG.defaultServerName
+      defaultServerHosts.fallback
     );
     registerIpc(() => mainWindow, orchestrator, config, log);
 

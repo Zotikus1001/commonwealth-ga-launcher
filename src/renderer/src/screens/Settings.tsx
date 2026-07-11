@@ -16,12 +16,20 @@ import {
   DEVELOPER_MAX_WIDTH,
   DEVELOPER_MIN_HEIGHT,
   DEVELOPER_MIN_WIDTH,
-  MAX_DEVELOPER_SERVERS,
-  validateDeveloperServers
+  MAX_CUSTOM_SERVERS,
+  validateServerSettings
 } from '@shared/serverProfiles';
 import styles from './Settings.module.css';
 
-export type SettingsTab = 'game' | 'patches' | 'account' | 'launch' | 'dev' | 'diagnostics' | 'about';
+export type SettingsTab =
+  | 'game'
+  | 'servers'
+  | 'patches'
+  | 'account'
+  | 'launch'
+  | 'dev'
+  | 'diagnostics'
+  | 'about';
 
 export interface SettingsHandle {
   requestBack: () => void;
@@ -81,6 +89,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },
+      { id: 'servers', label: 'Servers' },
       { id: 'patches', label: 'Patches' }
     ];
     // Account tab is built but gated off until Phase 4 auto-login works (plan §11b decision #4).
@@ -111,7 +120,10 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       );
       return false;
     }
-    const validationError = validateDeveloperServers(draft.developer.servers);
+    const validationError = validateServerSettings(
+      draft.servers.builtInName,
+      draft.servers.custom
+    );
     if (validationError) {
       setSaveError(validationError);
       return false;
@@ -517,6 +529,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'patches' && <PatchesTab state={state} />}
 
+        {tab === 'servers' && <ServersTab settings={draft} edit={edit} />}
+
         {tab === 'launch' && (
           <section className={styles.section}>
             <div className="panel-title">Launcher Interface</div>
@@ -689,6 +703,166 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
 export default Settings;
 
+function ServersTab({
+  settings,
+  edit
+}: {
+  settings: SettingsModel;
+  edit: (fn: (settings: SettingsModel) => SettingsModel) => void;
+}): JSX.Element {
+  const customServers = settings.servers.custom;
+  const hasIncompleteServer = customServers.some(
+    (server) => !server.name.trim() || !server.host.trim()
+  );
+
+  const addServer = (): void => {
+    if (customServers.length >= MAX_CUSTOM_SERVERS || hasIncompleteServer) return;
+    edit((current) => {
+      if (
+        current.servers.custom.length >= MAX_CUSTOM_SERVERS ||
+        current.servers.custom.some((server) => !server.name.trim() || !server.host.trim())
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        servers: {
+          ...current.servers,
+          custom: [
+            ...current.servers.custom,
+            { id: crypto.randomUUID(), name: '', host: '' }
+          ]
+        }
+      };
+    });
+  };
+
+  const removeServer = (id: string): void => {
+    edit((current) => ({
+      ...current,
+      servers: {
+        ...current.servers,
+        selectedServerId:
+          current.servers.selectedServerId === id
+            ? DEFAULT_SERVER_ID
+            : current.servers.selectedServerId,
+        custom: current.servers.custom.filter((server) => server.id !== id)
+      }
+    }));
+  };
+
+  return (
+    <section className={styles.section}>
+      <div className="panel-title">Servers</div>
+      <p className={styles.hint}>
+        Rename the built-in server or add other servers to choose from before launching.
+      </p>
+
+      <div className={styles.serverProfiles}>
+        <article className={`${styles.serverProfile} ${styles.builtInServerProfile}`}>
+          <span className={styles.serverProfileIndex}>01</span>
+          <div className={styles.serverProfileFields}>
+            <label>
+              <span>Name</span>
+              <input
+                type="text"
+                maxLength={48}
+                value={settings.servers.builtInName}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    servers: { ...current.servers, builtInName: event.target.value }
+                  }))
+                }
+              />
+            </label>
+            <div className={styles.serverManagedField}>
+              <span>Address</span>
+              <div className={styles.serverManagedValue}>Managed by Launcher</div>
+            </div>
+          </div>
+          <span className={styles.builtInServerBadge}>Built-In</span>
+        </article>
+
+        {customServers.map((server, index) => (
+          <article className={styles.serverProfile} key={server.id}>
+            <span className={styles.serverProfileIndex}>
+              {String(index + 2).padStart(2, '0')}
+            </span>
+            <div className={styles.serverProfileFields}>
+              <label>
+                <span>Name</span>
+                <input
+                  type="text"
+                  maxLength={48}
+                  value={server.name}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      servers: {
+                        ...current.servers,
+                        custom: current.servers.custom.map((candidate) =>
+                          candidate.id === server.id
+                            ? { ...candidate, name: event.target.value }
+                            : candidate
+                        )
+                      }
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>IP Address or Hostname</span>
+                <input
+                  type="text"
+                  value={server.host}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      servers: {
+                        ...current.servers,
+                        custom: current.servers.custom.map((candidate) =>
+                          candidate.id === server.id
+                            ? { ...candidate, host: event.target.value }
+                            : candidate
+                        )
+                      }
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <button
+              className={styles.removeServerButton}
+              aria-label={`Remove ${server.name || `server ${index + 2}`}`}
+              onClick={() => removeServer(server.id)}
+            >
+              Remove
+            </button>
+          </article>
+        ))}
+
+        {customServers.length === 0 && (
+          <p className={styles.emptyServers}>No additional servers added.</p>
+        )}
+      </div>
+
+      <button
+        className={styles.addServerButton}
+        disabled={customServers.length >= MAX_CUSTOM_SERVERS || hasIncompleteServer}
+        title={
+          hasIncompleteServer
+            ? 'Finish or remove the current server before adding another.'
+            : undefined
+        }
+        onClick={addServer}
+      >
+        + Add Server
+      </button>
+    </section>
+  );
+}
+
 function DeveloperTab({
   settings,
   edit,
@@ -702,44 +876,6 @@ function DeveloperTab({
   modeError: string | null;
   onModeChange: (enabled: boolean) => void;
 }): JSX.Element {
-  const hasUnfinishedServer = settings.developer.servers.some(
-    (server) => !server.name.trim() || !server.host.trim()
-  );
-
-  const addServer = (): void => {
-    if (settings.developer.servers.length >= MAX_DEVELOPER_SERVERS || hasUnfinishedServer) return;
-    edit((current) => {
-      const servers = current.developer.servers;
-      if (
-        servers.length >= MAX_DEVELOPER_SERVERS ||
-        servers.some((server) => !server.name.trim() || !server.host.trim())
-      ) {
-        return current;
-      }
-      return {
-        ...current,
-        developer: {
-          ...current.developer,
-          servers: [...servers, { id: crypto.randomUUID(), name: '', host: '' }]
-        }
-      };
-    });
-  };
-
-  const removeServer = (id: string): void => {
-    edit((current) => ({
-      ...current,
-      developer: {
-        ...current.developer,
-        selectedServerId:
-          current.developer.selectedServerId === id
-            ? DEFAULT_SERVER_ID
-            : current.developer.selectedServerId,
-        servers: current.developer.servers.filter((server) => server.id !== id)
-      }
-    }));
-  };
-
   return (
     <section className={styles.section}>
       <div className="panel-title">Developer Mode</div>
@@ -754,7 +890,8 @@ function DeveloperTab({
         <label htmlFor="developer-mode">
           <span className={styles.featureName}>Enable Developer Mode</span>
           <span className={styles.featureDetail}>
-            Allows multiple game instances and adds a server selector beside Play. This setting is saved immediately.
+            Allows multiple game instances and enables Dev Launch display settings. This setting
+            is saved immediately.
           </span>
         </label>
       </div>
@@ -826,82 +963,6 @@ function DeveloperTab({
             </div>
           </div>
 
-          <div className="panel-title">Test Servers</div>
-          <p className={styles.hint}>
-            Add named IP addresses or hostnames. The main page shows only the server name.
-          </p>
-          <div className={styles.serverProfiles}>
-            {settings.developer.servers.map((server, index) => (
-              <article key={server.id} className={styles.serverProfile}>
-                <span className={styles.serverProfileIndex}>{String(index + 1).padStart(2, '0')}</span>
-                <div className={styles.serverProfileFields}>
-                  <label>
-                    <span>Name</span>
-                    <input
-                      type="text"
-                      maxLength={48}
-                      value={server.name}
-                      placeholder="Local test"
-                      onChange={(event) =>
-                        edit((current) => ({
-                          ...current,
-                          developer: {
-                            ...current.developer,
-                            servers: current.developer.servers.map((item) =>
-                              item.id === server.id ? { ...item, name: event.target.value } : item
-                            )
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>IP address or hostname</span>
-                    <input
-                      type="text"
-                      value={server.host}
-                      placeholder="127.0.0.1"
-                      onChange={(event) =>
-                        edit((current) => ({
-                          ...current,
-                          developer: {
-                            ...current.developer,
-                            servers: current.developer.servers.map((item) =>
-                              item.id === server.id ? { ...item, host: event.target.value } : item
-                            )
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-                <button
-                  className={styles.removeServerButton}
-                  aria-label={`Remove ${server.name || `server ${index + 1}`}`}
-                  onClick={() => removeServer(server.id)}
-                >
-                  Remove
-                </button>
-              </article>
-            ))}
-            {settings.developer.servers.length === 0 && (
-              <p className={styles.emptyServers}>No test servers added.</p>
-            )}
-          </div>
-          <button
-            className={styles.addServerButton}
-            disabled={
-              settings.developer.servers.length >= MAX_DEVELOPER_SERVERS || hasUnfinishedServer
-            }
-            title={
-              hasUnfinishedServer
-                ? 'Finish or remove the current server before adding another.'
-                : undefined
-            }
-            onClick={addServer}
-          >
-            + Add server
-          </button>
         </>
       )}
     </section>

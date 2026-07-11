@@ -183,7 +183,8 @@
 }
 
 .developerResolution label > span,
-.serverProfileFields label > span {
+.serverProfileFields label > span,
+.serverManagedField > span {
   color: var(--text-faint);
   font-size: 9px;
   letter-spacing: 0.12em;
@@ -219,6 +220,13 @@
   background: rgba(15, 19, 28, 0.62);
 }
 
+.builtInServerProfile {
+  border-left-color: var(--amber);
+  background:
+    linear-gradient(90deg, rgba(240, 166, 60, 0.06), transparent 52%),
+    rgba(15, 19, 28, 0.62);
+}
+
 .serverProfileIndex {
   align-self: center;
   color: var(--cyan);
@@ -237,6 +245,39 @@
   min-width: 0;
   flex-direction: column;
   gap: 5px;
+}
+
+.serverManagedField {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.serverManagedValue {
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: rgba(7, 10, 16, 0.58);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.builtInServerBadge {
+  align-self: center;
+  padding: 5px 7px;
+  border: 1px solid rgba(240, 166, 60, 0.48);
+  color: var(--amber-hi);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .removeServerButton {

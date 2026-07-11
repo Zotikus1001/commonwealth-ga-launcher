@@ -59,8 +59,7 @@ export class Orchestrator {
     private readonly config: ConfigStore,
     private readonly log: Log,
     private readonly defaultServerHost: string,
-    private readonly fallbackServerHost: string,
-    private readonly defaultServerName: string
+    private readonly fallbackServerHost: string
   ) {
     this.gameLauncher = new GameLauncher(log);
     this.launcherUpdater = new LauncherUpdater(log, {
@@ -94,8 +93,8 @@ export class Orchestrator {
       statusLine: 'Starting…',
       errorDetails: null,
       resolvedHost: defaultServerHost,
-      serverName: defaultServerName,
-      serverChoices: [{ id: DEFAULT_SERVER_ID, name: defaultServerName }],
+      serverName: config.get().servers.builtInName,
+      serverChoices: [{ id: DEFAULT_SERVER_ID, name: config.get().servers.builtInName }],
       selectedServerId: DEFAULT_SERVER_ID,
       serverOnline: null,
       gamePathValid: false,
@@ -132,18 +131,16 @@ export class Orchestrator {
   private resolveServer(settings: Settings): ServerSelection {
     const defaultChoice = {
       id: DEFAULT_SERVER_ID,
-      name: this.defaultServerName
+      name: settings.servers.builtInName
     };
     const choices = [
       defaultChoice,
-      ...settings.developer.servers.map(({ id, name }) => ({ id, name }))
+      ...settings.servers.custom.map(({ id, name }) => ({ id, name }))
     ];
-    if (settings.developer.enabled) {
-      const selected = settings.developer.servers.find(
-        (server) => server.id === settings.developer.selectedServerId
-      );
-      if (selected) return { ...selected, choices };
-    }
+    const selected = settings.servers.custom.find(
+      (server) => server.id === settings.servers.selectedServerId
+    );
+    if (selected) return { ...selected, choices };
     return {
       ...defaultChoice,
       host: this.defaultServerHost,
@@ -552,16 +549,15 @@ export class Orchestrator {
     }
   }
 
-  async selectDeveloperServer(id: string): Promise<void> {
+  async selectServer(id: string): Promise<void> {
     const settings = this.config.get();
-    if (!settings.developer.enabled) throw new Error('Developer mode is not enabled.');
     if (
       id !== DEFAULT_SERVER_ID &&
-      !settings.developer.servers.some((server) => server.id === id)
+      !settings.servers.custom.some((server) => server.id === id)
     ) {
-      throw new Error('Unknown developer server.');
+      throw new Error('Unknown server.');
     }
-    await this.config.update({ developer: { selectedServerId: id } });
+    await this.config.update({ servers: { selectedServerId: id } });
     await this.refreshRuntimeState();
   }
 

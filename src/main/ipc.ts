@@ -57,9 +57,9 @@ export function registerIpc(
     if (id !== 'high-fps-movement-stability') throw new Error('Unknown client patch.');
     return orchestrator.applyClientPatch(id);
   });
-  ipcMain.handle(IPC.selectDeveloperServer, (_event, id: unknown) => {
-    if (typeof id !== 'string') throw new Error('Developer server identifier must be a string.');
-    return orchestrator.selectDeveloperServer(id);
+  ipcMain.handle(IPC.selectServer, (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Server identifier must be a string.');
+    return orchestrator.selectServer(id);
   });
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
   ipcMain.handle(IPC.listWineRunners, () => listWineRunners(config.get(), log));

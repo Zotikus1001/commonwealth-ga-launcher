@@ -3,7 +3,7 @@
 import type { LoginMap } from './loginMaps';
 import type { UiScale } from './uiScale';
 
-export interface DeveloperServer {
+export interface CustomServer {
   id: string;
   name: string;
   host: string;
@@ -35,6 +35,11 @@ export interface Settings {
     enabled: boolean;
     value: number;
   };
+  servers: {
+    builtInName: string;
+    selectedServerId: string;
+    custom: CustomServer[];
+  };
   launch: {
     closeAfterLaunch: boolean;
     gpuAdapter: number;
@@ -49,8 +54,6 @@ export interface Settings {
   };
   developer: {
     enabled: boolean;
-    selectedServerId: string;
-    servers: DeveloperServer[];
     windowed: boolean;
     resolutionWidth: number;
     resolutionHeight: number;
@@ -147,7 +150,7 @@ export interface LauncherApi {
   play(): Promise<void>;
   playDeveloper(): Promise<void>;
   applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
-  selectDeveloperServer(id: string): Promise<void>;
+  selectServer(id: string): Promise<void>;
   refresh(): Promise<void>;
   listWineRunners(): Promise<WineRunner[]>;
   createWinePrefix(): Promise<ActionResult>;

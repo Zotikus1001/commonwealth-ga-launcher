@@ -1,7 +1,9 @@
-import type { DeveloperServer } from './types';
+import type { CustomServer } from './types';
 
 export const DEFAULT_SERVER_ID = 'default';
-export const MAX_DEVELOPER_SERVERS = 20;
+export const DEFAULT_BUILT_IN_SERVER_NAME = 'CommonWealth';
+export const MAX_CUSTOM_SERVERS = 20;
+export const MAX_SERVER_NAME_LENGTH = 48;
 export const DEVELOPER_MIN_WIDTH = 640;
 export const DEVELOPER_MAX_WIDTH = 7680;
 export const DEVELOPER_MIN_HEIGHT = 480;
@@ -31,26 +33,38 @@ export function isValidServerHost(value: string): boolean {
   );
 }
 
-export function validateDeveloperServers(value: unknown): string | null {
+export function isValidServerName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim().length > 0 &&
+    value.trim().length <= MAX_SERVER_NAME_LENGTH &&
+    !/[\u0000-\u001f]/.test(value)
+  );
+}
+
+export function validateServerSettings(builtInName: unknown, value: unknown): string | null {
+  if (!isValidServerName(builtInName)) {
+    return `The built-in server needs a name containing 1 to ${MAX_SERVER_NAME_LENGTH} characters.`;
+  }
   if (!Array.isArray(value)) return 'Server profiles must be a list.';
-  if (value.length > MAX_DEVELOPER_SERVERS) {
-    return `Developer mode supports up to ${MAX_DEVELOPER_SERVERS} server profiles.`;
+  if (value.length > MAX_CUSTOM_SERVERS) {
+    return `You can add up to ${MAX_CUSTOM_SERVERS} custom servers.`;
   }
 
   const ids = new Set<string>();
   const names = new Set<string>();
   for (const [index, item] of value.entries()) {
-    const row = `Server ${index + 1}`;
+    const row = `Custom server ${index + 1}`;
     if (typeof item !== 'object' || item === null) return `${row} is invalid.`;
-    const server = item as Partial<DeveloperServer>;
+    const server = item as Partial<CustomServer>;
     const id = typeof server.id === 'string' ? server.id.trim() : '';
     const name = typeof server.name === 'string' ? server.name.trim() : '';
     const host = typeof server.host === 'string' ? server.host.trim() : '';
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || id === DEFAULT_SERVER_ID) {
       return `${row} has an invalid internal identifier. Remove it and add it again.`;
     }
-    if (!name || name.length > 48 || /[\u0000-\u001f]/.test(name)) {
-      return `${row} needs a name containing 1 to 48 characters.`;
+    if (!isValidServerName(name)) {
+      return `${row} needs a name containing 1 to ${MAX_SERVER_NAME_LENGTH} characters.`;
     }
     if (!isValidServerHost(host)) {
       return `${row} (“${name}”) needs a valid IP address or hostname without a port.`;

@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename, mkdir } from 'fs/promises';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import type { DeepPartial, DeveloperServer, Settings } from '@shared/types';
+import type { CustomServer, DeepPartial, Settings } from '@shared/types';
 import { DEFAULT_LOGIN_MAP, isLoginMap } from '@shared/loginMaps';
 import {
   DEFAULT_FPS_LIMIT,
@@ -10,18 +10,23 @@ import {
   MIN_FPS_LIMIT
 } from '@shared/fpsLimit';
 import {
+  DEFAULT_BUILT_IN_SERVER_NAME,
   DEFAULT_SERVER_ID,
+  isValidServerName,
   isDeveloperResolution,
-  validateDeveloperServers
+  validateServerSettings
 } from '@shared/serverProfiles';
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 5;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 6;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
-export function migrateStoredSettings(value: unknown): {
+export function migrateStoredSettings(
+  value: unknown,
+  defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
+): {
   settings: Record<string, unknown>;
   migrated: boolean;
 } {
@@ -82,6 +87,24 @@ export function migrateStoredSettings(value: unknown): {
         version = 5;
         migrated = true;
         break;
+      case 5: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 6,
+          servers: {
+            builtInName: defaultServerName,
+            selectedServerId:
+              typeof developer.selectedServerId === 'string'
+                ? developer.selectedServerId
+                : DEFAULT_SERVER_ID,
+            custom: Array.isArray(developer.servers) ? developer.servers : []
+          }
+        };
+        version = 6;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -89,7 +112,10 @@ export function migrateStoredSettings(value: unknown): {
   return { settings, migrated };
 }
 
-export function defaultSettings(): Settings {
+export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME): Settings {
+  const builtInName = isValidServerName(defaultServerName)
+    ? defaultServerName.trim()
+    : DEFAULT_BUILT_IN_SERVER_NAME;
   return {
     schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     uiScale: DEFAULT_UI_SCALE,
@@ -99,6 +125,11 @@ export function defaultSettings(): Settings {
     fpsLimit: {
       enabled: false,
       value: DEFAULT_FPS_LIMIT
+    },
+    servers: {
+      builtInName,
+      selectedServerId: DEFAULT_SERVER_ID,
+      custom: []
     },
     launch: {
       closeAfterLaunch: true,
@@ -114,8 +145,6 @@ export function defaultSettings(): Settings {
     },
     developer: {
       enabled: false,
-      selectedServerId: DEFAULT_SERVER_ID,
-      servers: [],
       windowed: true,
       resolutionWidth: 1280,
       resolutionHeight: 720
@@ -144,7 +173,7 @@ function mergeInto<T>(base: T, patch: unknown): T {
   return out as T;
 }
 
-function normalizeServer(server: DeveloperServer): DeveloperServer {
+function normalizeServer(server: CustomServer): CustomServer {
   return {
     id: server.id.trim(),
     name: server.name.trim(),
@@ -152,11 +181,17 @@ function normalizeServer(server: DeveloperServer): DeveloperServer {
   };
 }
 
-function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']): Settings['developer'] {
+function sanitizeStoredServers(
+  value: unknown,
+  fallback: Settings['servers']
+): Settings['servers'] {
   if (!isPlainObject(value)) return structuredClone(fallback);
-  const servers: DeveloperServer[] = [];
-  if (Array.isArray(value.servers)) {
-    for (const item of value.servers) {
+  const builtInName = isValidServerName(value.builtInName)
+    ? value.builtInName.trim()
+    : fallback.builtInName;
+  const custom: CustomServer[] = [];
+  if (Array.isArray(value.custom)) {
+    for (const item of value.custom) {
       if (!isPlainObject(item)) continue;
       if (
         typeof item.id !== 'string' ||
@@ -165,19 +200,44 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       ) {
         continue;
       }
-      const candidate = normalizeServer(item as unknown as DeveloperServer);
-      if (validateDeveloperServers([...servers, candidate]) === null) servers.push(candidate);
+      const candidate = normalizeServer(item as unknown as CustomServer);
+      if (validateServerSettings(builtInName, [...custom, candidate]) === null) {
+        custom.push(candidate);
+      }
     }
   }
   const requestedId =
     typeof value.selectedServerId === 'string' ? value.selectedServerId : DEFAULT_SERVER_ID;
-  const selectedServerId = servers.some((server) => server.id === requestedId)
-    ? requestedId
-    : DEFAULT_SERVER_ID;
+  return {
+    builtInName,
+    selectedServerId: custom.some((server) => server.id === requestedId)
+      ? requestedId
+      : DEFAULT_SERVER_ID,
+    custom
+  };
+}
+
+function validateUpdatedServers(value: unknown): Settings['servers'] {
+  if (!isPlainObject(value) || typeof value.selectedServerId !== 'string') {
+    throw new Error('Server settings are invalid.');
+  }
+  const error = validateServerSettings(value.builtInName, value.custom);
+  if (error) throw new Error(error);
+  const builtInName = (value.builtInName as string).trim();
+  const custom = (value.custom as CustomServer[]).map(normalizeServer);
+  return {
+    builtInName,
+    selectedServerId: custom.some((server) => server.id === value.selectedServerId)
+      ? value.selectedServerId
+      : DEFAULT_SERVER_ID,
+    custom
+  };
+}
+
+function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']): Settings['developer'] {
+  if (!isPlainObject(value)) return structuredClone(fallback);
   return {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : false,
-    selectedServerId,
-    servers,
     windowed: typeof value.windowed === 'boolean' ? value.windowed : fallback.windowed,
     resolutionWidth: isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)
       ? (value.resolutionWidth as number)
@@ -192,7 +252,6 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   if (!isPlainObject(value)) throw new Error('Developer settings are invalid.');
   if (
     typeof value.enabled !== 'boolean' ||
-    typeof value.selectedServerId !== 'string' ||
     typeof value.windowed !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
@@ -200,16 +259,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   if (!isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)) {
     throw new Error('Developer launch resolution is invalid.');
   }
-  const error = validateDeveloperServers(value.servers);
-  if (error) throw new Error(error);
-  const servers = (value.servers as DeveloperServer[]).map(normalizeServer);
-  const selectedServerId = servers.some((server) => server.id === value.selectedServerId)
-    ? value.selectedServerId
-    : DEFAULT_SERVER_ID;
   return {
     enabled: value.enabled,
-    selectedServerId,
-    servers,
     windowed: value.windowed,
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number
@@ -269,7 +320,7 @@ export class ConfigStore {
 
     let migrated: ReturnType<typeof migrateStoredSettings>;
     try {
-      migrated = migrateStoredSettings(parsed);
+      migrated = migrateStoredSettings(parsed, this.defaults.servers.builtInName);
     } catch (error) {
       const reason = error instanceof UnsupportedSettingsVersionError ? 'incompatible' : 'corrupt';
       await this.recoverInvalidSettings(reason, (error as Error).message);
@@ -278,6 +329,10 @@ export class ConfigStore {
 
     this.settings = mergeInto(structuredClone(this.defaults), migrated.settings);
     this.settings.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
+    this.settings.servers = sanitizeStoredServers(
+      this.settings.servers,
+      this.defaults.servers
+    );
     this.settings.developer = sanitizeStoredDeveloper(
       this.settings.developer,
       this.defaults.developer
@@ -315,6 +370,7 @@ export class ConfigStore {
   async update(patch: DeepPartial<Settings>): Promise<Settings> {
     const next = mergeInto(this.settings, patch);
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
+    next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
     if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');

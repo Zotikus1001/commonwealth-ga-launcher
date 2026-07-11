@@ -27,6 +27,7 @@ export function registerIpc(
 
   ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
     const updated = await config.update(patch);
+    getWindow()?.webContents.setZoomFactor(updated.uiScale);
     void orchestrator.settingsChanged();
     return updated;
   });

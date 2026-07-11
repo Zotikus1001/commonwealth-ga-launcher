@@ -14,9 +14,10 @@ import {
   isDeveloperResolution,
   validateDeveloperServers
 } from '@shared/serverProfiles';
+import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 4;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 5;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -72,6 +73,15 @@ export function migrateStoredSettings(value: unknown): {
         migrated = true;
         break;
       }
+      case 4:
+        settings = {
+          ...settings,
+          schemaVersion: 5,
+          uiScale: isUiScale(settings.uiScale) ? settings.uiScale : DEFAULT_UI_SCALE
+        };
+        version = 5;
+        migrated = true;
+        break;
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -82,6 +92,7 @@ export function migrateStoredSettings(value: unknown): {
 export function defaultSettings(): Settings {
   return {
     schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    uiScale: DEFAULT_UI_SCALE,
     gameExePath: '',
     loginMap: DEFAULT_LOGIN_MAP,
     showOverhealing: false,
@@ -275,6 +286,7 @@ export class ConfigStore {
       this.settings.fpsLimit,
       this.defaults.fpsLimit
     );
+    if (!isUiScale(this.settings.uiScale)) this.settings.uiScale = this.defaults.uiScale;
     if (!isLoginMap(this.settings.loginMap)) this.settings.loginMap = this.defaults.loginMap;
     if (typeof this.settings.showOverhealing !== 'boolean') {
       this.settings.showOverhealing = this.defaults.showOverhealing;
@@ -305,6 +317,7 @@ export class ConfigStore {
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
     next.developer = validateUpdatedDeveloper(next.developer);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
+    if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');
     if (!isLoginMap(next.loginMap)) next.loginMap = this.defaults.loginMap;
     if (typeof next.showOverhealing !== 'boolean') {
       next.showOverhealing = this.defaults.showOverhealing;

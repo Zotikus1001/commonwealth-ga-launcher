@@ -8,6 +8,7 @@ import type {
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
+import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import {
   DEFAULT_SERVER_ID,
@@ -100,6 +101,10 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
   const save = async (): Promise<boolean> => {
     if (!draft || mapSaving) return false;
+    if (!isUiScale(draft.uiScale)) {
+      setSaveError('Launcher UI scale is invalid.');
+      return false;
+    }
     if (!isFpsLimit(draft.fpsLimit.value)) {
       setSaveError(
         `FPS limit must be a whole number from ${MIN_FPS_LIMIT} to ${MAX_FPS_LIMIT}.`
@@ -514,6 +519,26 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'launch' && (
           <section className={styles.section}>
+            <div className="panel-title">Launcher interface</div>
+            <div className={styles.fieldRow}>
+              <label htmlFor="launcher-ui-scale">UI scale</label>
+              <select
+                id="launcher-ui-scale"
+                value={draft.uiScale}
+                onChange={(event) => {
+                  const scale = Number(event.currentTarget.value);
+                  if (isUiScale(scale)) edit((settings) => ({ ...settings, uiScale: scale }));
+                }}
+              >
+                {UI_SCALE_OPTIONS.map((scale) => (
+                  <option key={scale} value={scale}>
+                    {Math.round(scale * 100)}%
+                  </option>
+                ))}
+              </select>
+              <span className={styles.hint}>Applied after saving.</span>
+            </div>
+
             <div className="panel-title">Graphics</div>
             <div className={styles.fieldGrid}>
               <div>

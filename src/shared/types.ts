@@ -1,6 +1,7 @@
 // Shared contracts between main / preload / renderer. Types only — no runtime imports of
 // Electron or Node here (this file is compiled into all three targets).
 import type { LoginMap } from './loginMaps';
+import type { UiScale } from './uiScale';
 
 export interface DeveloperServer {
   id: string;
@@ -21,6 +22,8 @@ export interface ServerCommit {
 
 export interface Settings {
   schemaVersion: number;
+  /** Renderer zoom controlled only through Launcher UI scale settings. */
+  uiScale: UiScale;
   /** Absolute path to <GA root>/Binaries/GlobalAgenda.exe */
   gameExePath: string;
   /** Login map written to both [URL] Map and LocalMap before launch. */

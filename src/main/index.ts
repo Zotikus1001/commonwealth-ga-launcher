@@ -82,7 +82,7 @@ function lockDownBrowserWindow(window: BrowserWindow, log: Log): void {
   });
   window.on('system-context-menu', (event) => event.preventDefault());
   void contents
-    .setVisualZoomLevelLimits(0, 0)
+    .setVisualZoomLevelLimits(1, 1)
     .catch((error) => log.warn(`launcher zoom lock unavailable: ${error.message}`));
 }
 

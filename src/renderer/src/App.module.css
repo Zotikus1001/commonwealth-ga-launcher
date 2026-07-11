@@ -61,18 +61,41 @@
   gap: 14px;
 }
 
+.versionGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .version {
   color: var(--text-faint);
+  white-space: nowrap;
 }
 
-.updateChip {
-  border-color: var(--cyan);
-  color: var(--cyan);
+.updateStatus {
+  max-width: 190px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.updateChip:hover:not(:disabled) {
-  border-color: var(--cyan);
-  color: #8fe4f0;
+.ok {
+  color: var(--green);
+}
+
+.warn {
+  color: var(--amber-hi);
+}
+
+.error {
+  color: var(--red);
+}
+
+.dim {
+  color: var(--text-dim);
 }
 
 .body {

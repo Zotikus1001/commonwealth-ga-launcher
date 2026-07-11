@@ -2,28 +2,6 @@ import { useEffect, useState } from 'react';
 import type { ActionResult, LauncherState } from '@shared/types';
 import styles from './Play.module.css';
 
-function updateLine(state: LauncherState): { text: string; tone: 'ok' | 'warn' | 'dim' } {
-  switch (state.launcherUpdate) {
-    case 'up-to-date':
-      return { text: `Launcher v${state.launcherVersion} is up to date`, tone: 'ok' };
-    case 'checking':
-      return { text: 'Checking for launcher updates…', tone: 'dim' };
-    case 'downloading':
-      return {
-        text: `Downloading launcher${state.launcherUpdateVersion ? ` v${state.launcherUpdateVersion}` : ' update'}…`,
-        tone: 'warn'
-      };
-    case 'installing':
-      return { text: 'Installing update and restarting…', tone: 'warn' };
-    case 'error':
-      return { text: 'Launcher update check failed — Play is blocked', tone: 'warn' };
-    case 'disabled':
-      return { text: `Development run v${state.launcherVersion} — using local out/`, tone: 'dim' };
-    default:
-      return { text: `Launcher v${state.launcherVersion}`, tone: 'dim' };
-  }
-}
-
 function relativeTime(value: string): string {
   const elapsed = Date.now() - Date.parse(value);
   if (!Number.isFinite(elapsed) || elapsed < 0) return 'just now';
@@ -109,7 +87,6 @@ export default function Play({
   state: LauncherState;
   onOpenGameSettings: () => void;
 }): JSX.Element {
-  const update = updateLine(state);
   const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
   const [discordOpening, setDiscordOpening] = useState(false);
@@ -181,10 +158,7 @@ export default function Play({
 
       <div className={styles.grid}>
         <section className={`panel rise ${styles.updates}`} style={{ animationDelay: '100ms' }}>
-          <div className={styles.panelHeading}>
-            <div className="panel-title">Server updates</div>
-            <span className={`${styles.updateState} ${styles[update.tone]}`}>{update.text}</span>
-          </div>
+          <div className="panel-title">Server Updates</div>
           {state.progress && (
             <div className={styles.progressWrap}>
               <div className={styles.progressTrack}>

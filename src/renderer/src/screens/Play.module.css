@@ -96,33 +96,6 @@
   min-height: 252px;
 }
 
-.panelHeading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.updateState {
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ok {
-  color: var(--green);
-}
-
-.warn {
-  color: var(--amber-hi);
-}
-
-.dim {
-  color: var(--text-dim);
-}
-
 .progressWrap {
   display: flex;
   align-items: center;

@@ -2,6 +2,7 @@ import { constants } from 'fs';
 import { access, copyFile, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, join } from 'path';
 import { isLoginMap, type LoginMap } from '@shared/loginMaps';
+import { isFpsLimit } from '@shared/fpsLimit';
 import type { ClientPatchId, ClientPatchStatus } from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
@@ -27,7 +28,9 @@ interface TextPatchResult {
 type IniPatchOptions =
   | { kind: 'net-speed' }
   | { kind: 'login-map'; loginMap: LoginMap }
-  | { kind: 'overhealing'; suppressOverhealing: boolean };
+  | { kind: 'overhealing'; suppressOverhealing: boolean }
+  | { kind: 'fps-smoothing'; enabled: boolean }
+  | { kind: 'fps-limit'; limit: number };
 
 interface IniFileEdit {
   path: string;
@@ -154,6 +157,152 @@ function verifyEnginePlayerSection(text: string, fileName: string): void {
     if (found.length === 0 || found.some((value) => value !== CLIENT_NET_SPEED)) {
       throw new Error(`${fileName} did not retain ${key}=${CLIENT_NET_SPEED}`);
     }
+  }
+}
+
+function frameRateValue(
+  options: Extract<IniPatchOptions, { kind: 'fps-smoothing' | 'fps-limit' }>
+): {
+  key: 'bSmoothFrameRate' | 'MaxSmoothedFrameRate';
+  insertedValue: string;
+  replacementValue(current: string): string;
+  matches(current: string): boolean;
+} {
+  if (options.kind === 'fps-smoothing') {
+    const expected = options.enabled ? 'true' : 'false';
+    return {
+      key: 'bSmoothFrameRate',
+      insertedValue: options.enabled ? 'True' : 'False',
+      replacementValue: () => (options.enabled ? 'True' : 'False'),
+      matches: (current) => current.toLowerCase() === expected
+    };
+  }
+  return {
+    key: 'MaxSmoothedFrameRate',
+    insertedValue: options.limit.toFixed(6),
+    replacementValue: (current) => {
+      const decimals = current.match(/^[+]?[0-9]+\.([0-9]+)$/)?.[1].length;
+      return decimals === undefined ? String(options.limit) : options.limit.toFixed(decimals);
+    },
+    matches: (current) => Number(current) === options.limit
+  };
+}
+
+function patchGameEngineFrameRate(
+  text: string,
+  options: Extract<IniPatchOptions, { kind: 'fps-smoothing' | 'fps-limit' }>
+): TextPatchResult {
+  const setting = frameRateValue(options);
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
+  let inGameEngine = false;
+  let firstSectionStart = -1;
+  let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
+  let assignments = 0;
+  let hasRemoval = false;
+  let changed = false;
+
+  for (let index = 0; index < lines.length; index++) {
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      if (inGameEngine && firstSectionEnd < 0) firstSectionEnd = index;
+      inGameEngine = section[1].trim().toLowerCase() === 'engine.gameengine';
+      if (inGameEngine && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
+      continue;
+    }
+    if (!inGameEngine) continue;
+
+    const assignment = line.match(
+      /^(\s*)([+.-]?)(bSmoothFrameRate|MaxSmoothedFrameRate)(\s*=\s*)([^;#\s]*)(.*)$/i
+    );
+    if (!assignment || assignment[3].toLowerCase() !== setting.key.toLowerCase()) continue;
+    if (assignment[2] === '-') {
+      hasRemoval = true;
+      continue;
+    }
+    assignments++;
+    if (setting.matches(assignment[5])) continue;
+    lines[index] =
+      `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}` +
+      `${setting.replacementValue(assignment[5])}${assignment[6]}${lineEnding}`;
+    changed = true;
+  }
+
+  if (assignments > 0) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignment = `${hasRemoval ? '+' : ''}${setting.key}=${setting.insertedValue}`;
+  if (firstSectionStart < 0) {
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    const section = `[Engine.GameEngine]${preferredLineEnding}${newAssignment}`;
+    return { text: text + separator + section, changed: true };
+  }
+
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
+  let insertAt = firstSectionEnd;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
+  }
+  const previousHasLineEnding = insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  lines.splice(
+    insertAt,
+    0,
+    `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${
+      preserveMissingTrailingNewline ? '' : preferredLineEnding
+    }`
+  );
+  return { text: lines.join(''), changed: true };
+}
+
+function verifyGameEngineFrameRate(
+  text: string,
+  fileName: string,
+  options: Extract<IniPatchOptions, { kind: 'fps-smoothing' | 'fps-limit' }>
+): void {
+  const setting = frameRateValue(options);
+  let inGameEngine = false;
+  const values: string[] = [];
+  for (const line of text.split(/\r\n|\n|\r/)) {
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inGameEngine = section[1].trim().toLowerCase() === 'engine.gameengine';
+      continue;
+    }
+    if (!inGameEngine) continue;
+    const assignment = line.match(
+      /^\s*([+.-]?)(bSmoothFrameRate|MaxSmoothedFrameRate)\s*=\s*([^;#\s]*)/i
+    );
+    if (
+      !assignment ||
+      assignment[1] === '-' ||
+      assignment[2].toLowerCase() !== setting.key.toLowerCase()
+    ) {
+      continue;
+    }
+    values.push(assignment[3]);
+  }
+  if (values.length === 0 || values.some((value) => !setting.matches(value))) {
+    throw new Error(`${fileName} did not retain ${setting.key}=${setting.insertedValue}`);
   }
 }
 
@@ -426,6 +575,9 @@ async function patchIniFile(
   if (options.kind === 'overhealing') {
     apply(patchOverhealingSection(patchedText, options.suppressOverhealing));
   }
+  if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
+    apply(patchGameEngineFrameRate(patchedText, options));
+  }
 
   const verify = (text: string): void => {
     const fileName = basename(path);
@@ -433,6 +585,9 @@ async function patchIniFile(
     if (options.kind === 'login-map') verifyUrlSection(text, fileName, options.loginMap);
     if (options.kind === 'overhealing') {
       verifyOverhealingSection(text, fileName, options.suppressOverhealing);
+    }
+    if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
+      verifyGameEngineFrameRate(text, fileName, options);
     }
   };
 
@@ -570,21 +725,65 @@ async function ensureOverhealing(
   );
 }
 
+async function ensureFpsLimit(
+  install: GameInstall,
+  enabled: boolean,
+  limit: number,
+  log: Log
+): Promise<IniRepairResult> {
+  if (typeof enabled !== 'boolean' || !isFpsLimit(limit)) {
+    throw new Error('Invalid FPS limit setting');
+  }
+  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const files = [
+    { path: join(configDir, 'TgEngine.ini'), required: true },
+    { path: join(configDir, 'DefaultEngine.ini'), required: false }
+  ];
+  const maximumResult = enabled
+    ? await applyIniEdits(
+        files.map(({ path, required }) => ({
+          path,
+          required,
+          options: { kind: 'fps-limit', limit } as const
+        })),
+        log
+      )
+    : { checkedFiles: [], changedFiles: [], backupFiles: [] };
+  const smoothingResult = await applyIniEdits(
+    files.map(({ path, required }) => ({
+      path,
+      required,
+      options: { kind: 'fps-smoothing', enabled } as const
+    })),
+    log
+  );
+  return mergeRepairResults([maximumResult, smoothingResult]);
+}
+
 /** Applies each configured INI setting independently before every game launch. */
 export async function ensureClientConfiguration(
   install: GameInstall,
   loginMap: LoginMap,
   showOverhealing: boolean,
+  fpsLimitEnabled: boolean,
+  fpsLimit: number,
   log: Log
 ): Promise<IniRepairResult> {
   const networkResult = await applyClientPatch(install, 'high-fps-movement-stability', log);
   const loginMapResult = await ensureLoginMap(install, loginMap, log);
   const overhealingResult = await ensureOverhealing(install, showOverhealing, log);
-  const result = mergeRepairResults([networkResult, loginMapResult, overhealingResult]);
+  const fpsResult = await ensureFpsLimit(install, fpsLimitEnabled, fpsLimit, log);
+  const result = mergeRepairResults([
+    networkResult,
+    loginMapResult,
+    overhealingResult,
+    fpsResult
+  ]);
 
   log.info(
     `client ini: ${CLIENT_NET_SPEED}/${CLIENT_NET_SPEED}, ${loginMap}, and overhealing ` +
-      `${showOverhealing ? 'shown' : 'suppressed'} verified in ` +
+      `${showOverhealing ? 'shown' : 'suppressed'}, FPS limit ` +
+      `${fpsLimitEnabled ? fpsLimit : 'off'} verified in ` +
       `${result.checkedFiles.length} file(s); ` +
       `${result.changedFiles.length} changed`
   );

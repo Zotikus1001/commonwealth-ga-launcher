@@ -4,13 +4,19 @@ import { homedir } from 'os';
 import type { DeepPartial, DeveloperServer, Settings } from '@shared/types';
 import { DEFAULT_LOGIN_MAP, isLoginMap } from '@shared/loginMaps';
 import {
+  DEFAULT_FPS_LIMIT,
+  isFpsLimit,
+  MAX_FPS_LIMIT,
+  MIN_FPS_LIMIT
+} from '@shared/fpsLimit';
+import {
   DEFAULT_SERVER_ID,
   isDeveloperResolution,
   validateDeveloperServers
 } from '@shared/serverProfiles';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 3;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 4;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -52,6 +58,20 @@ export function migrateStoredSettings(value: unknown): {
         migrated = true;
         break;
       }
+      case 3: {
+        const fpsLimit = isPlainObject(settings.fpsLimit) ? settings.fpsLimit : {};
+        settings = {
+          ...settings,
+          schemaVersion: 4,
+          fpsLimit: {
+            enabled: typeof fpsLimit.enabled === 'boolean' ? fpsLimit.enabled : false,
+            value: isFpsLimit(fpsLimit.value) ? fpsLimit.value : DEFAULT_FPS_LIMIT
+          }
+        };
+        version = 4;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -65,6 +85,10 @@ export function defaultSettings(): Settings {
     gameExePath: '',
     loginMap: DEFAULT_LOGIN_MAP,
     showOverhealing: false,
+    fpsLimit: {
+      enabled: false,
+      value: DEFAULT_FPS_LIMIT
+    },
     launch: {
       closeAfterLaunch: true,
       gpuAdapter: 0,
@@ -181,6 +205,24 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   };
 }
 
+function sanitizeStoredFpsLimit(
+  value: unknown,
+  fallback: Settings['fpsLimit']
+): Settings['fpsLimit'] {
+  if (!isPlainObject(value)) return structuredClone(fallback);
+  return {
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : fallback.enabled,
+    value: isFpsLimit(value.value) ? value.value : fallback.value
+  };
+}
+
+function validateUpdatedFpsLimit(value: unknown): Settings['fpsLimit'] {
+  if (!isPlainObject(value) || typeof value.enabled !== 'boolean' || !isFpsLimit(value.value)) {
+    throw new Error(`FPS limit must be a whole number from ${MIN_FPS_LIMIT} to ${MAX_FPS_LIMIT}.`);
+  }
+  return { enabled: value.enabled, value: value.value };
+}
+
 // JSON settings in userData/settings.json, merged over defaults, saved atomically (tmp + rename).
 export class ConfigStore {
   private readonly file: string;
@@ -229,6 +271,10 @@ export class ConfigStore {
       this.settings.developer,
       this.defaults.developer
     );
+    this.settings.fpsLimit = sanitizeStoredFpsLimit(
+      this.settings.fpsLimit,
+      this.defaults.fpsLimit
+    );
     if (!isLoginMap(this.settings.loginMap)) this.settings.loginMap = this.defaults.loginMap;
     if (typeof this.settings.showOverhealing !== 'boolean') {
       this.settings.showOverhealing = this.defaults.showOverhealing;
@@ -258,6 +304,7 @@ export class ConfigStore {
     const next = mergeInto(this.settings, patch);
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
     next.developer = validateUpdatedDeveloper(next.developer);
+    next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
     if (!isLoginMap(next.loginMap)) next.loginMap = this.defaults.loginMap;
     if (typeof next.showOverhealing !== 'boolean') {
       next.showOverhealing = this.defaults.showOverhealing;

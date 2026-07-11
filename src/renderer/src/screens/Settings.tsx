@@ -7,6 +7,7 @@ import type {
   WineRunner
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
+import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import {
   DEFAULT_SERVER_ID,
@@ -99,6 +100,12 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
   const save = async (): Promise<boolean> => {
     if (!draft || mapSaving) return false;
+    if (!isFpsLimit(draft.fpsLimit.value)) {
+      setSaveError(
+        `FPS limit must be a whole number from ${MIN_FPS_LIMIT} to ${MAX_FPS_LIMIT}.`
+      );
+      return false;
+    }
     const validationError = validateDeveloperServers(draft.developer.servers);
     if (validationError) {
       setSaveError(validationError);
@@ -375,6 +382,52 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               {mapSaveError && (
                 <p className={styles.invalid}>{`Could not save the login map: ${mapSaveError}`}</p>
               )}
+            </div>
+
+            <div className="panel-title">Frame rate</div>
+            <div className={styles.fpsLimitControl}>
+              <input
+                id="fps-limit-enabled"
+                type="checkbox"
+                checked={draft.fpsLimit.enabled}
+                onChange={(event) =>
+                  edit((settings) => ({
+                    ...settings,
+                    fpsLimit: { ...settings.fpsLimit, enabled: event.target.checked }
+                  }))
+                }
+              />
+              <label className={styles.fpsLimitDescription} htmlFor="fps-limit-enabled">
+                <span className={styles.featureName}>FPS limit</span>
+                <span className={styles.featureDetail}>
+                  Uses the game&apos;s frame smoothing limiter. Set it to your monitor refresh
+                  rate to reduce avoidable movement and timing issues. Applied when you press
+                  Play.
+                </span>
+              </label>
+              <label className={styles.fpsLimitValue}>
+                <span>Maximum FPS</span>
+                <div>
+                  <input
+                    type="number"
+                    min={MIN_FPS_LIMIT}
+                    max={MAX_FPS_LIMIT}
+                    step={1}
+                    disabled={!draft.fpsLimit.enabled}
+                    value={draft.fpsLimit.value}
+                    onChange={(event) =>
+                      edit((settings) => ({
+                        ...settings,
+                        fpsLimit: {
+                          ...settings.fpsLimit,
+                          value: Number.parseInt(event.target.value, 10) || 0
+                        }
+                      }))
+                    }
+                  />
+                  <span>FPS</span>
+                </div>
+              </label>
             </div>
 
             <div className="panel-title">Combat feedback</div>

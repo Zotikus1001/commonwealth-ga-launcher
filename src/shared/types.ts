@@ -27,6 +27,11 @@ export interface Settings {
   loginMap: LoginMap;
   /** Shows heal/repair feedback on full-health targets when enabled. */
   showOverhealing: boolean;
+  /** Frame smoothing limiter applied to [Engine.GameEngine] before launch. */
+  fpsLimit: {
+    enabled: boolean;
+    value: number;
+  };
   launch: {
     closeAfterLaunch: boolean;
     gpuAdapter: number;

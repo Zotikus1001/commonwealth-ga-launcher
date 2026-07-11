@@ -109,6 +109,51 @@
   line-height: 1.45;
 }
 
+.fpsLimitControl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 126px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  background: linear-gradient(90deg, rgba(64, 191, 191, 0.07), rgba(15, 19, 28, 0.48) 58%);
+}
+
+.fpsLimitDescription {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.fpsLimitValue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fpsLimitValue > span {
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fpsLimitValue > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.fpsLimitValue > div > span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
 .developerToggle {
   border-left: 2px solid var(--cyan);
   background: linear-gradient(90deg, rgba(64, 191, 191, 0.08), rgba(15, 19, 28, 0.48) 58%);

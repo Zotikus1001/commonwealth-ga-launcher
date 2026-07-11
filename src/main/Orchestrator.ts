@@ -524,6 +524,8 @@ export class Orchestrator {
         this.install,
         settings.loginMap,
         settings.showOverhealing,
+        settings.fpsLimit.enabled,
+        settings.fpsLimit.value,
         this.log
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });

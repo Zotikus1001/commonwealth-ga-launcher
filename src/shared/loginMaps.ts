@@ -1,9 +1,7 @@
 export const LOGIN_MAP_OPTIONS = [
   { value: 'Login_FreeAgent.ut3', label: 'Free Agent' },
   { value: 'LoginAllCombined_P.ut3', label: 'Rotating Earth' },
-  { value: 'LoginElvish_P.ut3', label: 'Elvish' },
-  { value: '3P_Beachhead3_P.ut3', label: 'Dropship' },
-  { value: 'Dome3_VR_Arena_P.ut3', label: 'VR Arena' }
+  { value: 'LoginElvish_P.ut3', label: 'Elvish' }
 ] as const;
 
 export type LoginMap = (typeof LOGIN_MAP_OPTIONS)[number]['value'];

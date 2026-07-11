@@ -778,7 +778,13 @@ function ServersTab({
             </label>
             <div className={styles.serverManagedField}>
               <span>Address</span>
-              <div className={styles.serverManagedValue}>Managed by Launcher</div>
+              <input
+                type="text"
+                value="Managed by Launcher"
+                readOnly
+                tabIndex={-1}
+                aria-label="Built-in server address managed by launcher"
+              />
             </div>
           </div>
           <span className={styles.builtInServerBadge}>Built-In</span>

@@ -1283,8 +1283,16 @@ function DiagnosticsTab({
         </div>
         <div>
           <dt>Server probe</dt>
-          <dd className={state.serverOnline ? styles.valid : state.serverOnline === false ? styles.invalid : undefined}>
-            {state.serverOnline === true ? 'online' : state.serverOnline === false ? 'offline' : 'pending'}
+          <dd
+            className={
+              state.serverStatus === 'online'
+                ? styles.valid
+                : state.serverStatus === 'checking'
+                  ? undefined
+                  : styles.invalid
+            }
+          >
+            {state.serverStatus}
           </dd>
         </div>
         {state.platform === 'linux' && (

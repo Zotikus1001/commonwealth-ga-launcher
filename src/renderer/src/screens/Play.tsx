@@ -56,7 +56,7 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
     case 'checking':
       if (
         !state.developerMode &&
-        state.serverOnline !== true &&
+        state.serverStatus === 'checking' &&
         state.gamePathValid &&
         (state.platform !== 'linux' || state.winePathValid === true)
       ) {
@@ -83,13 +83,21 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
   if (state.phase === 'error') {
     return { label: 'RETRY', disabled: false, action: () => void window.api.refresh() };
   }
-  if (!state.developerMode && state.serverOnline !== true) {
-    return {
-      label: 'CHECKING SERVER',
-      disabled: true,
-      action: () => {},
-      loading: true
-    };
+  if (!state.developerMode) {
+    if (state.serverStatus === 'checking') {
+      return {
+        label: 'CHECKING SERVER',
+        disabled: true,
+        action: () => {},
+        loading: true
+      };
+    }
+    if (state.serverStatus === 'invalid') {
+      return { label: 'INVALID SERVER ADDRESS', disabled: true, action: () => {} };
+    }
+    if (state.serverStatus === 'offline') {
+      return { label: 'SERVER OFFLINE', disabled: true, action: () => {} };
+    }
   }
   return { label: 'PLAY', disabled: false, action: () => void window.api.play() };
 }
@@ -103,7 +111,7 @@ export default function Play({
 }): JSX.Element {
   const update = updateLine(state);
   const button = cta(state, onOpenGameSettings);
-  const online = state.serverOnline;
+  const serverStatus = state.serverStatus;
   const [discordOpening, setDiscordOpening] = useState(false);
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
   const [selectingServer, setSelectingServer] = useState(false);
@@ -220,11 +228,23 @@ export default function Play({
           <div className={styles.serverRow}>
             <span
               className={`${styles.dot} ${
-                online === true ? styles.dotOn : online === false ? styles.dotOff : styles.dotUnknown
+                serverStatus === 'online'
+                  ? styles.dotOn
+                  : serverStatus === 'offline'
+                    ? styles.dotOff
+                    : serverStatus === 'invalid'
+                      ? styles.dotInvalid
+                      : styles.dotUnknown
               }`}
             />
             <span className={styles.serverStatus}>
-              {online === true ? 'ONLINE' : online === false ? 'OFFLINE' : 'PROBING'}
+              {serverStatus === 'online'
+                ? 'ONLINE'
+                : serverStatus === 'offline'
+                  ? 'OFFLINE'
+                  : serverStatus === 'invalid'
+                    ? 'INVALID ADDRESS'
+                    : 'PROBING'}
             </span>
           </div>
         </section>

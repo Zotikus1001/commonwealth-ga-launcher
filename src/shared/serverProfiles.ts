@@ -20,16 +20,53 @@ export function isDeveloperResolution(width: unknown, height: unknown): boolean 
   );
 }
 
+function isValidIpv4(host: string): boolean {
+  const parts = host.split('.');
+  return (
+    parts.length === 4 &&
+    parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+  );
+}
+
+function isValidIpv6(host: string): boolean {
+  let address = host;
+  if (address.includes('.')) {
+    const lastColon = address.lastIndexOf(':');
+    if (lastColon < 0 || !isValidIpv4(address.slice(lastColon + 1))) return false;
+    address = `${address.slice(0, lastColon + 1)}0:0`;
+  }
+  if (!/^[A-Fa-f0-9:]+$/.test(address) || address.includes(':::')) return false;
+  const compressedAt = address.indexOf('::');
+  if (compressedAt !== -1 && compressedAt !== address.lastIndexOf('::')) return false;
+  const compressed = compressedAt !== -1;
+  const [left = '', right = ''] = compressed ? address.split('::') : [address, ''];
+  const leftGroups = left ? left.split(':') : [];
+  const rightGroups = right ? right.split(':') : [];
+  const groups = [...leftGroups, ...rightGroups];
+  if (groups.some((group) => !/^[A-Fa-f0-9]{1,4}$/.test(group))) return false;
+  return compressed ? groups.length < 8 : groups.length === 8;
+}
+
 export function isValidServerHost(value: string): boolean {
   const host = value.trim();
   const colonCount = (host.match(/:/g) ?? []).length;
-  return (
-    host.length > 0 &&
-    host.length <= 253 &&
-    !host.includes('://') &&
-    colonCount !== 1 &&
-    !/[\s\\/]/.test(host) &&
-    /^[A-Za-z0-9._:-]+$/.test(host)
+  if (
+    host.length === 0 ||
+    host.length > 253 ||
+    host.includes('://') ||
+    colonCount === 1 ||
+    /[\s\\/]/.test(host) ||
+    !/^[A-Za-z0-9._:-]+$/.test(host)
+  ) {
+    return false;
+  }
+  if (colonCount > 1) return isValidIpv6(host);
+  if (/^[0-9.]+$/.test(host)) return isValidIpv4(host);
+  return host.split('.').every(
+    (label) =>
+      label.length > 0 &&
+      label.length <= 63 &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
   );
 }
 

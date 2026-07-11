@@ -282,6 +282,11 @@
   box-shadow: 0 0 8px var(--red);
 }
 
+.dotInvalid {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber-dim);
+}
+
 .dotUnknown {
   background: var(--text-faint);
   animation: pulse 1.2s ease-in-out infinite;

@@ -91,6 +91,8 @@ export interface ClientPatchStatus {
   applied: boolean | null;
 }
 
+export type ServerStatus = 'checking' | 'online' | 'offline' | 'invalid';
+
 export interface LauncherState {
   phase: Phase;
   statusLine: string;
@@ -99,7 +101,7 @@ export interface LauncherState {
   serverName: string;
   serverChoices: ServerChoice[];
   selectedServerId: string;
-  serverOnline: boolean | null; // null = not probed yet
+  serverStatus: ServerStatus;
   gamePathValid: boolean;
   /** Exact saved path represented by gamePathValid. */
   validatedGameExePath: string;

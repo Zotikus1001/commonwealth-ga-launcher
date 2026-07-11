@@ -13,7 +13,7 @@ import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
 import { validateGameExe, autoDetectGame, type GameInstall } from './services/InstallLocator';
 import { GameLauncher } from './services/GameLauncher';
-import { probeServer } from './services/ServerProbe';
+import { probeServer, type ServerProbeStatus } from './services/ServerProbe';
 import { LauncherUpdater } from './services/LauncherUpdater';
 import { fetchServerCommits } from './services/ServerCommits';
 import { validateWineRunner } from './services/WineEnv';
@@ -27,6 +27,8 @@ import {
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
 const SERVER_CHECKING_STATUS = 'Checking server availability…';
+const SERVER_OFFLINE_STATUS = 'Selected server is offline.';
+const SERVER_INVALID_STATUS = 'Selected server address is invalid or cannot be resolved.';
 const COMMIT_REFRESH_MS = 5 * 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
@@ -36,6 +38,11 @@ interface ServerSelection {
   name: string;
   host: string;
   choices: ServerChoice[];
+}
+
+interface CandidateProbeResult {
+  host: string;
+  status: ServerProbeStatus;
 }
 
 /** Owns launcher state and keeps the renderer as a pure state consumer. */
@@ -48,7 +55,7 @@ export class Orchestrator {
   private busy = false;
   private refreshPending = false;
   private probeTimer: NodeJS.Timeout | null = null;
-  private readonly probesInFlight = new Map<string, Promise<boolean>>();
+  private readonly probesInFlight = new Map<string, Promise<ServerProbeStatus>>();
   private offlineRefreshInFlight = false;
   private commitTimer: NodeJS.Timeout | null = null;
   private commitRefreshInFlight = false;
@@ -96,7 +103,7 @@ export class Orchestrator {
       serverName: config.get().servers.builtInName,
       serverChoices: [{ id: DEFAULT_SERVER_ID, name: config.get().servers.builtInName }],
       selectedServerId: DEFAULT_SERVER_ID,
-      serverOnline: null,
+      serverStatus: 'checking',
       gamePathValid: false,
       validatedGameExePath: '',
       winePathValid: PLATFORM === 'linux' ? false : null,
@@ -174,7 +181,7 @@ export class Orchestrator {
       serverChoices: selection.choices,
       selectedServerId: selection.id,
       developerMode: settings.developer.enabled,
-      serverOnline: hostChanged ? null : this.state.serverOnline
+      serverStatus: hostChanged ? 'checking' : this.state.serverStatus
     });
     void this.reprobe();
     return selection;
@@ -214,7 +221,7 @@ export class Orchestrator {
     const shouldCheckLauncher =
       app.isPackaged &&
       !this.state.developerMode &&
-      this.state.serverOnline === false &&
+      (this.state.serverStatus === 'offline' || this.state.serverStatus === 'invalid') &&
       !this.state.launchCoolingDown &&
       !this.busy &&
       (this.state.phase === 'ready' || this.state.launcherUpdate === 'error');
@@ -243,12 +250,15 @@ export class Orchestrator {
     }
   }
 
-  private probeHost(host: string): Promise<boolean> {
+  private probeHost(host: string): Promise<ServerProbeStatus> {
     const existing = this.probesInFlight.get(host);
     if (existing) return existing;
     const pending = (async () => {
       try {
         return await probeServer(host);
+      } catch (error) {
+        this.log.warn(`server probe failed unexpectedly for ${host}: ${(error as Error).message}`);
+        return 'offline' as const;
       } finally {
         this.probesInFlight.delete(host);
       }
@@ -257,32 +267,55 @@ export class Orchestrator {
     return pending;
   }
 
+  private probeCandidates(candidates: string[]): Promise<CandidateProbeResult> {
+    return new Promise((resolve) => {
+      let remaining = candidates.length;
+      let sawOffline = false;
+      let settled = false;
+      const finish = (result: CandidateProbeResult): void => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+
+      for (const host of candidates) {
+        void this.probeHost(host).then((status) => {
+          if (settled) return;
+          if (status === 'online') {
+            finish({ host, status });
+            return;
+          }
+          if (status === 'offline') sawOffline = true;
+          remaining -= 1;
+          if (remaining === 0) {
+            finish({
+              host: candidates[0],
+              status: sawOffline ? 'offline' : 'invalid'
+            });
+          }
+        });
+      }
+    });
+  }
+
   private async reprobe(): Promise<boolean> {
     const settings = this.config.get();
     const selection = this.resolveServer(settings);
     const candidates = this.hostCandidates(selection);
     if (candidates.length === 0) {
-      if (this.state.serverOnline !== false) this.patch({ serverOnline: false });
+      if (this.state.serverStatus !== 'invalid') this.patch({ serverStatus: 'invalid' });
       return false;
     }
-    const showOfflineRetry =
+    const showServerStatus =
       !this.state.developerMode &&
       this.state.phase === 'ready' &&
       this.state.gamePathValid &&
-      (PLATFORM !== 'linux' || this.state.winePathValid === true) &&
-      this.state.serverOnline === false;
-    if (showOfflineRetry) {
-      this.patch({ serverOnline: null, statusLine: SERVER_CHECKING_STATUS });
-    }
-    let reachableHost = candidates[0];
-    let online = false;
-    for (const candidate of candidates) {
-      if (await this.probeHost(candidate)) {
-        reachableHost = candidate;
-        online = true;
-        break;
-      }
-    }
+      (PLATFORM !== 'linux' || this.state.winePathValid === true);
+    this.patch({
+      serverStatus: 'checking',
+      ...(showServerStatus ? { statusLine: SERVER_CHECKING_STATUS } : {})
+    });
+    const result = await this.probeCandidates(candidates);
     const currentSettings = this.config.get();
     const currentSelection = this.resolveServer(currentSettings);
     if (
@@ -292,14 +325,28 @@ export class Orchestrator {
       return false;
     }
     const patch: Partial<LauncherState> = {};
-    const resolvedHost = online ? reachableHost : candidates[0];
+    const resolvedHost = result.status === 'online' ? result.host : candidates[0];
     if (resolvedHost !== this.state.resolvedHost) patch.resolvedHost = resolvedHost;
-    if (online !== this.state.serverOnline) patch.serverOnline = online;
-    if (this.state.statusLine === SERVER_CHECKING_STATUS) {
-      patch.statusLine = 'Ready.';
+    if (result.status !== this.state.serverStatus) patch.serverStatus = result.status;
+    const canShowTerminalStatus =
+      !this.state.developerMode &&
+      this.state.phase === 'ready' &&
+      this.state.gamePathValid &&
+      (PLATFORM !== 'linux' || this.state.winePathValid === true) &&
+      (this.state.statusLine === 'Ready.' ||
+        this.state.statusLine === SERVER_CHECKING_STATUS ||
+        this.state.statusLine === SERVER_OFFLINE_STATUS ||
+        this.state.statusLine === SERVER_INVALID_STATUS);
+    if (canShowTerminalStatus) {
+      patch.statusLine =
+        result.status === 'online'
+          ? 'Ready.'
+          : result.status === 'invalid'
+            ? SERVER_INVALID_STATUS
+            : SERVER_OFFLINE_STATUS;
     }
     if (Object.keys(patch).length > 0) this.patch(patch);
-    return online;
+    return result.status === 'online';
   }
 
   async refresh(): Promise<void> {
@@ -344,7 +391,7 @@ export class Orchestrator {
     if (!selection.host) {
       this.patch({
         phase: 'error',
-        serverOnline: false,
+        serverStatus: 'invalid',
         statusLine: 'Server address unavailable. Retry after updating the launcher.',
         errorDetails: 'No default server address is configured for this build.'
       });
@@ -450,8 +497,10 @@ export class Orchestrator {
         if (!(await this.reprobe())) {
           this.patch({
             phase: 'ready',
-            serverOnline: false,
-            statusLine: 'Ready.',
+            statusLine:
+              this.state.serverStatus === 'invalid'
+                ? SERVER_INVALID_STATUS
+                : SERVER_OFFLINE_STATUS,
             errorDetails: null
           });
           return;

@@ -652,6 +652,28 @@ export class Orchestrator {
     await this.refreshRuntimeState();
   }
 
+  async checkServer(): Promise<void> {
+    if (
+      this.busy ||
+      this.state.developerMode ||
+      this.state.launchCoolingDown ||
+      this.state.phase !== 'ready' ||
+      this.state.serverStatus !== 'offline'
+    ) {
+      return;
+    }
+    this.busy = true;
+    try {
+      await this.reprobe();
+    } catch (error) {
+      this.log.warn(`manual server check failed: ${(error as Error).message}`);
+      this.patch({ serverStatus: 'offline', statusLine: SERVER_OFFLINE_STATUS });
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
   async settingsChanged(): Promise<void> {
     await this.refresh();
   }

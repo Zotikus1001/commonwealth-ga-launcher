@@ -69,6 +69,7 @@ export function registerIpc(
     if (typeof id !== 'string') throw new Error('Server identifier must be a string.');
     return orchestrator.selectServer(id);
   });
+  ipcMain.handle(IPC.checkServer, () => orchestrator.checkServer());
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
   ipcMain.handle(IPC.listWineRunners, () => listWineRunners(config.get(), log));
   ipcMain.handle(IPC.createWinePrefix, () => {

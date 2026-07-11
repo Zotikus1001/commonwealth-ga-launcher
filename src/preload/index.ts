@@ -21,6 +21,7 @@ const api: LauncherApi = {
   playDeveloper: () => ipcRenderer.invoke(IPC.playDeveloper),
   applyClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.applyClientPatch, id),
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
+  checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),
   listWineRunners: () => ipcRenderer.invoke(IPC.listWineRunners),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),

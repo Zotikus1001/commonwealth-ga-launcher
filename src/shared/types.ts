@@ -155,6 +155,7 @@ export interface LauncherApi {
   playDeveloper(): Promise<void>;
   applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
   selectServer(id: string): Promise<void>;
+  checkServer(): Promise<void>;
   refresh(): Promise<void>;
   listWineRunners(): Promise<WineRunner[]>;
   createWinePrefix(): Promise<ActionResult>;

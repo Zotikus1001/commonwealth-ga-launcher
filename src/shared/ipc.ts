@@ -9,6 +9,7 @@ export const IPC = {
   playDeveloper: 'launcher:play-developer',
   applyClientPatch: 'launcher:apply-client-patch',
   selectServer: 'launcher:select-server',
+  checkServer: 'launcher:check-server',
   refresh: 'launcher:refresh',
   listWineRunners: 'launcher:list-wine-runners',
   createWinePrefix: 'launcher:create-wine-prefix',

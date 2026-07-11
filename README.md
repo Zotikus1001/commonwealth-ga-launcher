@@ -37,7 +37,7 @@ launcher specifically asks you to download the latest version.
 | --- | --- |
 | **Automatic launcher updates** | Checks for stable updates before use and installs them before launching the game. |
 | **Easy game setup** | Finds common Steam installations automatically, supports manual selection, and links directly to the Steam store or install action when needed. |
-| **Server status checks** | Detects online, offline, and invalid server addresses so the game is not launched toward an unavailable server. |
+| **Server status checks** | Detects online, offline, and invalid server addresses, blocks unavailable launches, and lets you retry an offline server immediately. |
 | **Multiple server profiles** | Lets you rename the main server, add other servers, and choose where to connect from the home screen. |
 | **High-FPS movement fix** | Applies the required client network fix for high-FPS teleporting and movement issues. |
 | **Safe game configuration** | Changes only the required INI settings, preserves unrelated settings, creates a backup, and verifies each change before launch. |

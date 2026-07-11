@@ -75,7 +75,11 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
       return { label: 'INVALID SERVER ADDRESS', disabled: true, action: () => {} };
     }
     if (state.serverStatus === 'offline') {
-      return { label: 'SERVER OFFLINE', disabled: true, action: () => {} };
+      return {
+        label: 'CHECK SERVER',
+        disabled: false,
+        action: () => void window.api.checkServer()
+      };
     }
   }
   return { label: 'PLAY', disabled: false, action: () => void window.api.play() };

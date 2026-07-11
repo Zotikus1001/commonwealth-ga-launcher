@@ -6,6 +6,8 @@ const CONFIG_KEYS = new Set([
   'default_server_host',
   'fallback_server_host',
   'default_server_name',
+  'agenda_stats_url',
+  'agenda_stats_status_url',
   'discord_invite_url',
   'steam_store_url',
   'steam_install_url',
@@ -143,6 +145,28 @@ function loadLauncherConfig(options = {}) {
     throw new Error('default_server_name must contain 1 to 64 characters');
   }
 
+  let agendaStatsUrl;
+  let agendaStatsStatusUrl;
+  try {
+    agendaStatsUrl = new URL(raw.agenda_stats_url);
+    agendaStatsStatusUrl = new URL(raw.agenda_stats_status_url);
+  } catch {
+    throw new Error('Agenda Stats URLs must be valid URLs');
+  }
+  if (
+    agendaStatsUrl.protocol !== 'https:' ||
+    agendaStatsStatusUrl.protocol !== 'https:' ||
+    agendaStatsUrl.username ||
+    agendaStatsUrl.password ||
+    agendaStatsStatusUrl.username ||
+    agendaStatsStatusUrl.password
+  ) {
+    throw new Error('Agenda Stats URLs must use HTTPS without embedded credentials');
+  }
+  if (agendaStatsUrl.origin !== agendaStatsStatusUrl.origin) {
+    throw new Error('agenda_stats_url and agenda_stats_status_url must use the same origin');
+  }
+
   let discordUrl;
   try {
     discordUrl = new URL(raw.discord_invite_url);
@@ -209,6 +233,8 @@ function loadLauncherConfig(options = {}) {
     defaultServerHost,
     fallbackServerHost,
     defaultServerName,
+    agendaStatsUrl: agendaStatsUrl.toString(),
+    agendaStatsStatusUrl: agendaStatsStatusUrl.toString(),
     discordInviteUrl: raw.discord_invite_url,
     steamStoreUrl: raw.steam_store_url,
     steamInstallUrl: raw.steam_install_url,

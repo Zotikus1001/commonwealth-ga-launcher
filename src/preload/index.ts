@@ -25,6 +25,7 @@ const api: LauncherApi = {
   listWineRunners: () => ipcRenderer.invoke(IPC.listWineRunners),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),
   openDiscord: () => ipcRenderer.invoke(IPC.openDiscord),
+  openAgendaStats: () => ipcRenderer.invoke(IPC.openAgendaStats),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),
   openSteamInstall: () => ipcRenderer.invoke(IPC.openSteamInstall),
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),

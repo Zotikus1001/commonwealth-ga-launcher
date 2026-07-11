@@ -15,6 +15,7 @@ import { validateGameExe, autoDetectGame, type GameInstall } from './services/In
 import { GameLauncher } from './services/GameLauncher';
 import { probeServer, type ServerProbeStatus } from './services/ServerProbe';
 import { LauncherUpdater } from './services/LauncherUpdater';
+import { fetchAgendaStatsStatus } from './services/AgendaStats';
 import { fetchServerCommits } from './services/ServerCommits';
 import { validateWineRunner } from './services/WineEnv';
 import {
@@ -30,6 +31,7 @@ const SERVER_CHECKING_STATUS = 'Checking server availability…';
 const SERVER_OFFLINE_STATUS = 'Selected server is offline.';
 const SERVER_INVALID_STATUS = 'Selected server address is invalid or cannot be resolved.';
 const COMMIT_REFRESH_MS = 5 * 60_000;
+const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
 
@@ -58,6 +60,8 @@ export class Orchestrator {
   private offlineRefreshInFlight = false;
   private commitTimer: NodeJS.Timeout | null = null;
   private commitRefreshInFlight = false;
+  private agendaStatsTimer: NodeJS.Timeout | null = null;
+  private agendaStatsRefreshInFlight = false;
   private autoCloseTimer: NodeJS.Timeout | null = null;
   private launchCooldownTimer: NodeJS.Timeout | null = null;
 
@@ -92,6 +96,8 @@ export class Orchestrator {
       clientPatches: unavailableClientPatches(),
       serverCommits: [],
       serverCommitsStatus: 'loading',
+      agendaStatsText: null,
+      agendaStatsStatus: 'loading',
       platform: PLATFORM,
       accountTabEnabled: false
     };
@@ -170,6 +176,7 @@ export class Orchestrator {
 
   private applyServerSelection(settings: Settings): ServerSelection {
     const selection = this.resolveServer(settings);
+    const selectedServerChanged = selection.id !== this.state.selectedServerId;
     const candidates = this.hostCandidates(selection);
     const activeHost = candidates.find(
       (candidate) => candidate.toLowerCase() === this.state.resolvedHost.toLowerCase()
@@ -185,6 +192,9 @@ export class Orchestrator {
       serverStatus: hostChanged ? 'checking' : this.state.serverStatus
     });
     void this.reprobe();
+    if (selectedServerChanged && selection.id === DEFAULT_SERVER_ID) {
+      void this.refreshAgendaStats(true);
+    }
     return selection;
   }
 
@@ -195,6 +205,7 @@ export class Orchestrator {
       await this.refresh();
     }
     void this.refreshServerCommits();
+    void this.refreshAgendaStats(true);
     if (!this.probeTimer) {
       this.probeTimer = setInterval(
         () => void this.refreshWhileServerOffline(),
@@ -203,6 +214,32 @@ export class Orchestrator {
     }
     if (!this.commitTimer) {
       this.commitTimer = setInterval(() => void this.refreshServerCommits(), COMMIT_REFRESH_MS);
+    }
+    if (!this.agendaStatsTimer) {
+      this.agendaStatsTimer = setInterval(
+        () => void this.refreshAgendaStats(),
+        AGENDA_STATS_REFRESH_MS
+      );
+    }
+  }
+
+  private async refreshAgendaStats(showLoading = false): Promise<void> {
+    if (this.state.selectedServerId !== DEFAULT_SERVER_ID) return;
+    if (showLoading) this.patch({ agendaStatsText: null, agendaStatsStatus: 'loading' });
+    if (this.agendaStatsRefreshInFlight) return;
+    this.agendaStatsRefreshInFlight = true;
+    try {
+      const text = await fetchAgendaStatsStatus();
+      if (this.state.selectedServerId === DEFAULT_SERVER_ID) {
+        this.patch({ agendaStatsText: text, agendaStatsStatus: 'ready' });
+      }
+    } catch (error) {
+      this.log.warn(`Agenda Stats unavailable: ${(error as Error).message}`);
+      if (this.state.selectedServerId === DEFAULT_SERVER_ID) {
+        this.patch({ agendaStatsStatus: 'error' });
+      }
+    } finally {
+      this.agendaStatsRefreshInFlight = false;
     }
   }
 

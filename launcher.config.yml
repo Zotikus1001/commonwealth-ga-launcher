@@ -2,6 +2,8 @@
 default_server_host: "216.201.76.180"
 fallback_server_host: "commonwealth.ydns.eu"
 default_server_name: "CommonWealth"
+agenda_stats_url: "https://commonwealth.ydns.eu"
+agenda_stats_status_url: "https://commonwealth.ydns.eu/api/status"
 discord_invite_url: "https://discord.gg/EdwDCnBG7"
 steam_store_url: "https://store.steampowered.com/app/17020/"
 steam_install_url: "steam://run/17020"

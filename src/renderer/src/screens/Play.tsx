@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ActionResult, LauncherState } from '@shared/types';
+import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -91,6 +92,8 @@ export default function Play({
   const serverStatus = state.serverStatus;
   const [discordOpening, setDiscordOpening] = useState(false);
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
+  const [agendaStatsOpening, setAgendaStatsOpening] = useState(false);
+  const [agendaStatsOpenError, setAgendaStatsOpenError] = useState<string | null>(null);
   const [selectingServer, setSelectingServer] = useState(false);
   const [serverSelectionError, setServerSelectionError] = useState<string | null>(null);
   const [, setClock] = useState(0);
@@ -100,6 +103,13 @@ export default function Play({
     !state.launchCoolingDown &&
     state.gamePathValid &&
     (state.platform !== 'linux' || state.winePathValid === true);
+  const showsAgendaStats = state.selectedServerId === DEFAULT_SERVER_ID;
+  const agendaStatsText =
+    state.agendaStatsStatus === 'ready' && state.agendaStatsText
+      ? state.agendaStatsText
+      : state.agendaStatsStatus === 'error'
+        ? 'Player count unavailable'
+        : 'Reading live population…';
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock((value) => value + 1), 60_000);
@@ -119,6 +129,22 @@ export default function Play({
       });
     } finally {
       setDiscordOpening(false);
+    }
+  };
+
+  const openAgendaStats = async (): Promise<void> => {
+    if (agendaStatsOpening) return;
+    setAgendaStatsOpening(true);
+    setAgendaStatsOpenError(null);
+    try {
+      const result = await window.api.openAgendaStats();
+      if (!result.ok) setAgendaStatsOpenError(result.message);
+    } catch (error) {
+      setAgendaStatsOpenError(
+        `Could not open Agenda Stats: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setAgendaStatsOpening(false);
     }
   };
 
@@ -221,6 +247,44 @@ export default function Play({
                     : 'PROBING'}
             </span>
           </div>
+          {showsAgendaStats && (
+            <div className={styles.agendaStats}>
+              <div className={styles.agendaStatsPopulation}>
+                <span className={styles.agendaStatsLabel}>Live population</span>
+                <span
+                  className={`${styles.agendaStatsValue} ${
+                    state.agendaStatsStatus === 'ready'
+                      ? styles.agendaStatsReady
+                      : state.agendaStatsStatus === 'error'
+                        ? styles.agendaStatsError
+                        : styles.agendaStatsLoading
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className={styles.agendaStatsSignal} aria-hidden="true" />
+                  {agendaStatsText}
+                </span>
+              </div>
+              <button
+                className={styles.agendaStatsButton}
+                disabled={agendaStatsOpening}
+                title="View recorded PvP, PvE, mission, and player statistics"
+                onClick={() => void openAgendaStats()}
+              >
+                <span className={styles.agendaStatsButtonCopy}>
+                  <strong>Agenda Stats</strong>
+                  <small>PvP · PvE · player records</small>
+                </span>
+                <span className={styles.agendaStatsOpen}>
+                  {agendaStatsOpening ? 'OPENING…' : 'VIEW ↗'}
+                </span>
+              </button>
+              {agendaStatsOpenError && (
+                <p className={styles.agendaStatsOpenError}>{agendaStatsOpenError}</p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 

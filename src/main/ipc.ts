@@ -7,6 +7,7 @@ import type { Log } from './services/Log';
 import { listWineRunners, createWinePrefix } from './services/WineEnv';
 import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
+import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 
 export function registerIpc(
   getWindow: () => BrowserWindow | null,
@@ -81,6 +82,18 @@ export function registerIpc(
       return { ok: true, message: 'Discord invite opened.' };
     } catch (error) {
       return { ok: false, message: `Could not open Discord: ${(error as Error).message}` };
+    }
+  });
+
+  ipcMain.handle(IPC.openAgendaStats, async () => {
+    if (orchestrator.getState().selectedServerId !== DEFAULT_SERVER_ID) {
+      return { ok: false, message: 'Agenda Stats is available only for the Commonwealth server.' };
+    }
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.agendaStatsUrl);
+      return { ok: true, message: 'Agenda Stats opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open Agenda Stats: ${(error as Error).message}` };
     }
   });
 

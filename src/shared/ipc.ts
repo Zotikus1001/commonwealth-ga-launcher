@@ -13,6 +13,7 @@ export const IPC = {
   listWineRunners: 'launcher:list-wine-runners',
   createWinePrefix: 'launcher:create-wine-prefix',
   openDiscord: 'launcher:open-discord',
+  openAgendaStats: 'launcher:open-agenda-stats',
   openSteamStore: 'launcher:open-steam-store',
   openSteamInstall: 'launcher:open-steam-install',
   openLauncherLogs: 'launcher:open-launcher-logs',

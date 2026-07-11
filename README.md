@@ -45,7 +45,7 @@ launcher specifically asks you to download the latest version.
 | **Faster startup** | Can skip startup movies and the splash screen, then close the launcher automatically after the game starts. |
 | **Custom launcher scaling** | Adjusts launcher text and controls from 100% to 150% and applies the new scale immediately. |
 | **Patches and diagnostics** | Shows whether required fixes are applied, lets you apply them manually, checks the runtime setup, and provides launcher logs for troubleshooting. |
-| **Community updates** | Shows recent game-server changes and provides direct access to the community Discord. |
+| **Agenda Stats and community updates** | Shows the Commonwealth server's live player count, opens recorded PvP, PvE, mission, and player statistics, lists recent server changes, and links to Discord. |
 | **Windows and Linux support** | Provides a Windows installer and a Linux AppImage with configurable Wine runner and prefix support. |
 
 ---

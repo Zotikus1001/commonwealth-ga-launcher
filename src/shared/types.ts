@@ -118,6 +118,8 @@ export interface LauncherState {
   clientPatches: ClientPatchStatus[];
   serverCommits: ServerCommit[];
   serverCommitsStatus: 'loading' | 'ready' | 'error';
+  agendaStatsText: string | null;
+  agendaStatsStatus: 'loading' | 'ready' | 'error';
   platform: 'win32' | 'linux' | 'darwin';
   /** Account tab stays hidden until Phase 4 auto-login lands (plan §11b decision #4). */
   accountTabEnabled: boolean;
@@ -157,6 +159,7 @@ export interface LauncherApi {
   listWineRunners(): Promise<WineRunner[]>;
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
+  openAgendaStats(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;
   openLauncherLogs(): Promise<ActionResult>;

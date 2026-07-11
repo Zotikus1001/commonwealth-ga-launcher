@@ -2,9 +2,7 @@ import { app, BrowserWindow, Menu, type Input } from 'electron';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Log } from './services/Log';
-import { ConfigStore, defaultSettings } from './services/ConfigStore';
-import { Orchestrator } from './Orchestrator';
-import { registerIpc } from './ipc';
+import { LauncherUpdater } from './services/LauncherUpdater';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 
 const BROWSER_KEYS = new Set([
@@ -137,6 +135,23 @@ if (!app.requestSingleInstanceLock()) {
     const log = new Log(app.getPath('userData'));
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
 
+    const launcherUpdater = new LauncherUpdater(log);
+    const bootstrapUpdate = await launcherUpdater.ensureCurrentBeforeWindow();
+    if (bootstrapUpdate === 'restarting') {
+      log.info('self-update bootstrap: update installer started before window creation');
+      return;
+    }
+    if (bootstrapUpdate === 'error') {
+      log.warn('self-update bootstrap: continuing to recovery UI after update failure');
+    }
+
+    const [{ ConfigStore, defaultSettings }, { Orchestrator }, { registerIpc }] =
+      await Promise.all([
+        import('./services/ConfigStore'),
+        import('./Orchestrator'),
+        import('./ipc')
+      ]);
+
     const config = new ConfigStore(
       app.getPath('userData'),
       defaultSettings(LAUNCHER_CONFIG.defaultServerName),
@@ -149,7 +164,8 @@ if (!app.requestSingleInstanceLock()) {
       config,
       log,
       defaultServerHosts.primary,
-      defaultServerHosts.fallback
+      defaultServerHosts.fallback,
+      launcherUpdater
     );
     registerIpc(() => mainWindow, orchestrator, config, log);
 
@@ -205,7 +221,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     void windowLoad.catch((error) => log.error(`launcher window load rejected: ${error.message}`));
 
-    void orchestrator.start();
+    void orchestrator.start(true);
   });
 
   app.on('window-all-closed', () => {

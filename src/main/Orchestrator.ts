@@ -50,7 +50,6 @@ export class Orchestrator {
   private state: LauncherState;
   private install: GameInstall | null = null;
   private readonly gameLauncher: GameLauncher;
-  private readonly launcherUpdater: LauncherUpdater;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -66,10 +65,37 @@ export class Orchestrator {
     private readonly config: ConfigStore,
     private readonly log: Log,
     private readonly defaultServerHost: string,
-    private readonly fallbackServerHost: string
+    private readonly fallbackServerHost: string,
+    private readonly launcherUpdater: LauncherUpdater
   ) {
     this.gameLauncher = new GameLauncher(log);
-    this.launcherUpdater = new LauncherUpdater(log, {
+    const launcherUpdate = launcherUpdater.getSnapshot();
+    this.state = {
+      phase: 'init',
+      statusLine: 'Starting…',
+      errorDetails: null,
+      resolvedHost: defaultServerHost,
+      serverName: config.get().servers.builtInName,
+      serverChoices: [{ id: DEFAULT_SERVER_ID, name: config.get().servers.builtInName }],
+      selectedServerId: DEFAULT_SERVER_ID,
+      serverStatus: 'checking',
+      gamePathValid: false,
+      validatedGameExePath: '',
+      winePathValid: PLATFORM === 'linux' ? false : null,
+      launchCoolingDown: false,
+      developerMode: false,
+      progress: launcherUpdate.progress,
+      launcherVersion: app.getVersion(),
+      launcherUpdate: launcherUpdate.status,
+      launcherUpdateVersion: launcherUpdate.version,
+      launcherUpdateError: launcherUpdate.error,
+      clientPatches: unavailableClientPatches(),
+      serverCommits: [],
+      serverCommitsStatus: 'loading',
+      platform: PLATFORM,
+      accountTabEnabled: false
+    };
+    launcherUpdater.setEvents({
       onStatus: (status: LauncherUpdateStatus, version, error) => {
         const patch: Partial<LauncherState> = {
           launcherUpdate: status,
@@ -95,31 +121,6 @@ export class Orchestrator {
       },
       onProgress: (progress: UpdateProgress | null) => this.patch({ progress })
     });
-    this.state = {
-      phase: 'init',
-      statusLine: 'Starting…',
-      errorDetails: null,
-      resolvedHost: defaultServerHost,
-      serverName: config.get().servers.builtInName,
-      serverChoices: [{ id: DEFAULT_SERVER_ID, name: config.get().servers.builtInName }],
-      selectedServerId: DEFAULT_SERVER_ID,
-      serverStatus: 'checking',
-      gamePathValid: false,
-      validatedGameExePath: '',
-      winePathValid: PLATFORM === 'linux' ? false : null,
-      launchCoolingDown: false,
-      developerMode: false,
-      progress: null,
-      launcherVersion: app.getVersion(),
-      launcherUpdate: 'idle',
-      launcherUpdateVersion: null,
-      launcherUpdateError: null,
-      clientPatches: unavailableClientPatches(),
-      serverCommits: [],
-      serverCommitsStatus: 'loading',
-      platform: PLATFORM,
-      accountTabEnabled: false
-    };
   }
 
   setBroadcast(fn: (state: LauncherState) => void): void {
@@ -187,8 +188,12 @@ export class Orchestrator {
     return selection;
   }
 
-  async start(): Promise<void> {
-    await this.refresh();
+  async start(startupUpdateChecked = false): Promise<void> {
+    if (startupUpdateChecked) {
+      await this.refreshRuntimeState();
+    } else {
+      await this.refresh();
+    }
     void this.refreshServerCommits();
     if (!this.probeTimer) {
       this.probeTimer = setInterval(

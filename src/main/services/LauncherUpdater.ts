@@ -17,6 +17,20 @@ export interface LauncherUpdateEvents {
   onProgress(progress: UpdateProgress | null): void;
 }
 
+export interface LauncherUpdateSnapshot {
+  status: LauncherUpdateStatus;
+  version: string | null;
+  error: string | null;
+  progress: UpdateProgress | null;
+}
+
+export type BootstrapUpdateResult = 'current' | 'restarting' | 'error';
+
+const NO_UPDATE_EVENTS: LauncherUpdateEvents = {
+  onStatus: () => {},
+  onProgress: () => {}
+};
+
 interface InstalledReleaseState {
   schemaVersion: 1;
   repository: string;
@@ -85,6 +99,11 @@ async function latestRelease(source: UpdateRepository): Promise<PublishedRelease
  */
 export class LauncherUpdater {
   private status: LauncherUpdateStatus = 'idle';
+  private statusVersion: string | null = null;
+  private statusError: string | null = null;
+  private progress: UpdateProgress | null = null;
+  private events: LauncherUpdateEvents;
+  private readonly bootstrapWaiters = new Set<(result: BootstrapUpdateResult) => void>();
   private checkInFlight: Promise<boolean> | null = null;
   private readonly latestByRepository = new Map<string, PublishedRelease | null>();
   private nextRepositoryIndex = 0;
@@ -94,8 +113,9 @@ export class LauncherUpdater {
 
   constructor(
     private readonly log: Log,
-    private readonly events: LauncherUpdateEvents
+    events: LauncherUpdateEvents = NO_UPDATE_EVENTS
   ) {
+    this.events = events;
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.autoRunAppAfterInstall = true;
@@ -108,7 +128,7 @@ export class LauncherUpdater {
     });
     autoUpdater.on('update-not-available', () => this.setStatus('up-to-date'));
     autoUpdater.on('download-progress', (progress) => {
-      this.events.onProgress({
+      this.setProgress({
         kind: 'launcher',
         percent: Math.round(progress.percent),
         transferred: progress.transferred,
@@ -116,11 +136,19 @@ export class LauncherUpdater {
       });
     });
     autoUpdater.on('update-downloaded', (info) => {
-      this.events.onProgress(null);
+      this.setProgress(null);
       this.log.info(`self-update: ${info.version} downloaded, installing now`);
       this.setStatus('installing', info.version);
       void this.queueSelectedRelease().then(
-        () => setTimeout(() => autoUpdater.quitAndInstall(false, true), 250),
+        () =>
+          setTimeout(() => {
+            try {
+              autoUpdater.quitAndInstall(false, true);
+              this.finishBootstrap('restarting');
+            } catch (error) {
+              this.setStatus('error', null, (error as Error).message);
+            }
+          }, 250),
         (error: Error) => {
           this.log.warn(`self-update: could not persist pending release state: ${error.message}`);
           this.setStatus('error', null, error.message);
@@ -128,10 +156,33 @@ export class LauncherUpdater {
       );
     });
     autoUpdater.on('error', (error) => {
-      this.events.onProgress(null);
+      this.setProgress(null);
       this.log.warn(`self-update: ${error.message}`);
       this.setStatus('error', null, error.message);
     });
+  }
+
+  setEvents(events: LauncherUpdateEvents): void {
+    this.events = events;
+  }
+
+  getSnapshot(): LauncherUpdateSnapshot {
+    return {
+      status: this.status,
+      version: this.statusVersion,
+      error: this.statusError,
+      progress: this.progress
+    };
+  }
+
+  private setProgress(progress: UpdateProgress | null): void {
+    this.progress = progress;
+    this.events.onProgress(progress);
+  }
+
+  private finishBootstrap(result: BootstrapUpdateResult): void {
+    for (const resolve of this.bootstrapWaiters) resolve(result);
+    this.bootstrapWaiters.clear();
   }
 
   private setStatus(
@@ -140,7 +191,10 @@ export class LauncherUpdater {
     error: string | null = null
   ): void {
     this.status = status;
+    this.statusVersion = version;
+    this.statusError = error;
     this.events.onStatus(status, version, error);
+    if (status === 'error') this.finishBootstrap('error');
   }
 
   private toState(release: PublishedRelease): InstalledReleaseState {
@@ -213,6 +267,34 @@ export class LauncherUpdater {
     return this.checkInFlight;
   }
 
+  /** Completes before any application window is created. Updates restart without loading UI. */
+  ensureCurrentBeforeWindow(): Promise<BootstrapUpdateResult> {
+    return new Promise((resolve) => {
+      let finished = false;
+      const complete = (result: BootstrapUpdateResult): void => {
+        if (finished) return;
+        finished = true;
+        this.bootstrapWaiters.delete(complete);
+        resolve(result);
+      };
+      this.bootstrapWaiters.add(complete);
+      void this.ensureCurrent().then(
+        (current) => {
+          if (current) {
+            complete('current');
+          } else if (this.status === 'error') {
+            complete('error');
+          }
+        },
+        (error: Error) => {
+          this.log.warn(`self-update bootstrap failed unexpectedly: ${error.message}`);
+          this.setStatus('error', null, error.message);
+          complete('error');
+        }
+      );
+    });
+  }
+
   /** Refreshes one repository per call while still comparing the newest cached release from both. */
   ensureCurrentFromNextSource(): Promise<boolean> {
     if (!app.isPackaged) return Promise.resolve(true);
@@ -230,7 +312,7 @@ export class LauncherUpdater {
   }
 
   private async runCheck(sources: readonly UpdateRepository[]): Promise<boolean> {
-    this.events.onProgress(null);
+    this.setProgress(null);
     this.selectedRelease = null;
     this.setStatus('checking');
     try {

@@ -1,7 +1,7 @@
 # Public launcher configuration. Keep string values double-quoted.
 default_server_host: "216.201.76.180"
 fallback_server_host: "commonwealth.ydns.eu"
-default_server_name: "CommonWealth"
+default_server_name: "Commonwealth"
 agenda_stats_url: "https://commonwealth.ydns.eu"
 agenda_stats_status_url: "https://commonwealth.ydns.eu/api/status"
 discord_invite_url: "https://discord.gg/EdwDCnBG7"

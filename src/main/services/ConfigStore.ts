@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 7;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 8;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -130,6 +130,23 @@ export function migrateStoredSettings(
         version = 7;
         migrated = true;
         break;
+      case 7: {
+        const servers = isPlainObject(settings.servers) ? settings.servers : {};
+        settings = {
+          ...settings,
+          schemaVersion: 8,
+          servers: {
+            ...servers,
+            builtInName:
+              servers.builtInName === 'CommonWealth'
+                ? defaultServerName
+                : servers.builtInName
+          }
+        };
+        version = 8;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }

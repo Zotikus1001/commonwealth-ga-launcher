@@ -1,7 +1,7 @@
 import type { CustomServer } from './types';
 
 export const DEFAULT_SERVER_ID = 'default';
-export const DEFAULT_BUILT_IN_SERVER_NAME = 'CommonWealth';
+export const DEFAULT_BUILT_IN_SERVER_NAME = 'Commonwealth';
 export const MAX_CUSTOM_SERVERS = 20;
 export const MAX_SERVER_NAME_LENGTH = 48;
 export const DEVELOPER_MIN_WIDTH = 640;

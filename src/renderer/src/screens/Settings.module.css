@@ -109,6 +109,94 @@
   line-height: 1.45;
 }
 
+.compactSetting,
+.launcherScaleSetting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 126px;
+  align-items: center;
+  gap: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  background: linear-gradient(90deg, rgba(64, 191, 191, 0.07), rgba(15, 19, 28, 0.48) 58%);
+}
+
+.compactSetting label,
+.launcherScaleCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compactSetting input {
+  text-align: center;
+}
+
+.optionList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.optionRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: rgba(15, 19, 28, 0.48);
+  cursor: pointer;
+}
+
+.optionRow input {
+  margin-top: 3px;
+}
+
+.optionRow > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.optionRow strong {
+  color: var(--text);
+  font-weight: 400;
+}
+
+.optionRow small {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.advancedLaunch {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: rgba(15, 19, 28, 0.48);
+}
+
+.launcherScaleSetting {
+  border-left-color: var(--amber);
+  background: linear-gradient(90deg, rgba(240, 166, 60, 0.07), rgba(15, 19, 28, 0.48) 58%);
+}
+
+.launcherScaleControl {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.instantStatus {
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: right;
+}
+
 .fpsLimitControl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) 126px;
@@ -504,17 +592,6 @@
 .aboutUpdateButton:not(:disabled) {
   border-color: var(--cyan);
   color: var(--cyan);
-}
-
-.fieldGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.fieldGrid label {
-  display: block;
-  margin-bottom: 6px;
 }
 
 .inlineButtons {

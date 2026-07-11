@@ -26,7 +26,7 @@ export type SettingsTab =
   | 'servers'
   | 'patches'
   | 'account'
-  | 'launch'
+  | 'launcher'
   | 'dev'
   | 'diagnostics'
   | 'about';
@@ -67,6 +67,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [saving, setSaving] = useState(false);
   const [mapSaving, setMapSaving] = useState(false);
   const [mapSaveError, setMapSaveError] = useState<string | null>(null);
+  const [uiScaleSaving, setUiScaleSaving] = useState(false);
+  const [uiScaleError, setUiScaleError] = useState<string | null>(null);
   const [wineRunners, setWineRunners] = useState<WineRunner[]>([]);
   const [prefixResult, setPrefixResult] = useState<ActionResult | null>(null);
   const [steamAction, setSteamAction] = useState<'store' | 'install' | null>(null);
@@ -95,7 +97,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     // Account tab is built but gated off until Phase 4 auto-login works (plan §11b decision #4).
     if (state.accountTabEnabled) t.push({ id: 'account', label: 'Account' });
     t.push(
-      { id: 'launch', label: 'Launch' },
+      { id: 'launcher', label: 'Launcher' },
       ...((draft?.developer.enabled || devUnlocked) ? [{ id: 'dev' as const, label: 'Dev' }] : []),
       { id: 'diagnostics', label: 'Diagnostics' },
       { id: 'about', label: 'About' }
@@ -109,7 +111,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   };
 
   const save = async (): Promise<boolean> => {
-    if (!draft || mapSaving) return false;
+    if (!draft || mapSaving || uiScaleSaving) return false;
     if (!isUiScale(draft.uiScale)) {
       setSaveError('Launcher UI scale is invalid.');
       return false;
@@ -164,6 +166,27 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       setMapSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setMapSaving(false);
+    }
+  };
+
+  const saveUiScale = async (uiScale: SettingsModel['uiScale']): Promise<void> => {
+    if (!draft || uiScaleSaving || uiScale === draft.uiScale) return;
+    const previous = draft.uiScale;
+    setDraft((current) => (current ? { ...current, uiScale } : current));
+    setUiScaleSaving(true);
+    setUiScaleError(null);
+    try {
+      const updated = await window.api.updateSettings({ uiScale });
+      setDraft((current) =>
+        current ? { ...current, uiScale: updated.uiScale } : current
+      );
+    } catch (error) {
+      setDraft((current) =>
+        current?.uiScale === uiScale ? { ...current, uiScale: previous } : current
+      );
+      setUiScaleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUiScaleSaving(false);
     }
   };
 
@@ -400,6 +423,58 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </span>
             </div>
 
+            {isLinux && (
+              <>
+                <div className="panel-title">Wine Compatibility</div>
+                <div className={styles.fieldRow}>
+                  <label>Wine Runner</label>
+                  <select
+                    value={draft.linux.winePath}
+                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
+                  >
+                    <option value="">— pick a runner —</option>
+                    {wineRunners.map((r) => (
+                      <option key={r.path} value={r.path}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label>Custom Wine Binary</label>
+                  <input
+                    type="text"
+                    value={draft.linux.winePath}
+                    placeholder="/path/to/wine"
+                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
+                  />
+                </div>
+                <div className={styles.fieldRow}>
+                  <label>Wine Prefix</label>
+                  <input
+                    type="text"
+                    value={draft.linux.winePrefix}
+                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePrefix: e.target.value } }))}
+                  />
+                  <div className={styles.inlineButtons}>
+                    <button onClick={() => void createPrefix()}>Create Prefix</button>
+                  </div>
+                  {prefixResult && (
+                    <span className={prefixResult.ok ? styles.valid : styles.invalid}>{prefixResult.message}</span>
+                  )}
+                </div>
+                <div className={styles.checkRow}>
+                  <input
+                    id="winedebug"
+                    type="checkbox"
+                    checked={draft.linux.wineDebug}
+                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, wineDebug: e.target.checked } }))}
+                  />
+                  <label htmlFor="winedebug">
+                    Wine debug output (captures Wine stderr into the launcher log; launcher stays attached to the game)
+                  </label>
+                </div>
+              </>
+            )}
+
             <div className="panel-title">Login Environment</div>
             <div className={`${styles.fieldRow} ${styles.mapPicker}`}>
               <label htmlFor="login-map">Login screen map</label>
@@ -423,6 +498,31 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               {mapSaveError && (
                 <p className={styles.invalid}>{`Could not save the login map: ${mapSaveError}`}</p>
               )}
+            </div>
+
+            <div className="panel-title">Graphics</div>
+            <div className={styles.compactSetting}>
+              <label htmlFor="game-gpu-adapter">
+                <span className={styles.featureName}>GPU Adapter</span>
+                <span className={styles.featureDetail}>
+                  Selects which graphics adapter the game uses. Adapter 0 is the primary GPU.
+                </span>
+              </label>
+              <input
+                id="game-gpu-adapter"
+                type="number"
+                min={0}
+                value={draft.launch.gpuAdapter}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    launch: {
+                      ...current.launch,
+                      gpuAdapter: Math.max(0, Number.parseInt(event.target.value, 10) || 0)
+                    }
+                  }))
+                }
+              />
             </div>
 
             <div className="panel-title">Frame Rate</div>
@@ -490,57 +590,60 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </label>
             </div>
 
-            {isLinux && (
-              <>
-                <div className="panel-title">Wine</div>
-                <div className={styles.fieldRow}>
-                  <label>Wine runner</label>
-                  <select
-                    value={draft.linux.winePath}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
-                  >
-                    <option value="">— pick a runner —</option>
-                    {wineRunners.map((r) => (
-                      <option key={r.path} value={r.path}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label>Custom wine binary</label>
-                  <input
-                    type="text"
-                    value={draft.linux.winePath}
-                    placeholder="/path/to/wine"
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
-                  />
-                </div>
-                <div className={styles.fieldRow}>
-                  <label>Wine prefix</label>
-                  <input
-                    type="text"
-                    value={draft.linux.winePrefix}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePrefix: e.target.value } }))}
-                  />
-                  <div className={styles.inlineButtons}>
-                    <button onClick={() => void createPrefix()}>Create prefix</button>
-                  </div>
-                  {prefixResult && (
-                    <span className={prefixResult.ok ? styles.valid : styles.invalid}>{prefixResult.message}</span>
-                  )}
-                </div>
-                <div className={styles.checkRow}>
-                  <input
-                    id="winedebug"
-                    type="checkbox"
-                    checked={draft.linux.wineDebug}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, wineDebug: e.target.checked } }))}
-                  />
-                  <label htmlFor="winedebug">
-                    Wine debug output (captures wine stderr into the launcher log; launcher stays attached to the game)
-                  </label>
-                </div>
-              </>
-            )}
+            <div className="panel-title">Game Startup</div>
+            <div className={styles.optionList}>
+              <label className={styles.optionRow} htmlFor="nostartupmovies">
+                <input
+                  id="nostartupmovies"
+                  type="checkbox"
+                  checked={draft.launch.noStartupMovies}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      launch: { ...current.launch, noStartupMovies: event.target.checked }
+                    }))
+                  }
+                />
+                <span>
+                  <strong>Skip Startup Movies</strong>
+                  <small>Starts the game without playing its intro videos.</small>
+                </span>
+              </label>
+              <label className={styles.optionRow} htmlFor="nosplash">
+                <input
+                  id="nosplash"
+                  type="checkbox"
+                  checked={draft.launch.noSplash}
+                  onChange={(event) =>
+                    edit((current) => ({
+                      ...current,
+                      launch: { ...current.launch, noSplash: event.target.checked }
+                    }))
+                  }
+                />
+                <span>
+                  <strong>Skip Splash Screen</strong>
+                  <small>Starts the game without showing its initial splash window.</small>
+                </span>
+              </label>
+            </div>
+
+            <div className="panel-title">Advanced Game Launch</div>
+            <div className={`${styles.fieldRow} ${styles.advancedLaunch}`}>
+              <label htmlFor="extra-game-arguments">Extra Launch Arguments</label>
+              <input
+                id="extra-game-arguments"
+                type="text"
+                value={draft.launch.extraArgs}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    launch: { ...current.launch, extraArgs: event.target.value }
+                  }))
+                }
+              />
+              <span className={styles.hint}>Space-separated arguments passed directly to the game.</span>
+            </div>
           </section>
         )}
 
@@ -555,47 +658,41 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'servers' && <ServersTab settings={draft} edit={edit} />}
 
-        {tab === 'launch' && (
+        {tab === 'launcher' && (
           <section className={styles.section}>
             <div className="panel-title">Launcher Interface</div>
-            <div className={styles.fieldRow}>
-              <label htmlFor="launcher-ui-scale">UI scale</label>
-              <select
-                id="launcher-ui-scale"
-                value={draft.uiScale}
-                onChange={(event) => {
-                  const scale = Number(event.currentTarget.value);
-                  if (isUiScale(scale)) edit((settings) => ({ ...settings, uiScale: scale }));
-                }}
-              >
-                {UI_SCALE_OPTIONS.map((scale) => (
-                  <option key={scale} value={scale}>
-                    {Math.round(scale * 100)}%
-                  </option>
-                ))}
-              </select>
-              <span className={styles.hint}>Applied after saving.</span>
-            </div>
-
-            <div className="panel-title">Graphics</div>
-            <div className={styles.fieldGrid}>
-              <div>
-                <label>GPU adapter (ordinal, 0 = primary)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={draft.launch.gpuAdapter}
-                  onChange={(e) =>
-                    edit((d) => ({
-                      ...d,
-                      launch: { ...d.launch, gpuAdapter: Math.max(0, parseInt(e.target.value, 10) || 0) }
-                    }))
-                  }
-                />
+            <div className={styles.launcherScaleSetting}>
+              <div className={styles.launcherScaleCopy}>
+                <span className={styles.featureName}>Launcher UI Scale</span>
+                <span className={styles.featureDetail}>
+                  Changes the size of launcher text and controls. The new scale is saved and
+                  applied immediately.
+                </span>
+              </div>
+              <div className={styles.launcherScaleControl}>
+                <select
+                  id="launcher-ui-scale"
+                  aria-label="Launcher UI Scale"
+                  value={draft.uiScale}
+                  disabled={uiScaleSaving || saving}
+                  onChange={(event) => {
+                    const scale = Number(event.currentTarget.value);
+                    if (isUiScale(scale)) void saveUiScale(scale);
+                  }}
+                >
+                  {UI_SCALE_OPTIONS.map((scale) => (
+                    <option key={scale} value={scale}>
+                      {Math.round(scale * 100)}%
+                    </option>
+                  ))}
+                </select>
+                <span className={uiScaleError ? styles.invalid : styles.instantStatus}>
+                  {uiScaleError ?? (uiScaleSaving ? 'Applying…' : 'Saved instantly')}
+                </span>
               </div>
             </div>
 
-            <div className="panel-title">Startup</div>
+            <div className="panel-title">After Game Launch</div>
             <div className={styles.featureToggle}>
               <input
                 id="close-after-launch"
@@ -614,34 +711,6 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                   Closes the launcher five seconds after it starts the game.
                 </span>
               </label>
-            </div>
-            <div className={styles.checkRow}>
-              <input
-                id="nostartupmovies"
-                type="checkbox"
-                checked={draft.launch.noStartupMovies}
-                onChange={(e) => edit((d) => ({ ...d, launch: { ...d.launch, noStartupMovies: e.target.checked } }))}
-              />
-              <label htmlFor="nostartupmovies">Skip startup movies (-nostartupmovies)</label>
-            </div>
-            <div className={styles.checkRow}>
-              <input
-                id="nosplash"
-                type="checkbox"
-                checked={draft.launch.noSplash}
-                onChange={(e) => edit((d) => ({ ...d, launch: { ...d.launch, noSplash: e.target.checked } }))}
-              />
-              <label htmlFor="nosplash">Skip splash screen (-nosplash)</label>
-            </div>
-
-            <div className="panel-title">Advanced</div>
-            <div className={styles.fieldRow}>
-              <label>Extra launch arguments (space-separated)</label>
-              <input
-                type="text"
-                value={draft.launch.extraArgs}
-                onChange={(e) => edit((d) => ({ ...d, launch: { ...d.launch, extraArgs: e.target.value } }))}
-              />
             </div>
           </section>
         )}
@@ -671,7 +740,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             </span>
             <button
               className={styles.saveButton}
-              disabled={saving || mapSaving || developerModeSaving}
+              disabled={saving || mapSaving || uiScaleSaving || developerModeSaving}
               onClick={() => void save()}
             >
               {saving ? 'Saving…' : 'Save & Re-check'}
@@ -697,14 +766,14 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             {saveError && <p className={styles.confirmError}>{saveError}</p>}
             <div className={styles.confirmActions}>
               <button
-                disabled={saving || discarding || mapSaving}
+                disabled={saving || discarding || mapSaving || uiScaleSaving}
                 onClick={() => setPendingNavigation(null)}
               >
                 Cancel
               </button>
               <button
                 className={styles.discardButton}
-                disabled={saving || discarding || mapSaving}
+                disabled={saving || discarding || mapSaving || uiScaleSaving}
                 onClick={() => void discardAndNavigate()}
               >
                 {discarding ? 'Discarding…' : "Don't save"}
@@ -712,7 +781,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               <button
                 autoFocus
                 className={styles.confirmSaveButton}
-                disabled={saving || discarding || mapSaving}
+                disabled={saving || discarding || mapSaving || uiScaleSaving}
                 onClick={() => void saveAndNavigate()}
               >
                 {saving ? 'Saving…' : 'Save changes'}

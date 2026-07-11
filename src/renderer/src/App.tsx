@@ -1,8 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LauncherState } from '@shared/types';
+import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import Play from './screens/Play';
 import Settings, { type SettingsHandle, type SettingsTab } from './screens/Settings';
 import styles from './App.module.css';
+
+const manualUpdateRepository = LAUNCHER_CONFIG.updateRepositories[0];
+const manualUpdateUrl =
+  `https://github.com/${manualUpdateRepository.owner}/${manualUpdateRepository.repo}/releases/latest`;
+
+function updateCheckFailureTitle(error: string | null): string {
+  const httpError = error?.match(/HTTP\s+\d{3}/i)?.[0].toUpperCase();
+  const normalizedError = error?.replace(/\s+/g, ' ').trim();
+  const detail = httpError ?? (normalizedError ? normalizedError.slice(0, 160) : 'Unknown error');
+  return [
+    'Could not retrieve launcher update information from GitHub.',
+    `Error: ${detail}`,
+    'The launcher should still work normally.',
+    `Download updates manually: ${manualUpdateUrl}`
+  ].join('\n');
+}
 
 function launcherUpdateLabel(state: LauncherState): {
   text: string;
@@ -26,9 +43,9 @@ function launcherUpdateLabel(state: LauncherState): {
       return { text: 'Installing update…', tone: 'warn', title: 'Installing launcher update' };
     case 'check-failed':
       return {
-        text: 'Update Check Failed',
-        tone: 'warn',
-        title: state.launcherUpdateError ?? 'Launcher update check failed'
+        text: 'Update status ?',
+        tone: 'dim',
+        title: updateCheckFailureTitle(state.launcherUpdateError)
       };
     case 'error':
       return {
@@ -81,10 +98,7 @@ export default function App(): JSX.Element {
         </div>
         <div className={styles.headerRight}>
           <div className={styles.versionGroup}>
-            <span
-              className={`mono ${styles.version} ${state.launcherUpdate === 'check-failed' ? styles.warn : ''}`}
-              title="Launcher version"
-            >
+            <span className={`mono ${styles.version}`} title="Launcher version">
               v{state.launcherVersion}
             </span>
             <span

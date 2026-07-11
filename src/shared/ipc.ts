@@ -12,7 +12,7 @@ export const IPC = {
   checkServer: 'launcher:check-server',
   refresh: 'launcher:refresh',
   checkLauncherUpdates: 'launcher:check-launcher-updates',
-  listWineRunners: 'launcher:list-wine-runners',
+  listLinuxRuntimeOptions: 'launcher:list-linux-runtime-options',
   createWinePrefix: 'launcher:create-wine-prefix',
   openDiscord: 'launcher:open-discord',
   openAgendaStats: 'launcher:open-agenda-stats',

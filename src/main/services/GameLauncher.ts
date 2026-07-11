@@ -1,6 +1,41 @@
 import { spawn, type ChildProcess } from 'child_process';
 import type { Settings } from '@shared/types';
 import type { Log } from './Log';
+import type { LinuxRuntimeInspection } from './LinuxRuntime';
+
+export interface LinuxLaunchCommand {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+}
+
+export function buildLinuxLaunchCommand(
+  settings: Settings,
+  runtime: LinuxRuntimeInspection,
+  gameArgs: string[]
+): LinuxLaunchCommand {
+  const env: NodeJS.ProcessEnv = { WINEPREFIX: runtime.prefixPath };
+  let command: string;
+  let args: string[];
+  if (settings.linux.runner === 'proton') {
+    command = runtime.umuPath;
+    args = [settings.gameExePath, ...gameArgs];
+    env.PROTONPATH = runtime.protonPath;
+    if (settings.linux.wineDebug) {
+      env.UMU_LOG = '1';
+      env.PROTON_LOG = '1';
+    }
+  } else {
+    command = runtime.winePath;
+    args = [settings.gameExePath, ...gameArgs];
+    if (!settings.linux.wineDebug) env.WINEDEBUG = '-all';
+  }
+  if (settings.linux.gameMode && runtime.gameModePath) {
+    args = [command, ...args];
+    command = runtime.gameModePath;
+  }
+  return { command, args, env };
+}
 
 /**
  * Builds the GA connection args. Always-passed baseline: -host/-hostdns (resolved server, hidden from the UI),
@@ -37,7 +72,9 @@ export class GameLauncher {
    * Platform split (fragile, keep both branches in sync with intent):
    *  - Windows: spawn GlobalAgenda.exe directly, detached — the game outlives the launcher
    *    (matches CommonwealthLauncher.cpp CloseHandle semantics).
-   *  - Linux: spawn <wine> <exePath> <args> with WINEPREFIX from settings and quiet Wine logging.
+   *  - Linux/Wine: spawn <wine> <exePath> with the resolved prefix.
+   *  - Linux/Proton: spawn <umu-run> <exePath> with WINEPREFIX and PROTONPATH.
+   *    Optional GameMode wraps either runner without changing its arguments.
    *    No dinput8 override is set while client-DLL distribution is disabled.
    *    The exe path stays NATIVE — Wine maps it via the Z: drive; no winepath translation.
    *    With wineDebug on, Wine keeps default logging and stderr is piped into the launcher log
@@ -48,7 +85,8 @@ export class GameLauncher {
     host: string,
     binariesDir: string,
     platform: NodeJS.Platform,
-    developerLaunch: boolean
+    developerLaunch: boolean,
+    linuxRuntime: LinuxRuntimeInspection | null = null
   ): void {
     const args = buildGameArgs(settings, host, developerLaunch);
     let child: ChildProcess;
@@ -62,25 +100,27 @@ export class GameLauncher {
       });
       child.unref();
     } else if (platform === 'linux') {
-      if (!settings.linux.winePath) throw new Error('no Wine runner configured (Settings -> Game)');
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        WINEPREFIX: settings.linux.winePrefix
-      };
-      if (!settings.linux.wineDebug) env.WINEDEBUG = '-all';
+      if (!linuxRuntime || linuxRuntime.status !== 'ready') {
+        throw new Error('Linux compatibility runtime is not ready (Settings -> Game)');
+      }
+      if (settings.linux.gameMode && !linuxRuntime.gameModePath) {
+        this.log.warn('GameMode was requested but gamemoderun is unavailable; launching without it');
+      }
+      const launch = buildLinuxLaunchCommand(settings, linuxRuntime, args);
       this.log.info(
-        `launching ${settings.gameExePath} with ${settings.linux.winePath} ` +
-          `(prefix ${settings.linux.winePrefix}) and managed connection arguments`
+        `launching ${settings.gameExePath} with ${settings.linux.runner} ` +
+          `(prefix ${linuxRuntime.prefixPath}, GameMode=${settings.linux.gameMode && !!linuxRuntime.gameModePath}) ` +
+          'and managed connection arguments'
       );
-      child = spawn(settings.linux.winePath, [settings.gameExePath, ...args], {
+      child = spawn(launch.command, launch.args, {
         cwd: binariesDir,
-        env,
+        env: { ...process.env, ...launch.env },
         detached: !settings.linux.wineDebug,
         stdio: settings.linux.wineDebug ? ['ignore', 'pipe', 'pipe'] : 'ignore'
       });
       if (settings.linux.wineDebug) {
-        child.stdout?.on('data', (d: Buffer) => this.log.info(`[wine] ${d.toString('utf-8').trimEnd()}`));
-        child.stderr?.on('data', (d: Buffer) => this.log.warn(`[wine] ${d.toString('utf-8').trimEnd()}`));
+        child.stdout?.on('data', (d: Buffer) => this.log.info(`[runtime] ${d.toString('utf-8').trimEnd()}`));
+        child.stderr?.on('data', (d: Buffer) => this.log.warn(`[runtime] ${d.toString('utf-8').trimEnd()}`));
       } else {
         child.unref();
       }

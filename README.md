@@ -22,6 +22,8 @@ server.
 
 Allow the AppImage to run, open it, and follow the setup instructions.
 
+The launcher supports installed Wine runners and Proton through UMU.
+
 The launcher updates itself automatically.
 
 ---
@@ -33,7 +35,7 @@ The launcher updates itself automatically.
 - Server status and server selection
 - Client fixes and game options
 - Agenda Stats and Discord access
-- Windows and Linux support
+- Windows support and flexible Linux compatibility options
 
 ---
 

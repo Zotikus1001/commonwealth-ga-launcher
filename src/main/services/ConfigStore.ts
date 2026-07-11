@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 8;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 9;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -147,6 +147,23 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 8: {
+        const linux = isPlainObject(settings.linux) ? settings.linux : {};
+        settings = {
+          ...settings,
+          schemaVersion: 9,
+          linux: {
+            ...linux,
+            runner: 'wine',
+            protonPath: '',
+            umuPath: '',
+            gameMode: false
+          }
+        };
+        version = 9;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -182,8 +199,12 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       extraArgs: ''
     },
     linux: {
+      runner: 'wine',
       winePath: '',
+      protonPath: '',
+      umuPath: '',
       winePrefix: join(homedir(), '.local', 'share', 'commonwealth-ga', 'prefix'),
+      gameMode: false,
       wineDebug: false
     },
     developer: {
@@ -340,6 +361,40 @@ function validateUpdatedFpsLimit(value: unknown): Settings['fpsLimit'] {
   return { enabled: value.enabled, value: value.value };
 }
 
+function sanitizeStoredLinux(value: unknown, fallback: Settings['linux']): Settings['linux'] {
+  if (!isPlainObject(value)) return structuredClone(fallback);
+  return {
+    runner: value.runner === 'wine' || value.runner === 'proton' ? value.runner : fallback.runner,
+    winePath: typeof value.winePath === 'string' ? value.winePath : fallback.winePath,
+    protonPath: typeof value.protonPath === 'string' ? value.protonPath : fallback.protonPath,
+    umuPath: typeof value.umuPath === 'string' ? value.umuPath : fallback.umuPath,
+    winePrefix: typeof value.winePrefix === 'string' ? value.winePrefix : fallback.winePrefix,
+    gameMode: typeof value.gameMode === 'boolean' ? value.gameMode : fallback.gameMode,
+    wineDebug: typeof value.wineDebug === 'boolean' ? value.wineDebug : fallback.wineDebug
+  };
+}
+
+function validateUpdatedLinux(value: unknown): Settings['linux'] {
+  if (!isPlainObject(value) || (value.runner !== 'wine' && value.runner !== 'proton')) {
+    throw new Error('Linux compatibility mode is invalid.');
+  }
+  for (const key of ['winePath', 'protonPath', 'umuPath', 'winePrefix'] as const) {
+    if (typeof value[key] !== 'string') throw new Error(`Linux ${key} is invalid.`);
+  }
+  if (typeof value.gameMode !== 'boolean' || typeof value.wineDebug !== 'boolean') {
+    throw new Error('Linux compatibility options are invalid.');
+  }
+  return {
+    runner: value.runner,
+    winePath: value.winePath as string,
+    protonPath: value.protonPath as string,
+    umuPath: value.umuPath as string,
+    winePrefix: value.winePrefix as string,
+    gameMode: value.gameMode,
+    wineDebug: value.wineDebug
+  };
+}
+
 function sanitizeStoredGameIniBaseline(
   value: unknown,
   fallback: GameIniBaseline
@@ -453,6 +508,7 @@ export class ConfigStore {
       this.settings.gameIniBaseline,
       this.defaults.gameIniBaseline
     );
+    this.settings.linux = sanitizeStoredLinux(this.settings.linux, this.defaults.linux);
     if (!isUiScale(this.settings.uiScale)) this.settings.uiScale = this.defaults.uiScale;
     if (!isLoginMap(this.settings.loginMap)) this.settings.loginMap = this.defaults.loginMap;
     if (typeof this.settings.showOverhealing !== 'boolean') {
@@ -487,6 +543,7 @@ export class ConfigStore {
     next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
+    next.linux = validateUpdatedLinux(next.linux);
     if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');
     if (!isLoginMap(next.loginMap)) next.loginMap = this.defaults.loginMap;
     if (typeof next.showOverhealing !== 'boolean') {

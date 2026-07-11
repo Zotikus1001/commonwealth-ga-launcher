@@ -33,6 +33,15 @@ export interface GameIniBaseline extends GameIniSettings {
   gameExePath: string;
 }
 
+export type LinuxRunnerType = 'wine' | 'proton';
+
+export type LinuxRuntimeStatus =
+  | 'ready'
+  | 'wine-runner-missing'
+  | 'wine-prefix-missing'
+  | 'umu-missing'
+  | 'proton-missing';
+
 export interface Settings {
   schemaVersion: number;
   /** Renderer zoom controlled only through Launcher UI scale settings. */
@@ -63,8 +72,12 @@ export interface Settings {
     extraArgs: string;
   };
   linux: {
+    runner: LinuxRunnerType;
     winePath: string;
+    protonPath: string;
+    umuPath: string;
     winePrefix: string;
+    gameMode: boolean;
     wineDebug: boolean;
   };
   developer: {
@@ -121,8 +134,10 @@ export interface LauncherState {
   gamePathValid: boolean;
   /** Exact saved path represented by gamePathValid. */
   validatedGameExePath: string;
-  /** null off Linux; otherwise whether the configured Wine runner is executable. */
-  winePathValid: boolean | null;
+  /** null off Linux; otherwise whether the selected compatibility runtime can launch. */
+  linuxRuntimeStatus: LinuxRuntimeStatus | null;
+  resolvedLinuxPrefix: string;
+  gameModeAvailable: boolean | null;
   /** True only during the five-second window after a Play launch attempt. */
   launchCoolingDown: boolean;
   developerMode: boolean;
@@ -141,9 +156,17 @@ export interface LauncherState {
   accountTabEnabled: boolean;
 }
 
-export interface WineRunner {
+export interface LinuxRunnerOption {
   label: string;
   path: string;
+}
+
+export interface LinuxRuntimeOptions {
+  wineRunners: LinuxRunnerOption[];
+  protonRunners: LinuxRunnerOption[];
+  umuPath: string;
+  gameModePath: string;
+  steamPrefixPath: string;
 }
 
 export interface ActionResult {
@@ -174,7 +197,7 @@ export interface LauncherApi {
   checkServer(): Promise<void>;
   refresh(): Promise<void>;
   checkLauncherUpdates(): Promise<void>;
-  listWineRunners(): Promise<WineRunner[]>;
+  listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;

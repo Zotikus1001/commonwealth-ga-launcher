@@ -37,7 +37,7 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
         !state.developerMode &&
         state.serverStatus === 'checking' &&
         state.gamePathValid &&
-        (state.platform !== 'linux' || state.winePathValid === true)
+        (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready')
       ) {
         return {
           label: 'CHECKING SERVER',
@@ -53,7 +53,7 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
   if (!state.gamePathValid) {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
   }
-  if (state.platform === 'linux' && !state.winePathValid) {
+  if (state.platform === 'linux' && state.linuxRuntimeStatus !== 'ready') {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
   }
   if (state.phase === 'error') {
@@ -103,7 +103,7 @@ export default function Play({
     state.phase === 'ready' &&
     !state.launchCoolingDown &&
     state.gamePathValid &&
-    (state.platform !== 'linux' || state.winePathValid === true);
+    (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready');
   const showsAgendaStats =
     state.selectedServerId === DEFAULT_SERVER_ID &&
     state.agendaStatsStatus === 'ready' &&

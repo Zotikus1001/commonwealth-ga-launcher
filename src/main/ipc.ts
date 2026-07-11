@@ -4,7 +4,7 @@ import { IPC } from '@shared/ipc';
 import type { Orchestrator } from './Orchestrator';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
-import { listWineRunners, createWinePrefix } from './services/WineEnv';
+import { createWinePrefix, listLinuxRuntimeOptions } from './services/LinuxRuntime';
 import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
@@ -72,10 +72,17 @@ export function registerIpc(
   ipcMain.handle(IPC.checkServer, () => orchestrator.checkServer());
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
   ipcMain.handle(IPC.checkLauncherUpdates, () => orchestrator.checkLauncherUpdates());
-  ipcMain.handle(IPC.listWineRunners, () => listWineRunners(config.get(), log));
-  ipcMain.handle(IPC.createWinePrefix, () => {
+  ipcMain.handle(IPC.listLinuxRuntimeOptions, () =>
+    listLinuxRuntimeOptions(config.get(), log)
+  );
+  ipcMain.handle(IPC.createWinePrefix, async () => {
     const s = config.get();
-    return createWinePrefix(s.linux.winePath, s.linux.winePrefix, log);
+    if (s.linux.runner !== 'wine') {
+      return { ok: false, message: 'UMU creates Proton prefixes automatically when Play runs.' };
+    }
+    const result = await createWinePrefix(s.linux.winePath, s.linux.winePrefix, log);
+    if (result.ok) await orchestrator.settingsChanged();
+    return result;
   });
 
   ipcMain.handle(IPC.openDiscord, async () => {

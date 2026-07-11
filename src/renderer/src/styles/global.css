@@ -166,7 +166,8 @@ select:focus {
   border-color: var(--amber);
 }
 
-input[type='checkbox'] {
+input[type='checkbox'],
+input[type='radio'] {
   accent-color: var(--amber);
   width: 14px;
   height: 14px;

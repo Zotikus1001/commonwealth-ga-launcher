@@ -3,8 +3,8 @@ import type {
   ActionResult,
   ClientPatchStatus,
   LauncherState,
+  LinuxRuntimeOptions,
   Settings as SettingsModel,
-  WineRunner
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
@@ -47,6 +47,13 @@ type PendingNavigation =
 
 const DEV_UNLOCK_CLICKS = 10;
 const DEV_UNLOCK_WINDOW_MS = 4_000;
+const EMPTY_LINUX_RUNTIME_OPTIONS: LinuxRuntimeOptions = {
+  wineRunners: [],
+  protonRunners: [],
+  umuPath: '',
+  gameModePath: '',
+  steamPrefixPath: ''
+};
 
 const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: string }> = {
   'high-fps-movement-stability': {
@@ -69,7 +76,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [mapSaveError, setMapSaveError] = useState<string | null>(null);
   const [uiScaleSaving, setUiScaleSaving] = useState(false);
   const [uiScaleError, setUiScaleError] = useState<string | null>(null);
-  const [wineRunners, setWineRunners] = useState<WineRunner[]>([]);
+  const [linuxRuntimeOptions, setLinuxRuntimeOptions] = useState<LinuxRuntimeOptions>(
+    EMPTY_LINUX_RUNTIME_OPTIONS
+  );
+  const [linuxRuntimeScanning, setLinuxRuntimeScanning] = useState(false);
+  const [prefixCreating, setPrefixCreating] = useState(false);
   const [prefixResult, setPrefixResult] = useState<ActionResult | null>(null);
   const [steamAction, setSteamAction] = useState<'store' | 'install' | null>(null);
   const [steamResult, setSteamResult] = useState<ActionResult | null>(null);
@@ -85,7 +96,9 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
   useEffect(() => {
     void window.api.getSettings().then(setDraft);
-    if (isLinux) void window.api.listWineRunners().then(setWineRunners);
+    if (isLinux) {
+      void window.api.listLinuxRuntimeOptions().then(setLinuxRuntimeOptions);
+    }
   }, [isLinux]);
 
   useEffect(() => {
@@ -240,9 +253,25 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   };
 
   const createPrefix = async (): Promise<void> => {
+    if (prefixCreating) return;
     if (dirty && !(await save())) return; // prefix creation uses SAVED settings
-    setPrefixResult({ ok: true, message: 'Creating prefix… (first boot can take minutes)' });
-    setPrefixResult(await window.api.createWinePrefix());
+    setPrefixCreating(true);
+    try {
+      setPrefixResult({ ok: true, message: 'Creating prefix… (first boot can take minutes)' });
+      setPrefixResult(await window.api.createWinePrefix());
+    } finally {
+      setPrefixCreating(false);
+    }
+  };
+
+  const rescanLinuxRuntime = async (): Promise<void> => {
+    if (linuxRuntimeScanning) return;
+    setLinuxRuntimeScanning(true);
+    try {
+      setLinuxRuntimeOptions(await window.api.listLinuxRuntimeOptions());
+    } finally {
+      setLinuxRuntimeScanning(false);
+    }
   };
 
   const saveDeveloperMode = async (enabled: boolean): Promise<void> => {
@@ -432,51 +461,219 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
             {isLinux && (
               <>
-                <div className="panel-title">Wine Compatibility</div>
-                <div className={styles.fieldRow}>
-                  <label>Wine Runner</label>
-                  <select
-                    value={draft.linux.winePath}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
-                  >
-                    <option value="">— pick a runner —</option>
-                    {wineRunners.map((r) => (
-                      <option key={r.path} value={r.path}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label>Custom Wine Binary</label>
-                  <input
-                    type="text"
-                    value={draft.linux.winePath}
-                    placeholder="/path/to/wine"
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePath: e.target.value } }))}
-                  />
+                <div className="panel-title">Linux Compatibility</div>
+                <div className={styles.optionList}>
+                  <label className={styles.optionRow}>
+                    <input
+                      type="radio"
+                      name="linux-runner"
+                      checked={draft.linux.runner === 'wine'}
+                      onChange={() =>
+                        edit((d) => ({ ...d, linux: { ...d.linux, runner: 'wine' } }))
+                      }
+                    />
+                    <span>
+                      <strong>Wine</strong>
+                      <small>Use a system or Lutris Wine runner directly.</small>
+                    </span>
+                  </label>
+                  <label className={styles.optionRow}>
+                    <input
+                      type="radio"
+                      name="linux-runner"
+                      checked={draft.linux.runner === 'proton'}
+                      onChange={() =>
+                        edit((d) => ({ ...d, linux: { ...d.linux, runner: 'proton' } }))
+                      }
+                    />
+                    <span>
+                      <strong>Proton via UMU</strong>
+                      <small>Recommended when UMU and Proton are installed.</small>
+                    </span>
+                  </label>
                 </div>
+
+                {draft.linux.runner === 'wine' ? (
+                  <div className={styles.fieldRow}>
+                    <label>Wine Runner</label>
+                    <select
+                      value={draft.linux.winePath}
+                      onChange={(event) =>
+                        edit((d) => ({
+                          ...d,
+                          linux: { ...d.linux, winePath: event.target.value }
+                        }))
+                      }
+                    >
+                      <option value="">— pick a runner —</option>
+                      {linuxRuntimeOptions.wineRunners.map((runner) => (
+                        <option key={runner.path} value={runner.path}>
+                          {runner.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label>Custom Wine Binary</label>
+                    <input
+                      type="text"
+                      value={draft.linux.winePath}
+                      placeholder="/path/to/wine"
+                      onChange={(event) =>
+                        edit((d) => ({
+                          ...d,
+                          linux: { ...d.linux, winePath: event.target.value }
+                        }))
+                      }
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className={styles.fieldRow}>
+                      <label>Proton Version</label>
+                      <select
+                        value={draft.linux.protonPath}
+                        onChange={(event) =>
+                          edit((d) => ({
+                            ...d,
+                            linux: { ...d.linux, protonPath: event.target.value }
+                          }))
+                        }
+                      >
+                        <option value="">— pick a Proton installation —</option>
+                        {linuxRuntimeOptions.protonRunners.map((runner) => (
+                          <option key={runner.path} value={runner.path}>
+                            {runner.label}
+                          </option>
+                        ))}
+                      </select>
+                      <label>Custom Proton Directory</label>
+                      <input
+                        type="text"
+                        value={draft.linux.protonPath}
+                        placeholder="/path/to/GE-Proton"
+                        onChange={(event) =>
+                          edit((d) => ({
+                            ...d,
+                            linux: { ...d.linux, protonPath: event.target.value }
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className={styles.fieldRow}>
+                      <label>UMU Launcher Override</label>
+                      <input
+                        type="text"
+                        value={draft.linux.umuPath}
+                        placeholder={linuxRuntimeOptions.umuPath || '/path/to/umu-run'}
+                        onChange={(event) =>
+                          edit((d) => ({
+                            ...d,
+                            linux: { ...d.linux, umuPath: event.target.value }
+                          }))
+                        }
+                      />
+                      <span className={linuxRuntimeOptions.umuPath ? styles.valid : styles.invalid}>
+                        {linuxRuntimeOptions.umuPath
+                          ? `UMU detected: ${linuxRuntimeOptions.umuPath}`
+                          : 'UMU was not detected. Install umu-launcher or enter its executable path.'}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className={styles.fieldRow}>
-                  <label>Wine Prefix</label>
+                  <label>Compatibility Prefix</label>
                   <input
                     type="text"
                     value={draft.linux.winePrefix}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, winePrefix: e.target.value } }))}
+                    placeholder="/path/to/prefix or .../compatdata/17020"
+                    onChange={(event) =>
+                      edit((d) => ({
+                        ...d,
+                        linux: { ...d.linux, winePrefix: event.target.value }
+                      }))
+                    }
                   />
+                  <span className={styles.featureDetail}>
+                    Accepts a Wine prefix or a Proton compatibility-data folder. A nested pfx
+                    prefix is found automatically.
+                  </span>
                   <div className={styles.inlineButtons}>
-                    <button onClick={() => void createPrefix()}>Create Prefix</button>
+                    {draft.linux.runner === 'wine' && (
+                      <button
+                        disabled={prefixCreating}
+                        onClick={() => void createPrefix()}
+                      >
+                        {prefixCreating ? 'Creating…' : 'Create Prefix'}
+                      </button>
+                    )}
+                    {linuxRuntimeOptions.steamPrefixPath &&
+                      draft.linux.winePrefix !== linuxRuntimeOptions.steamPrefixPath && (
+                        <button
+                          onClick={() =>
+                            edit((d) => ({
+                              ...d,
+                              linux: {
+                                ...d.linux,
+                                winePrefix: linuxRuntimeOptions.steamPrefixPath
+                              }
+                            }))
+                          }
+                        >
+                          Use Steam Prefix
+                        </button>
+                      )}
+                    <button
+                      disabled={linuxRuntimeScanning}
+                      onClick={() => void rescanLinuxRuntime()}
+                    >
+                      {linuxRuntimeScanning ? 'Scanning…' : 'Rescan Linux Tools'}
+                    </button>
                   </div>
                   {prefixResult && (
-                    <span className={prefixResult.ok ? styles.valid : styles.invalid}>{prefixResult.message}</span>
+                    <span className={prefixResult.ok ? styles.valid : styles.invalid}>
+                      {prefixResult.message}
+                    </span>
                   )}
                 </div>
+
+                <div className={styles.featureToggle}>
+                  <input
+                    id="linux-gamemode"
+                    type="checkbox"
+                    checked={draft.linux.gameMode}
+                    disabled={!linuxRuntimeOptions.gameModePath && !draft.linux.gameMode}
+                    onChange={(event) =>
+                      edit((d) => ({
+                        ...d,
+                        linux: { ...d.linux, gameMode: event.target.checked }
+                      }))
+                    }
+                  />
+                  <label htmlFor="linux-gamemode">
+                    <span className={styles.featureName}>Use GameMode</span>
+                    <span className={styles.featureDetail}>
+                      {linuxRuntimeOptions.gameModePath
+                        ? `Detected at ${linuxRuntimeOptions.gameModePath}. Applies temporary Linux performance optimizations while the game runs.`
+                        : 'GameMode is not installed or could not be detected.'}
+                    </span>
+                  </label>
+                </div>
+
                 <div className={styles.checkRow}>
                   <input
                     id="winedebug"
                     type="checkbox"
                     checked={draft.linux.wineDebug}
-                    onChange={(e) => edit((d) => ({ ...d, linux: { ...d.linux, wineDebug: e.target.checked } }))}
+                    onChange={(event) =>
+                      edit((d) => ({
+                        ...d,
+                        linux: { ...d.linux, wineDebug: event.target.checked }
+                      }))
+                    }
                   />
                   <label htmlFor="winedebug">
-                    Wine debug output (captures Wine stderr into the launcher log; launcher stays attached to the game)
+                    Runtime debug output (captures compatibility-layer output in the launcher log;
+                    the launcher stays attached to the game)
                   </label>
                 </div>
               </>
@@ -1272,6 +1469,18 @@ function DiagnosticsTab({
         ? styles.valid
         : undefined;
   const serverAddressStatus = state.resolvedHost ? 'configured' : 'unavailable';
+  const linuxRuntimeStatus =
+    state.linuxRuntimeStatus === 'ready'
+      ? `${settings.linux.runner} ready`
+      : state.linuxRuntimeStatus === 'wine-runner-missing'
+        ? 'Wine runner missing'
+        : state.linuxRuntimeStatus === 'wine-prefix-missing'
+          ? 'prefix missing'
+          : state.linuxRuntimeStatus === 'umu-missing'
+            ? 'UMU missing'
+            : state.linuxRuntimeStatus === 'proton-missing'
+              ? 'Proton missing'
+              : 'not applicable';
 
   return (
     <section className={styles.section}>
@@ -1306,16 +1515,24 @@ function DiagnosticsTab({
           </dd>
         </div>
         {state.platform === 'linux' && (
-          <div>
-            <dt>Wine runner</dt>
-            <dd className={state.winePathValid ? styles.valid : styles.invalid}>
-              {state.winePathValid
-                ? 'executable'
-                : settings.linux.winePath
-                  ? 'not executable'
-                  : 'not configured'}
-            </dd>
-          </div>
+          <>
+            <div>
+              <dt>Linux runtime</dt>
+              <dd
+                className={
+                  state.linuxRuntimeStatus === 'ready' ? styles.valid : styles.invalid
+                }
+              >
+                {linuxRuntimeStatus}
+              </dd>
+            </div>
+            <div>
+              <dt>GameMode</dt>
+              <dd className={state.gameModeAvailable ? styles.valid : undefined}>
+                {state.gameModeAvailable ? 'available' : 'not detected'}
+              </dd>
+            </div>
+          </>
         )}
       </dl>
 

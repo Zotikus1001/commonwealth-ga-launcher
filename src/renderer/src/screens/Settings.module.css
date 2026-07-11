@@ -148,6 +148,12 @@
   border: 1px solid var(--line);
   background: rgba(15, 19, 28, 0.48);
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.optionRow:has(input:checked) {
+  border-color: var(--cyan);
+  background: linear-gradient(90deg, rgba(69, 200, 218, 0.11), rgba(15, 19, 28, 0.58));
 }
 
 .optionRow input {

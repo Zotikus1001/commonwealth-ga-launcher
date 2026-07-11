@@ -17,7 +17,11 @@ import { probeServer, type ServerProbeStatus } from './services/ServerProbe';
 import { LauncherUpdater } from './services/LauncherUpdater';
 import { fetchAgendaStatsStatus } from './services/AgendaStats';
 import { fetchServerCommits } from './services/ServerCommits';
-import { validateWineRunner } from './services/WineEnv';
+import {
+  inspectLinuxRuntime,
+  resolveExistingPrefix,
+  type LinuxRuntimeInspection
+} from './services/LinuxRuntime';
 import {
   applyClientPatch as applyIniClientPatch,
   ensureClientConfiguration,
@@ -52,6 +56,7 @@ interface CandidateProbeResult {
 export class Orchestrator {
   private state: LauncherState;
   private install: GameInstall | null = null;
+  private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
@@ -86,7 +91,9 @@ export class Orchestrator {
       serverStatus: 'checking',
       gamePathValid: false,
       validatedGameExePath: '',
-      winePathValid: PLATFORM === 'linux' ? false : null,
+      linuxRuntimeStatus: PLATFORM === 'linux' ? 'wine-runner-missing' : null,
+      resolvedLinuxPrefix: '',
+      gameModeAvailable: PLATFORM === 'linux' ? false : null,
       launchCoolingDown: false,
       developerMode: false,
       progress: launcherUpdate.progress,
@@ -314,7 +321,7 @@ export class Orchestrator {
       !this.state.developerMode &&
       this.state.phase === 'ready' &&
       this.state.gamePathValid &&
-      (PLATFORM !== 'linux' || this.state.winePathValid === true);
+      (PLATFORM !== 'linux' || this.state.linuxRuntimeStatus === 'ready');
     this.patch({
       serverStatus: 'checking',
       ...(showServerStatus ? { statusLine: SERVER_CHECKING_STATUS } : {})
@@ -336,7 +343,7 @@ export class Orchestrator {
       !this.state.developerMode &&
       this.state.phase === 'ready' &&
       this.state.gamePathValid &&
-      (PLATFORM !== 'linux' || this.state.winePathValid === true) &&
+      (PLATFORM !== 'linux' || this.state.linuxRuntimeStatus === 'ready') &&
       (this.state.statusLine === 'Ready.' ||
         this.state.statusLine === SERVER_CHECKING_STATUS ||
         this.state.statusLine === SERVER_OFFLINE_STATUS ||
@@ -379,11 +386,17 @@ export class Orchestrator {
   private async refreshRuntimeState(): Promise<void> {
     this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
     let settings = this.config.get();
-    const [install, winePathValid]: [GameInstall | null, boolean | null] = await Promise.all([
+    const [install, linuxRuntime] = await Promise.all([
       validateGameExe(settings.gameExePath),
-      PLATFORM === 'linux' ? validateWineRunner(settings.linux.winePath) : Promise.resolve(null)
+      PLATFORM === 'linux' ? inspectLinuxRuntime(settings, this.log) : Promise.resolve(null)
     ]);
     this.install = install;
+    this.linuxRuntime = linuxRuntime;
+    if (linuxRuntime?.suggestedPrefixPath) {
+      settings = await this.config.update({
+        linux: { winePrefix: linuxRuntime.suggestedPrefixPath }
+      });
+    }
     let clientPatches = unavailableClientPatches();
     if (install) {
       const [patches, gameIniSettings] = await Promise.all([
@@ -398,7 +411,9 @@ export class Orchestrator {
     this.patch({
       gamePathValid: install !== null,
       validatedGameExePath: settings.gameExePath,
-      winePathValid,
+      linuxRuntimeStatus: linuxRuntime?.status ?? null,
+      resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
+      gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
       clientPatches
     });
 
@@ -420,7 +435,7 @@ export class Orchestrator {
       });
       return;
     }
-    if (PLATFORM === 'linux' && !winePathValid) {
+    if (PLATFORM === 'linux' && linuxRuntime?.status !== 'ready') {
       this.patch({ phase: 'ready', statusLine: 'Complete your Linux game setup in Settings.' });
       return;
     }
@@ -493,6 +508,10 @@ export class Orchestrator {
         this.patch({ phase: 'ready', statusLine: 'Set your Global Agenda install path in Settings first.' });
         return;
       }
+      if (PLATFORM === 'linux' && this.linuxRuntime?.status !== 'ready') {
+        this.patch({ phase: 'ready', statusLine: 'Complete your Linux game setup in Settings.' });
+        return;
+      }
       if (!selection.host) {
         this.patch({
           phase: 'error',
@@ -545,7 +564,8 @@ export class Orchestrator {
         launchHost,
         this.install.binariesDir,
         PLATFORM,
-        developerLaunch
+        developerLaunch,
+        this.linuxRuntime
       );
       this.scheduleAutoCloseAfterLaunch();
       this.scheduleLaunchCooldown();
@@ -648,7 +668,15 @@ export class Orchestrator {
 
   async autoDetect(): Promise<string | null> {
     const settings = this.config.get();
-    const found = await autoDetectGame(PLATFORM, settings.linux.winePrefix, this.log);
+    const existingPrefix =
+      PLATFORM === 'linux'
+        ? await resolveExistingPrefix(settings.linux.winePrefix)
+        : settings.linux.winePrefix;
+    const found = await autoDetectGame(
+      PLATFORM,
+      existingPrefix ?? settings.linux.winePrefix,
+      this.log
+    );
     if (!found) return null;
     await this.config.update({ gameExePath: found.exePath });
     await this.refresh();

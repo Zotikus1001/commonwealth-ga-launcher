@@ -54,7 +54,7 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
   }
   if (state.platform === 'linux' && !state.winePathValid) {
-    return { label: 'SET WINE RUNNER', disabled: false, action: onOpenGameSettings };
+    return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
   }
   if (state.phase === 'error') {
     return { label: 'RETRY', disabled: false, action: () => void window.api.refresh() };

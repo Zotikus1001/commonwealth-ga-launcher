@@ -412,7 +412,7 @@ export class Orchestrator {
       return;
     }
     if (PLATFORM === 'linux' && !winePathValid) {
-      this.patch({ phase: 'ready', statusLine: 'Configure an executable Wine runner in Settings.' });
+      this.patch({ phase: 'ready', statusLine: 'Complete your Linux game setup in Settings.' });
       return;
     }
     this.patch({ phase: 'ready', statusLine: 'Ready.' });

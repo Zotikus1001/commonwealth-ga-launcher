@@ -407,13 +407,15 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 >
                   {steamAction === 'store' ? 'Opening Steam…' : 'View on Steam'}
                 </button>
-                <button
-                  className={styles.steamButton}
-                  disabled={steamAction !== null}
-                  onClick={() => void openSteamInstall()}
-                >
-                  {steamAction === 'install' ? 'Opening Steam…' : 'Install on Steam'}
-                </button>
+                {!state.gamePathValid && (
+                  <button
+                    className={styles.steamButton}
+                    disabled={steamAction !== null}
+                    onClick={() => void openSteamInstall()}
+                  >
+                    {steamAction === 'install' ? 'Opening Steam…' : 'Install on Steam'}
+                  </button>
+                )}
               </div>
               {steamResult && (
                 <span className={styles.invalid}>{steamResult.message}</span>

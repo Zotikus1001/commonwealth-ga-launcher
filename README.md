@@ -13,17 +13,14 @@ server.
 
 1. Run the installer.
 2. Open the launcher.
-3. Select `GlobalAgenda.exe` when prompted, or let the launcher find it automatically.
+3. Select your game installation, or let the launcher find it.
 4. Press **Play**.
 
 ### Linux
 
-> [!WARNING]
-> The Linux version includes Wine support but has not been fully tested yet.
-
 **[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Allow the AppImage to run, open it, and follow the game setup instructions.
+Allow the AppImage to run, open it, and follow the setup instructions.
 
 The launcher updates itself automatically.
 
@@ -31,17 +28,12 @@ The launcher updates itself automatically.
 
 ## Features
 
-- **Automatic updates** — Keeps the launcher up to date.
-- **Easy game setup** — Finds your game or lets you select it manually.
-- **Server status** — Shows whether your selected server is available.
-- **Multiple servers** — Save and choose additional servers.
-- **Client fixes** — Includes fixes for known gameplay issues.
-- **Game options** — Manage login themes, FPS limits, healing numbers, graphics, and launch options.
-- **Faster launching** — Skip startup movies and close the launcher after starting the game.
-- **UI scaling** — Adjust the launcher size for your display.
-- **Patches and diagnostics** — View installed fixes and access troubleshooting tools.
-- **Community tools** — View player counts, Agenda Stats, server updates, and Discord.
-- **Windows and Linux** — Available as a Windows installer and Linux AppImage.
+- Automatic updates
+- Easy game setup and launching
+- Server status and server selection
+- Client fixes and game options
+- Agenda Stats and Discord access
+- Windows and Linux support
 
 ---
 

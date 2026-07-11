@@ -323,18 +323,6 @@
   color: var(--green);
 }
 
-.agendaStatsLoading {
-  color: var(--cyan);
-}
-
-.agendaStatsLoading .agendaStatsSignal {
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.agendaStatsError {
-  color: var(--amber-hi);
-}
-
 .agendaStatsButton {
   display: grid;
   min-height: 48px;

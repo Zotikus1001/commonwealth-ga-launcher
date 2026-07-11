@@ -103,13 +103,10 @@ export default function Play({
     !state.launchCoolingDown &&
     state.gamePathValid &&
     (state.platform !== 'linux' || state.winePathValid === true);
-  const showsAgendaStats = state.selectedServerId === DEFAULT_SERVER_ID;
-  const agendaStatsText =
-    state.agendaStatsStatus === 'ready' && state.agendaStatsText
-      ? state.agendaStatsText
-      : state.agendaStatsStatus === 'error'
-        ? 'Player count unavailable'
-        : 'Reading live population…';
+  const showsAgendaStats =
+    state.selectedServerId === DEFAULT_SERVER_ID &&
+    state.agendaStatsStatus === 'ready' &&
+    state.agendaStatsText !== null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock((value) => value + 1), 60_000);
@@ -252,18 +249,12 @@ export default function Play({
               <div className={styles.agendaStatsPopulation}>
                 <span className={styles.agendaStatsLabel}>Live population</span>
                 <span
-                  className={`${styles.agendaStatsValue} ${
-                    state.agendaStatsStatus === 'ready'
-                      ? styles.agendaStatsReady
-                      : state.agendaStatsStatus === 'error'
-                        ? styles.agendaStatsError
-                        : styles.agendaStatsLoading
-                  }`}
+                  className={`${styles.agendaStatsValue} ${styles.agendaStatsReady}`}
                   role="status"
                   aria-live="polite"
                 >
                   <span className={styles.agendaStatsSignal} aria-hidden="true" />
-                  <span className={styles.agendaStatsText}>{agendaStatsText}</span>
+                  <span className={styles.agendaStatsText}>{state.agendaStatsText}</span>
                 </span>
               </div>
               <button

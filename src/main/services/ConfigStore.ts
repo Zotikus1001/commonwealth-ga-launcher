@@ -23,6 +23,13 @@ export const CURRENT_SETTINGS_SCHEMA_VERSION = 6;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
+export class FutureSettingsVersionError extends UnsupportedSettingsVersionError {
+  constructor(readonly version: number) {
+    super(`Settings schema ${version} requires a newer launcher.`);
+    this.name = 'FutureSettingsVersionError';
+  }
+}
+
 export function migrateStoredSettings(
   value: unknown,
   defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
@@ -35,8 +42,11 @@ export function migrateStoredSettings(
   if (typeof rawVersion !== 'number' || !Number.isInteger(rawVersion)) {
     throw new Error('Settings schema version is invalid.');
   }
-  if (rawVersion < 1 || rawVersion > CURRENT_SETTINGS_SCHEMA_VERSION) {
+  if (rawVersion < 1) {
     throw new UnsupportedSettingsVersionError(`Unsupported settings schema: ${rawVersion}`);
+  }
+  if (rawVersion > CURRENT_SETTINGS_SCHEMA_VERSION) {
+    throw new FutureSettingsVersionError(rawVersion);
   }
 
   let version = rawVersion;
@@ -289,6 +299,7 @@ function validateUpdatedFpsLimit(value: unknown): Settings['fpsLimit'] {
 export class ConfigStore {
   private readonly file: string;
   private settings: Settings;
+  private readOnlyReason: string | null = null;
 
   constructor(
     userDataDir: string,
@@ -300,6 +311,7 @@ export class ConfigStore {
   }
 
   async load(): Promise<Settings> {
+    this.readOnlyReason = null;
     let raw: string;
     try {
       raw = await readFile(this.file, { encoding: 'utf-8' });
@@ -322,6 +334,17 @@ export class ConfigStore {
     try {
       migrated = migrateStoredSettings(parsed, this.defaults.servers.builtInName);
     } catch (error) {
+      if (error instanceof FutureSettingsVersionError) {
+        this.readOnlyReason =
+          `Settings were created by a newer launcher (schema ${error.version}). ` +
+          'Update the launcher before changing them.';
+        this.log.warn(
+          `settings schema ${error.version} is newer than supported schema ` +
+            `${CURRENT_SETTINGS_SCHEMA_VERSION}; preserving ${this.file} unchanged`
+        );
+        this.settings = structuredClone(this.defaults);
+        return this.settings;
+      }
       const reason = error instanceof UnsupportedSettingsVersionError ? 'incompatible' : 'corrupt';
       await this.recoverInvalidSettings(reason, (error as Error).message);
       return this.settings;
@@ -368,6 +391,7 @@ export class ConfigStore {
   }
 
   async update(patch: DeepPartial<Settings>): Promise<Settings> {
+    if (this.readOnlyReason) throw new Error(this.readOnlyReason);
     const next = mergeInto(this.settings, patch);
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
     next.servers = validateUpdatedServers(next.servers);

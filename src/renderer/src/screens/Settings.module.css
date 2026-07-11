@@ -342,22 +342,12 @@
   gap: 5px;
 }
 
-.serverManagedField input {
-  color: var(--text-faint);
-  cursor: default;
-}
-
-.builtInServerBadge {
-  align-self: center;
-  box-sizing: border-box;
-  width: 100%;
-  padding: 5px 7px;
-  border: 1px solid rgba(240, 166, 60, 0.48);
-  color: var(--amber-hi);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.serverManagedField input:disabled {
+  background: rgba(15, 19, 28, 0.58);
+  color: rgba(84, 94, 115, 0.62);
+  -webkit-text-fill-color: rgba(84, 94, 115, 0.62);
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 .removeServerButton {

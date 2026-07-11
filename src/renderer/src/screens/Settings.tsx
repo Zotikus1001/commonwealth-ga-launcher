@@ -876,13 +876,11 @@ function ServersTab({
               <input
                 type="text"
                 value="Managed by Launcher"
-                readOnly
-                tabIndex={-1}
+                disabled
                 aria-label="Built-in server address managed by launcher"
               />
             </div>
           </div>
-          <span className={styles.builtInServerBadge}>Built-In</span>
         </article>
 
         {customServers.map((server, index) => (

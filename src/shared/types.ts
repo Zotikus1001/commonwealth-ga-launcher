@@ -59,7 +59,6 @@ export type Phase =
   | 'checking'
   | 'ready'
   | 'launching'
-  | 'running'
   | 'error';
 
 export type LauncherUpdateStatus =
@@ -100,8 +99,8 @@ export interface LauncherState {
   validatedGameExePath: string;
   /** null off Linux; otherwise whether the configured Wine runner is executable. */
   winePathValid: boolean | null;
-  gameRunning: boolean;
-  activeGameInstances: number;
+  /** True only during the five-second window after a Play launch attempt. */
+  launchCoolingDown: boolean;
   developerMode: boolean;
   progress: UpdateProgress | null;
   launcherVersion: string;

@@ -29,7 +29,7 @@ const SERVER_PROBE_REFRESH_MS = 65_000;
 const SERVER_CHECKING_STATUS = 'Checking server availability…';
 const COMMIT_REFRESH_MS = 5 * 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
-const EXTERNAL_GAME_REFRESH_MS = 3_000;
+const LAUNCH_COOLDOWN_MS = 5_000;
 
 interface ServerSelection {
   id: string;
@@ -53,8 +53,7 @@ export class Orchestrator {
   private commitTimer: NodeJS.Timeout | null = null;
   private commitRefreshInFlight = false;
   private autoCloseTimer: NodeJS.Timeout | null = null;
-  private externalGameTimer: NodeJS.Timeout | null = null;
-  private externalGameRefreshInFlight = false;
+  private launchCooldownTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly config: ConfigStore,
@@ -102,8 +101,7 @@ export class Orchestrator {
       gamePathValid: false,
       validatedGameExePath: '',
       winePathValid: PLATFORM === 'linux' ? false : null,
-      gameRunning: false,
-      activeGameInstances: 0,
+      launchCoolingDown: false,
       developerMode: false,
       progress: null,
       launcherVersion: app.getVersion(),
@@ -197,33 +195,6 @@ export class Orchestrator {
     if (!this.commitTimer) {
       this.commitTimer = setInterval(() => void this.refreshServerCommits(), COMMIT_REFRESH_MS);
     }
-    if (!this.externalGameTimer) {
-      this.externalGameTimer = setInterval(
-        () => void this.refreshExternalGameProcess(),
-        EXTERNAL_GAME_REFRESH_MS
-      );
-    }
-  }
-
-  private async refreshExternalGameProcess(): Promise<void> {
-    if (
-      this.externalGameRefreshInFlight ||
-      this.busy ||
-      this.state.phase !== 'running' ||
-      this.gameLauncher.activeInstanceCount() > 0
-    ) {
-      return;
-    }
-    this.externalGameRefreshInFlight = true;
-    try {
-      if (await this.gameLauncher.isGameRunning(PLATFORM)) return;
-      this.log.info('external game process no longer detected');
-      await this.refreshRuntimeState(false);
-    } catch (error) {
-      this.log.warn(`external game process refresh failed: ${(error as Error).message}`);
-    } finally {
-      this.externalGameRefreshInFlight = false;
-    }
   }
 
   private async refreshServerCommits(): Promise<void> {
@@ -247,7 +218,7 @@ export class Orchestrator {
       app.isPackaged &&
       !this.state.developerMode &&
       this.state.serverOnline === false &&
-      !this.state.gameRunning &&
+      !this.state.launchCoolingDown &&
       !this.busy &&
       (this.state.phase === 'ready' || this.state.launcherUpdate === 'error');
     if (!shouldCheckLauncher) {
@@ -265,7 +236,7 @@ export class Orchestrator {
     try {
       if (!(await this.launcherUpdater.ensureCurrentFromNextSource())) return;
       if (recoveringFromUpdateError) {
-        await this.refreshRuntimeState(false);
+        await this.refreshRuntimeState();
       } else {
         this.patch(resume);
         await this.reprobe();
@@ -340,14 +311,11 @@ export class Orchestrator {
       return;
     }
     this.refreshPending = false;
-    const inGame = this.state.gameRunning;
     this.busy = true;
     try {
-      if (!inGame) {
-        this.patch({ phase: 'checking', statusLine: 'Checking for launcher updates…', errorDetails: null });
-        if (!(await this.launcherUpdater.ensureCurrent())) return;
-      }
-      await this.refreshRuntimeState(inGame);
+      this.patch({ phase: 'checking', statusLine: 'Checking for launcher updates…', errorDetails: null });
+      if (!(await this.launcherUpdater.ensureCurrent())) return;
+      await this.refreshRuntimeState();
     } catch (error) {
       const message = (error as Error).message;
       this.log.error(`refresh failed: ${message}`);
@@ -358,19 +326,12 @@ export class Orchestrator {
     }
   }
 
-  private async refreshRuntimeState(preserveGamePhase: boolean): Promise<void> {
-    if (!preserveGamePhase) {
-      this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
-    }
+  private async refreshRuntimeState(): Promise<void> {
+    this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
     const settings = this.config.get();
-    const [install, winePathValid, gameRunning]: [
-      GameInstall | null,
-      boolean | null,
-      boolean
-    ] = await Promise.all([
+    const [install, winePathValid]: [GameInstall | null, boolean | null] = await Promise.all([
       validateGameExe(settings.gameExePath),
-      PLATFORM === 'linux' ? validateWineRunner(settings.linux.winePath) : Promise.resolve(null),
-      this.gameLauncher.isGameRunning(PLATFORM)
+      PLATFORM === 'linux' ? validateWineRunner(settings.linux.winePath) : Promise.resolve(null)
     ]);
     this.install = install;
     const clientPatches = await inspectClientPatches(install);
@@ -380,11 +341,8 @@ export class Orchestrator {
       gamePathValid: install !== null,
       validatedGameExePath: settings.gameExePath,
       winePathValid,
-      gameRunning,
-      activeGameInstances: this.gameLauncher.activeInstanceCount(),
       clientPatches
     });
-    if (preserveGamePhase && gameRunning) return;
 
     if (!selection.host) {
       this.patch({
@@ -408,33 +366,7 @@ export class Orchestrator {
       this.patch({ phase: 'ready', statusLine: 'Configure an executable Wine runner in Settings.' });
       return;
     }
-    if (gameRunning) {
-      this.patch({ phase: 'running', statusLine: 'Game process detected.' });
-      return;
-    }
     this.patch({ phase: 'ready', statusLine: 'Ready.' });
-  }
-
-  private gameInstancesChanged(count: number): void {
-    if (count > 0) {
-      const suffix = count === 1 ? 'instance' : 'instances';
-      this.patch({
-        phase: 'running',
-        gameRunning: true,
-        activeGameInstances: count,
-        statusLine: `${count} game ${suffix} running.`
-      });
-      return;
-    }
-    void this.gameLauncher.isGameRunning(PLATFORM).then((running) => {
-      if (this.gameLauncher.activeInstanceCount() > 0) return;
-      this.patch({
-        phase: running ? 'running' : 'ready',
-        gameRunning: running,
-        activeGameInstances: 0,
-        statusLine: running ? 'Game process detected.' : 'Game closed.'
-      });
-    });
   }
 
   private shouldAutoClose(settings: Settings): boolean {
@@ -449,17 +381,35 @@ export class Orchestrator {
     if (!this.shouldAutoClose(this.config.get())) return;
     if (this.autoCloseTimer) clearTimeout(this.autoCloseTimer);
     this.log.info('auto-close: launcher will close in 5 seconds');
-    this.patch({ statusLine: 'Game launched. Closing launcher in 5 seconds…' });
+    this.patch({ statusLine: 'Closing launcher in 5 seconds…' });
     this.autoCloseTimer = setTimeout(() => {
       this.autoCloseTimer = null;
       if (!this.shouldAutoClose(this.config.get())) {
         this.log.info('auto-close: canceled by current settings');
-        this.patch({ statusLine: 'Game is running.' });
+        this.patch({ statusLine: 'Ready.' });
         return;
       }
       this.log.info('auto-close: closing launcher');
       app.quit();
     }, AUTO_CLOSE_DELAY_MS);
+  }
+
+  private scheduleLaunchCooldown(): void {
+    if (this.launchCooldownTimer) clearTimeout(this.launchCooldownTimer);
+    this.log.info('launch attempt: Play is locked for 5 seconds');
+    this.launchCooldownTimer = setTimeout(() => {
+      this.launchCooldownTimer = null;
+      if (this.state.phase === 'launching') {
+        this.patch({
+          phase: 'ready',
+          launchCoolingDown: false,
+          statusLine: 'Ready.',
+          errorDetails: null
+        });
+      } else {
+        this.patch({ launchCoolingDown: false });
+      }
+    }, LAUNCH_COOLDOWN_MS);
   }
 
   async play(developerLaunch = false): Promise<void> {
@@ -470,8 +420,8 @@ export class Orchestrator {
     }
     if (
       this.busy ||
-      this.state.phase === 'launching' ||
-      (this.state.phase === 'running' && !initialSettings.developer.enabled)
+      this.state.launchCoolingDown ||
+      this.state.phase === 'launching'
     ) {
       return;
     }
@@ -482,10 +432,6 @@ export class Orchestrator {
 
       const settings = this.config.get();
       const selection = this.applyServerSelection(settings);
-      if (!settings.developer.enabled && (await this.gameLauncher.isGameRunning(PLATFORM))) {
-        this.patch({ phase: 'running', gameRunning: true, statusLine: 'Game is already running.' });
-        return;
-      }
       if (!this.install) {
         this.patch({ phase: 'ready', statusLine: 'Set your Global Agenda install path in Settings first.' });
         return;
@@ -532,6 +478,7 @@ export class Orchestrator {
 
       this.patch({
         phase: 'launching',
+        launchCoolingDown: true,
         statusLine: `Launching ${selection.name}${developerLaunch ? ' with developer display settings' : ''}…`
       });
       this.gameLauncher.launch(
@@ -539,18 +486,16 @@ export class Orchestrator {
         launchHost,
         this.install.binariesDir,
         PLATFORM,
-        developerLaunch,
-        (count) => this.gameInstancesChanged(count),
-        () => this.scheduleAutoCloseAfterLaunch()
+        developerLaunch
       );
+      this.scheduleAutoCloseAfterLaunch();
+      this.scheduleLaunchCooldown();
     } catch (error) {
       const message = (error as Error).message;
-      const count = this.gameLauncher.activeInstanceCount();
       this.log.error(`launch failed: ${message}`);
       this.patch({
-        phase: count > 0 ? 'running' : 'ready',
-        gameRunning: count > 0,
-        activeGameInstances: count,
+        phase: 'ready',
+        launchCoolingDown: false,
         statusLine: `Launch failed: ${message}`,
         errorDetails: message
       });
@@ -567,8 +512,8 @@ export class Orchestrator {
     if (this.busy) return { ok: false, message: 'The launcher is busy. Try again shortly.' };
     this.busy = true;
     try {
-      if (this.state.gameRunning || (await this.gameLauncher.isGameRunning(PLATFORM))) {
-        return { ok: false, message: 'Close the game before applying client patches.' };
+      if (this.state.launchCoolingDown) {
+        return { ok: false, message: 'Wait for the current game launch to finish.' };
       }
       const settings = this.config.get();
       const install = await validateGameExe(settings.gameExePath);
@@ -617,7 +562,7 @@ export class Orchestrator {
       throw new Error('Unknown developer server.');
     }
     await this.config.update({ developer: { selectedServerId: id } });
-    await this.refreshRuntimeState(this.state.gameRunning);
+    await this.refreshRuntimeState();
   }
 
   async settingsChanged(): Promise<void> {

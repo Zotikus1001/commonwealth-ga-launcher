@@ -47,6 +47,9 @@ interface CtaSpec {
 }
 
 function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
+  if (state.launchCoolingDown) {
+    return { label: 'LAUNCHING…', disabled: true, action: () => {} };
+  }
   switch (state.phase) {
     case 'init':
       return { label: 'CHECKING…', disabled: true, action: () => {} };
@@ -67,10 +70,6 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
       return { label: 'CHECKING…', disabled: true, action: () => {} };
     case 'launching':
       return { label: 'LAUNCHING…', disabled: true, action: () => {} };
-    case 'running':
-      return state.developerMode
-        ? { label: 'PLAY', disabled: false, action: () => void window.api.play() }
-        : { label: 'RUNNING', disabled: true, action: () => {} };
   }
   if (state.launcherUpdate !== 'up-to-date' && state.launcherUpdate !== 'disabled') {
     return { label: 'RETRY UPDATE', disabled: false, action: () => void window.api.refresh() };
@@ -112,7 +111,8 @@ export default function Play({
   const [, setClock] = useState(0);
   const canDevLaunch =
     state.developerMode &&
-    (state.phase === 'ready' || state.phase === 'running') &&
+    state.phase === 'ready' &&
+    !state.launchCoolingDown &&
     state.gamePathValid &&
     (state.platform !== 'linux' || state.winePathValid === true);
 

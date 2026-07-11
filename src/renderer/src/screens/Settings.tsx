@@ -548,7 +548,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               <label htmlFor="close-after-launch">
                 <span className={styles.featureName}>Automatically close launcher after launching game</span>
                 <span className={styles.featureDetail}>
-                  Closes the launcher five seconds after the game starts.
+                  Closes the launcher five seconds after it starts the game.
                 </span>
               </label>
             </div>
@@ -924,8 +924,8 @@ function PatchesTab({ state }: { state: LauncherState }): JSX.Element {
               : patch.applied === false
                 ? patchApplying
                   ? 'Applying…'
-                  : state.gameRunning
-                    ? 'Close the game to apply'
+                  : state.launchCoolingDown
+                    ? 'Wait for launch to finish'
                     : 'Ready to apply'
                 : 'Game path required';
           const tone =
@@ -939,9 +939,9 @@ function PatchesTab({ state }: { state: LauncherState }): JSX.Element {
               {patch.applied === false ? (
                 <button
                   className={`${styles.patchIcon} ${styles.patchApplyButton}`}
-                  disabled={patchApplying || state.gameRunning}
+                  disabled={patchApplying || state.launchCoolingDown}
                   aria-label={`Apply ${copy.title} patch`}
-                  title={state.gameRunning ? 'Close the game before applying this patch.' : 'Apply patch'}
+                  title={state.launchCoolingDown ? 'Wait for launch to finish.' : 'Apply patch'}
                   onClick={() => void applyPatch(patch.id)}
                 >
                   {patchApplying ? '…' : 'APPLY'}
@@ -997,7 +997,7 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
                 : { text: 'Ready to check for updates.', tone: styles.aboutDim };
   const platform =
     state.platform === 'win32' ? 'Windows' : state.platform === 'linux' ? 'Linux' : 'macOS';
-  const checkDisabled = development || updateBusy || state.gameRunning;
+  const checkDisabled = development || updateBusy || state.launchCoolingDown;
 
   return (
     <section className={styles.section}>
@@ -1030,8 +1030,8 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <div>
           <div className="panel-title">Launcher updates</div>
           <p className={`${styles.aboutStatus} ${updateStatus.tone}`}>{updateStatus.text}</p>
-          {state.gameRunning && (
-            <p className={styles.aboutStatus}>Close the game before checking manually.</p>
+          {state.launchCoolingDown && (
+            <p className={styles.aboutStatus}>Wait for the current game launch to finish.</p>
           )}
         </div>
         <button

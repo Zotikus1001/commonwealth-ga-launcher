@@ -1,9 +1,6 @@
-import { spawn, execFile, type ChildProcess } from 'child_process';
-import { promisify } from 'util';
+import { spawn, type ChildProcess } from 'child_process';
 import type { Settings } from '@shared/types';
 import type { Log } from './Log';
-
-const execFileP = promisify(execFile);
 
 /**
  * Builds the GA connection args. Always-passed baseline: -host/-hostdns (resolved server, hidden from the UI),
@@ -34,36 +31,7 @@ export function buildGameArgs(
 }
 
 export class GameLauncher {
-  private readonly children = new Set<ChildProcess>();
-
   constructor(private readonly log: Log) {}
-
-  activeInstanceCount(): number {
-    return this.children.size;
-  }
-
-  /** Our own spawned child OR any system-wide GlobalAgenda.exe (a player may launch by hand). */
-  async isGameRunning(platform: NodeJS.Platform): Promise<boolean> {
-    if (this.children.size > 0) return true;
-    try {
-      if (platform === 'win32') {
-        const { stdout } = await execFileP(
-          'tasklist',
-          ['/FI', 'IMAGENAME eq GlobalAgenda.exe', '/NH', '/FO', 'CSV'],
-          { windowsHide: true }
-        );
-        return stdout.toLowerCase().includes('globalagenda.exe');
-      }
-      // Under Wine the process cmdline contains the exe path — pgrep -f matches it.
-      await execFileP('pgrep', ['-f', 'GlobalAgenda.exe']);
-      return true; // pgrep exit 0 = at least one match
-    } catch (e) {
-      const err = e as { code?: number | string };
-      if (err.code === 1) return false; // pgrep: no match
-      // tasklist/pgrep unavailable or errored — fall back to what we know for sure.
-      return this.children.size > 0;
-    }
-  }
 
   /**
    * Platform split (fragile, keep both branches in sync with intent):
@@ -80,9 +48,7 @@ export class GameLauncher {
     host: string,
     binariesDir: string,
     platform: NodeJS.Platform,
-    developerLaunch: boolean,
-    onInstancesChanged: (count: number) => void,
-    onStarted: () => void
+    developerLaunch: boolean
   ): void {
     const args = buildGameArgs(settings, host, developerLaunch);
     let child: ChildProcess;
@@ -122,22 +88,8 @@ export class GameLauncher {
       throw new Error(`unsupported launcher platform: ${platform}`);
     }
 
-    this.children.add(child);
-    onInstancesChanged(this.children.size);
-    child.once('spawn', onStarted);
-    let completed = false;
-    const complete = (): void => {
-      if (completed) return;
-      completed = true;
-      if (this.children.delete(child)) onInstancesChanged(this.children.size);
-    };
     child.once('error', (e) => {
       this.log.error(`game process error: ${e.message}`);
-      complete();
-    });
-    child.once('exit', (code) => {
-      this.log.info(`game exited (code ${code ?? 'unknown'})`);
-      complete();
     });
   }
 }

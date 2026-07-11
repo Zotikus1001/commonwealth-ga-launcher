@@ -1182,10 +1182,20 @@ function DeveloperTab({
   const [graphicsResult, setGraphicsResult] = useState<ActionResult | null>(null);
   const rendererLabel =
     state.dxvk.rendererSetting === 'directx-10'
-      ? 'DirectX 10 Enabled'
+      ? 'DirectX 10 — DXVK Unavailable'
       : state.dxvk.rendererSetting === 'directx-9'
         ? 'DirectX 9'
         : 'Not Detected';
+  const dxvkCompatible = state.dxvk.rendererSetting === 'directx-9';
+  const dxvkDetail =
+    state.dxvk.rendererSetting === 'directx-10' &&
+    state.dxvk.status !== 'needs-restore' &&
+    state.dxvk.status !== 'error'
+      ? 'Global Agenda DirectX 10 is incompatible with DXVK on native Windows. ' +
+        'Launch normally, disable DirectX 10 in the game options, then return here to test DXVK.'
+      : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
+        ? 'DXVK testing requires the game renderer setting to be detected with DirectX 10 disabled.'
+        : state.dxvk.detail;
   const dxvkStatusLabel: Record<LauncherState['dxvk']['status'], string> = {
     unsupported: 'Windows Only',
     native: 'Native Direct3D',
@@ -1303,10 +1313,12 @@ function DeveloperTab({
               <div className="panel-title">Graphics Renderer</div>
               <div
                 className={`${styles.dxvkPanel} ${
-                  state.dxvk.status === 'active'
-                    ? styles.dxvkActive
-                    : state.dxvk.status === 'needs-restore' || state.dxvk.status === 'error'
-                      ? styles.dxvkProblem
+                  state.dxvk.status === 'needs-restore' ||
+                  state.dxvk.status === 'error' ||
+                  !dxvkCompatible
+                    ? styles.dxvkProblem
+                    : state.dxvk.status === 'active'
+                      ? styles.dxvkActive
                       : ''
                 }`}
               >
@@ -1315,6 +1327,7 @@ function DeveloperTab({
                     id="developer-dxvk"
                     type="checkbox"
                     checked={settings.developer.useDxvk}
+                    disabled={!dxvkCompatible && !settings.developer.useDxvk}
                     onChange={(event) =>
                       edit((current) => ({
                         ...current,
@@ -1323,11 +1336,10 @@ function DeveloperTab({
                     }
                   />
                   <label htmlFor="developer-dxvk">
-                    <span className={styles.featureName}>Use DXVK For Dev Launch</span>
+                    <span className={styles.featureName}>Use DXVK For DirectX 9 Dev Launch</span>
                     <span className={styles.featureDetail}>
-                      Runs the game&apos;s DirectX 9 or DirectX 10 renderer through Vulkan for
-                      comparison testing. Experimental on Windows; normal Play restores the
-                      previous graphics files.
+                      Runs DirectX 9 through Vulkan for comparison testing. Experimental on
+                      Windows; normal Play restores the previous graphics files.
                     </span>
                   </label>
                 </div>
@@ -1341,7 +1353,13 @@ function DeveloperTab({
                     <strong>{dxvkStatusLabel[state.dxvk.status]}</strong>
                   </div>
                 </div>
-                <p className={styles.dxvkDetail}>{state.dxvk.detail}</p>
+                <p
+                  className={`${styles.dxvkDetail} ${
+                    !dxvkCompatible ? styles.dxvkCompatibility : ''
+                  }`}
+                >
+                  {dxvkDetail}
+                </p>
                 {state.dxvk.canRestore && (
                   <button
                     className={styles.dxvkRestoreButton}

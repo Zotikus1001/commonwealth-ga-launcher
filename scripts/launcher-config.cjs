@@ -21,10 +21,7 @@ const CONFIG_KEYS = new Set([
   'dxvk_version',
   'dxvk_archive_url',
   'dxvk_archive_sha256',
-  'dxvk_d3d9_sha256',
-  'dxvk_d3d10core_sha256',
-  'dxvk_d3d11_sha256',
-  'dxvk_dxgi_sha256'
+  'dxvk_d3d9_sha256'
 ]);
 
 function parseQuotedString(value, lineNumber) {
@@ -260,10 +257,7 @@ function loadLauncherConfig(options = {}) {
   }
   for (const key of [
     'dxvk_archive_sha256',
-    'dxvk_d3d9_sha256',
-    'dxvk_d3d10core_sha256',
-    'dxvk_d3d11_sha256',
-    'dxvk_dxgi_sha256'
+    'dxvk_d3d9_sha256'
   ]) {
     assertSha256(raw[key], key);
   }
@@ -297,10 +291,7 @@ function loadLauncherConfig(options = {}) {
       archiveUrl: raw.dxvk_archive_url,
       archiveSha256: raw.dxvk_archive_sha256,
       dllSha256: {
-        'd3d9.dll': raw.dxvk_d3d9_sha256,
-        'd3d10core.dll': raw.dxvk_d3d10core_sha256,
-        'd3d11.dll': raw.dxvk_d3d11_sha256,
-        'dxgi.dll': raw.dxvk_dxgi_sha256
+        'd3d9.dll': raw.dxvk_d3d9_sha256
       }
     }
   };

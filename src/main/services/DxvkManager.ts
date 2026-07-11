@@ -17,20 +17,26 @@ import { downloadToFile, type DownloadProgress } from './Download';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
-export const DXVK_DLL_NAMES = [
+export const DXVK_ARCHIVE_DLL_NAMES = [
   'd3d9.dll',
   'd3d10core.dll',
   'd3d11.dll',
   'dxgi.dll'
 ] as const;
 
-export type DxvkDllName = (typeof DXVK_DLL_NAMES)[number];
+export const DXVK_ACTIVE_DLL_NAMES = ['d3d9.dll'] as const;
+
+// GA's native-Windows D3D10 frontend mixes system DXGI adapters with DXVK's D3D11 device and
+// fails CreateSwapChain with E_NOINTERFACE. Only the self-contained D3D9 wrapper is safe to test.
+
+export type DxvkDllName = (typeof DXVK_ARCHIVE_DLL_NAMES)[number];
+export type DxvkActiveDllName = (typeof DXVK_ACTIVE_DLL_NAMES)[number];
 
 export interface DxvkDefinition {
   version: string;
   archiveUrl: string;
   archiveSha256: string;
-  dllSha256: Record<DxvkDllName, string>;
+  dllSha256: Record<DxvkActiveDllName, string>;
 }
 
 interface MarkerFile {
@@ -40,11 +46,11 @@ interface MarkerFile {
 }
 
 interface DxvkMarker {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   owner: 'commonwealth-ga-launcher';
   version: string;
   phase: 'activating' | 'active' | 'restoring';
-  files: Record<DxvkDllName, MarkerFile>;
+  files: Partial<Record<DxvkDllName, MarkerFile>>;
 }
 
 const MARKER_NAME = '.commonwealth-dxvk.json';
@@ -63,6 +69,16 @@ const DEFAULT_DEFINITION: DxvkDefinition = {
 
 function backupName(name: DxvkDllName): string {
   return `${name}${BACKUP_SUFFIX}`;
+}
+
+function markerDllNames(marker: DxvkMarker): readonly DxvkDllName[] {
+  return marker.schemaVersion === 1 ? DXVK_ARCHIVE_DLL_NAMES : DXVK_ACTIVE_DLL_NAMES;
+}
+
+function markerFile(marker: DxvkMarker, name: DxvkDllName): MarkerFile {
+  const file = marker.files[name];
+  if (!file) throw new Error(`DXVK recovery marker is missing ${name} metadata`);
+  return file;
 }
 
 function isMissing(error: unknown): boolean {
@@ -130,7 +146,7 @@ function parseMarker(value: unknown): DxvkMarker {
   }
   const marker = value as Partial<DxvkMarker>;
   if (
-    marker.schemaVersion !== 1 ||
+    (marker.schemaVersion !== 1 && marker.schemaVersion !== 2) ||
     marker.owner !== 'commonwealth-ga-launcher' ||
     typeof marker.version !== 'string' ||
     !['activating', 'active', 'restoring'].includes(marker.phase ?? '') ||
@@ -140,7 +156,17 @@ function parseMarker(value: unknown): DxvkMarker {
   ) {
     throw new Error('DXVK recovery marker has unsupported metadata');
   }
-  for (const name of DXVK_DLL_NAMES) {
+  const names = marker.schemaVersion === 1 ? DXVK_ARCHIVE_DLL_NAMES : DXVK_ACTIVE_DLL_NAMES;
+  if (
+    marker.schemaVersion === 2 &&
+    DXVK_ARCHIVE_DLL_NAMES.some(
+      (name) =>
+        !(DXVK_ACTIVE_DLL_NAMES as readonly string[]).includes(name) && marker.files?.[name]
+    )
+  ) {
+    throw new Error('DXVK recovery marker contains unexpected graphics files');
+  }
+  for (const name of names) {
     const file = marker.files[name];
     if (
       !file ||
@@ -223,27 +249,28 @@ export class DxvkManager {
   }
 
   private async hasAnyBackups(install: GameInstall): Promise<boolean> {
-    for (const name of DXVK_DLL_NAMES) {
+    for (const name of DXVK_ARCHIVE_DLL_NAMES) {
       if (await exists(join(install.binariesDir, backupName(name)))) return true;
     }
     return false;
   }
 
   private async hasAnyLocalGraphicsDlls(install: GameInstall): Promise<boolean> {
-    for (const name of DXVK_DLL_NAMES) {
+    for (const name of DXVK_ACTIVE_DLL_NAMES) {
       if (await exists(join(install.binariesDir, name))) return true;
     }
     return false;
   }
 
   private async activeFilesMatch(install: GameInstall, marker: DxvkMarker): Promise<boolean> {
-    for (const name of DXVK_DLL_NAMES) {
+    for (const name of markerDllNames(marker)) {
+      const record = markerFile(marker, name);
       const target = join(install.binariesDir, name);
-      if (!(await exists(target)) || (await sha256File(target)) !== marker.files[name].dxvkSha256) {
+      if (!(await exists(target)) || (await sha256File(target)) !== record.dxvkSha256) {
         return false;
       }
-      const backup = join(install.binariesDir, marker.files[name].backupName);
-      const originalHash = marker.files[name].originalSha256;
+      const backup = join(install.binariesDir, record.backupName);
+      const originalHash = record.originalSha256;
       if (originalHash === null) {
         if (await exists(backup)) return false;
       } else if (!(await exists(backup)) || (await sha256File(backup)) !== originalHash) {
@@ -352,7 +379,7 @@ export class DxvkManager {
   }
 
   private async payloadIsValid(): Promise<boolean> {
-    for (const name of DXVK_DLL_NAMES) {
+    for (const name of DXVK_ACTIVE_DLL_NAMES) {
       const path = join(this.payloadDir, name);
       if (!(await exists(path)) || (await sha256File(path)) !== this.definition.dllSha256[name]) {
         return false;
@@ -361,8 +388,18 @@ export class DxvkManager {
     return true;
   }
 
+  private async pruneInactivePayloadFiles(): Promise<void> {
+    for (const name of DXVK_ARCHIVE_DLL_NAMES) {
+      if ((DXVK_ACTIVE_DLL_NAMES as readonly string[]).includes(name)) continue;
+      await rm(join(this.payloadDir, name), { force: true });
+    }
+  }
+
   private async ensurePayload(onProgress: (progress: DownloadProgress) => void): Promise<void> {
-    if (await this.payloadIsValid()) return;
+    if (await this.payloadIsValid()) {
+      await this.pruneInactivePayloadFiles();
+      return;
+    }
     await mkdir(this.root, { recursive: true });
     await rm(this.payloadDir, { recursive: true, force: true });
     const token = `${process.pid}-${Date.now()}`;
@@ -380,7 +417,7 @@ export class DxvkManager {
         throw new Error('downloaded DXVK archive failed SHA-256 verification');
       }
       const wanted = new Set(
-        DXVK_DLL_NAMES.map((name) => `dxvk-${this.definition.version}/x32/${name}`)
+        DXVK_ACTIVE_DLL_NAMES.map((name) => `dxvk-${this.definition.version}/x32/${name}`)
       );
       await extractTar({
         file: archive,
@@ -390,7 +427,7 @@ export class DxvkManager {
         preservePaths: false,
         filter: (path) => wanted.has(path.replace(/\\/g, '/'))
       });
-      for (const name of DXVK_DLL_NAMES) {
+      for (const name of DXVK_ACTIVE_DLL_NAMES) {
         const path = join(staging, name);
         if (!(await exists(path)) || (await sha256File(path)) !== this.definition.dllSha256[name]) {
           throw new Error(`extracted ${name} failed SHA-256 verification`);
@@ -406,9 +443,10 @@ export class DxvkManager {
 
   private definitionMatches(marker: DxvkMarker): boolean {
     return (
+      marker.schemaVersion === 2 &&
       marker.version === this.definition.version &&
-      DXVK_DLL_NAMES.every(
-        (name) => marker.files[name].dxvkSha256 === this.definition.dllSha256[name]
+      DXVK_ACTIVE_DLL_NAMES.every(
+        (name) => markerFile(marker, name).dxvkSha256 === this.definition.dllSha256[name]
       )
     );
   }
@@ -417,8 +455,8 @@ export class DxvkManager {
     if (await this.hasAnyBackups(install)) {
       throw new Error('existing Commonwealth graphics backups prevent a safe DXVK activation');
     }
-    const files = {} as Record<DxvkDllName, MarkerFile>;
-    for (const name of DXVK_DLL_NAMES) {
+    const files: DxvkMarker['files'] = {};
+    for (const name of DXVK_ACTIVE_DLL_NAMES) {
       const target = join(install.binariesDir, name);
       files[name] = {
         originalSha256: (await exists(target)) ? await sha256File(target) : null,
@@ -427,7 +465,7 @@ export class DxvkManager {
       };
     }
     const marker: DxvkMarker = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       owner: 'commonwealth-ga-launcher',
       version: this.definition.version,
       phase: 'activating',
@@ -435,17 +473,18 @@ export class DxvkManager {
     };
     await this.writeMarker(install, marker);
     try {
-      for (const name of DXVK_DLL_NAMES) {
+      for (const name of DXVK_ACTIVE_DLL_NAMES) {
         const target = join(install.binariesDir, name);
-        if (files[name].originalSha256 !== null) {
-          await rename(target, join(install.binariesDir, files[name].backupName));
+        const record = markerFile(marker, name);
+        if (record.originalSha256 !== null) {
+          await rename(target, join(install.binariesDir, record.backupName));
         }
       }
-      for (const name of DXVK_DLL_NAMES) {
+      for (const name of DXVK_ACTIVE_DLL_NAMES) {
         const target = join(install.binariesDir, name);
         const temp = `${target}.commonwealth-dxvk.tmp`;
         await copyFile(join(this.payloadDir, name), temp);
-        if ((await sha256File(temp)) !== files[name].dxvkSha256) {
+        if ((await sha256File(temp)) !== markerFile(marker, name).dxvkSha256) {
           throw new Error(`copied ${name} failed verification`);
         }
         await rename(temp, target);
@@ -456,7 +495,7 @@ export class DxvkManager {
       await mkdir(this.stateCacheDir, { recursive: true });
       this.log.info(`DXVK ${this.definition.version}: activated for Windows Dev Launch`);
     } catch (error) {
-      for (const name of DXVK_DLL_NAMES) {
+      for (const name of DXVK_ACTIVE_DLL_NAMES) {
         await rm(join(install.binariesDir, `${name}.commonwealth-dxvk.tmp`), { force: true }).catch(
           () => {}
         );
@@ -477,8 +516,8 @@ export class DxvkManager {
     if (!marker) return false;
     marker.phase = 'restoring';
     await this.writeMarker(install, marker);
-    for (const name of DXVK_DLL_NAMES) {
-      const record = marker.files[name];
+    for (const name of markerDllNames(marker)) {
+      const record = markerFile(marker, name);
       const target = join(install.binariesDir, name);
       const backup = join(install.binariesDir, record.backupName);
       if (await exists(target)) {
@@ -509,7 +548,7 @@ export class DxvkManager {
       }
       await rename(backup, target);
     }
-    for (const name of DXVK_DLL_NAMES) {
+    for (const name of markerDllNames(marker)) {
       await rm(join(install.binariesDir, `${name}.commonwealth-dxvk.tmp`), { force: true });
     }
     await rm(this.markerPath(install));
@@ -528,6 +567,17 @@ export class DxvkManager {
       if (!useDxvk) {
         if (marker) await this.restoreManaged(install);
         return this.inspect(install);
+      }
+      const rendererSetting = await readRendererSetting(install.configDir);
+      if (rendererSetting !== 'directx-9') {
+        if (marker) await this.restoreManaged(install);
+        throw new Error(
+          rendererSetting === 'directx-10'
+            ? 'Global Agenda DirectX 10 is incompatible with DXVK on native Windows. ' +
+                'Launch normally, disable DirectX 10 in the game options, then try DXVK again.'
+            : 'The Global Agenda renderer setting could not be detected. ' +
+                'DXVK testing requires DirectX 10 to be disabled.'
+        );
       }
       if (marker) {
         if (

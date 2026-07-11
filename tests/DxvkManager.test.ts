@@ -5,7 +5,8 @@ import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   detectConfiguredRenderer,
-  DXVK_DLL_NAMES,
+  DXVK_ACTIVE_DLL_NAMES,
+  DXVK_ARCHIVE_DLL_NAMES,
   DxvkManager,
   type DxvkDefinition
 } from '../src/main/services/DxvkManager';
@@ -25,7 +26,7 @@ function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-async function fixture(): Promise<{
+async function fixture(allowD3d10 = false): Promise<{
   root: string;
   userData: string;
   install: GameInstall;
@@ -40,14 +41,14 @@ async function fixture(): Promise<{
   await mkdir(configDir, { recursive: true });
   await writeFile(
     join(configDir, 'TgEngine.ini'),
-    '[SystemSettings]\r\nAllowD3D10=True\r\n',
+    `[SystemSettings]\r\nAllowD3D10=${allowD3d10 ? 'True' : 'False'}\r\n`,
     { encoding: 'utf-8' }
   );
   const version = 'test-1';
   const dllSha256 = {} as DxvkDefinition['dllSha256'];
   const payloadDir = join(userData, 'dxvk', version, 'payload');
   await mkdir(payloadDir, { recursive: true });
-  for (const name of DXVK_DLL_NAMES) {
+  for (const name of DXVK_ACTIVE_DLL_NAMES) {
     const contents = `DXVK payload for ${name}`;
     dllSha256[name] = digest(contents);
     await writeFile(join(payloadDir, name), contents, { encoding: 'utf-8' });
@@ -103,13 +104,18 @@ describe('DxvkManager graphics DLL transaction', () => {
     const { userData, install, definition } = await fixture();
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     await writeFile(join(install.binariesDir, 'dxgi.dll'), 'original dxgi', { encoding: 'utf-8' });
+    await writeFile(
+      join(userData, 'dxvk', definition.version, 'payload', 'dxgi.dll'),
+      'stale pre-release cache file',
+      { encoding: 'utf-8' }
+    );
     const manager = new DxvkManager(userData, logger(), definition);
 
     expect((await manager.inspect(install)).status).toBe('external');
     const active = await manager.prepareForLaunch(install, true);
     expect(active.status).toBe('active');
-    expect(active.rendererSetting).toBe('directx-10');
-    for (const name of DXVK_DLL_NAMES) {
+    expect(active.rendererSetting).toBe('directx-9');
+    for (const name of DXVK_ACTIVE_DLL_NAMES) {
       expect(await readFile(join(install.binariesDir, name), { encoding: 'utf-8' })).toBe(
         `DXVK payload for ${name}`
       );
@@ -119,6 +125,13 @@ describe('DxvkManager graphics DLL transaction', () => {
         encoding: 'utf-8'
       })
     ).toBe('original d3d9');
+    expect(await readFile(join(install.binariesDir, 'dxgi.dll'), { encoding: 'utf-8' })).toBe(
+      'original dxgi'
+    );
+    expect(await isFile(join(install.binariesDir, 'dxgi.dll.commonwealth-original'))).toBe(false);
+    expect(
+      await isFile(join(userData, 'dxvk', definition.version, 'payload', 'dxgi.dll'))
+    ).toBe(false);
 
     const restored = await manager.prepareForLaunch(install, false);
     expect(restored.status).toBe('external');
@@ -164,7 +177,7 @@ describe('DxvkManager graphics DLL transaction', () => {
     };
     marker.phase = 'activating';
     await writeFile(markerPath, `${JSON.stringify(marker)}\n`, { encoding: 'utf-8' });
-    await rm(join(install.binariesDir, 'd3d11.dll'));
+    await rm(join(install.binariesDir, 'd3d9.dll'));
 
     const restored = await manager.restore(install);
     expect(restored.status).toBe('external');
@@ -175,5 +188,67 @@ describe('DxvkManager graphics DLL transaction', () => {
       expect(await isFile(join(install.binariesDir, name))).toBe(false);
     }
     expect(await isFile(markerPath)).toBe(false);
+  });
+
+  it('rejects DirectX 10 before changing any game graphics DLL', async () => {
+    const { userData, install, definition } = await fixture(true);
+    await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
+    const manager = new DxvkManager(userData, logger(), definition);
+
+    await expect(manager.prepareForLaunch(install, true)).rejects.toThrow(
+      'DirectX 10 is incompatible with DXVK'
+    );
+    expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
+      'original d3d9'
+    );
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(false);
+  });
+
+  it('restores every DLL from a legacy four-file marker before using the DX9-only flow', async () => {
+    const { userData, install, definition } = await fixture(true);
+    const files: Record<string, { originalSha256: string | null; dxvkSha256: string; backupName: string }> = {};
+    for (const name of DXVK_ARCHIVE_DLL_NAMES) {
+      const payload = `DXVK payload for ${name}`;
+      const original = name === 'd3d9.dll' || name === 'dxgi.dll' ? `original ${name}` : null;
+      await writeFile(join(install.binariesDir, name), payload, { encoding: 'utf-8' });
+      if (original !== null) {
+        await writeFile(join(install.binariesDir, `${name}.commonwealth-original`), original, {
+          encoding: 'utf-8'
+        });
+      }
+      files[name] = {
+        originalSha256: original === null ? null : digest(original),
+        dxvkSha256: digest(payload),
+        backupName: `${name}.commonwealth-original`
+      };
+    }
+    await writeFile(
+      join(install.binariesDir, '.commonwealth-dxvk.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        owner: 'commonwealth-ga-launcher',
+        version: definition.version,
+        phase: 'active',
+        files
+      })}\n`,
+      { encoding: 'utf-8' }
+    );
+    const manager = new DxvkManager(userData, logger(), definition);
+
+    await expect(manager.prepareForLaunch(install, true)).rejects.toThrow(
+      'DirectX 10 is incompatible with DXVK'
+    );
+    expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
+      'original d3d9.dll'
+    );
+    expect(await readFile(join(install.binariesDir, 'dxgi.dll'), { encoding: 'utf-8' })).toBe(
+      'original dxgi.dll'
+    );
+    expect(await isFile(join(install.binariesDir, 'd3d10core.dll'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, 'd3d11.dll'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, 'dxgi.dll.commonwealth-original'))).toBe(false);
   });
 });

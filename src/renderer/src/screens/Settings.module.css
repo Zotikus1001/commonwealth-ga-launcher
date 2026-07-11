@@ -523,14 +523,17 @@
   gap: 10px;
 }
 
-.steamStoreButton {
-  margin-left: auto;
+.steamButton {
   border-color: rgba(102, 192, 244, 0.55);
   background: linear-gradient(135deg, rgba(27, 73, 101, 0.62), rgba(15, 19, 28, 0.82));
   color: #8bd6ff;
 }
 
-.steamStoreButton:hover:not(:disabled) {
+.steamStoreButton {
+  margin-left: auto;
+}
+
+.steamButton:hover:not(:disabled) {
   border-color: #8bd6ff;
   color: #c8edff;
 }

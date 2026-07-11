@@ -69,7 +69,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [mapSaveError, setMapSaveError] = useState<string | null>(null);
   const [wineRunners, setWineRunners] = useState<WineRunner[]>([]);
   const [prefixResult, setPrefixResult] = useState<ActionResult | null>(null);
-  const [steamOpening, setSteamOpening] = useState(false);
+  const [steamAction, setSteamAction] = useState<'store' | 'install' | null>(null);
   const [steamResult, setSteamResult] = useState<ActionResult | null>(null);
   const [devUnlocked, setDevUnlocked] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -178,8 +178,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   };
 
   const openSteamStore = async (): Promise<void> => {
-    if (steamOpening) return;
-    setSteamOpening(true);
+    if (steamAction) return;
+    setSteamAction('store');
     setSteamResult(null);
     try {
       const result = await window.api.openSteamStore();
@@ -190,7 +190,24 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
         message: `Could not open Steam: ${error instanceof Error ? error.message : String(error)}`
       });
     } finally {
-      setSteamOpening(false);
+      setSteamAction(null);
+    }
+  };
+
+  const openSteamInstall = async (): Promise<void> => {
+    if (steamAction) return;
+    setSteamAction('install');
+    setSteamResult(null);
+    try {
+      const result = await window.api.openSteamInstall();
+      if (!result.ok) setSteamResult(result);
+    } catch (error) {
+      setSteamResult({
+        ok: false,
+        message: `Could not open Steam: ${error instanceof Error ? error.message : String(error)}`
+      });
+    } finally {
+      setSteamAction(null);
     }
   };
 
@@ -361,11 +378,18 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 <button onClick={() => void browse()}>Browse…</button>
                 <button onClick={() => void autoDetect()}>Auto-detect</button>
                 <button
-                  className={styles.steamStoreButton}
-                  disabled={steamOpening}
+                  className={`${styles.steamButton} ${styles.steamStoreButton}`}
+                  disabled={steamAction !== null}
                   onClick={() => void openSteamStore()}
                 >
-                  {steamOpening ? 'Opening Steam…' : 'View on Steam'}
+                  {steamAction === 'store' ? 'Opening Steam…' : 'View on Steam'}
+                </button>
+                <button
+                  className={styles.steamButton}
+                  disabled={steamAction !== null}
+                  onClick={() => void openSteamInstall()}
+                >
+                  {steamAction === 'install' ? 'Opening Steam…' : 'Install on Steam'}
                 </button>
               </div>
               {steamResult && (

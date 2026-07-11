@@ -8,6 +8,7 @@ const CONFIG_KEYS = new Set([
   'default_server_name',
   'discord_invite_url',
   'steam_store_url',
+  'steam_install_url',
   'stable_branch',
   'update_repositories',
   'server_history_repository',
@@ -165,6 +166,25 @@ function loadLauncherConfig(options = {}) {
   ) {
     throw new Error('steam_store_url must use https://store.steampowered.com/app/<app-id>/');
   }
+
+  let steamInstallUrl;
+  try {
+    steamInstallUrl = new URL(raw.steam_install_url);
+  } catch {
+    throw new Error('steam_install_url must be a valid URL');
+  }
+  if (
+    steamInstallUrl.protocol !== 'steam:' ||
+    steamInstallUrl.hostname !== 'run' ||
+    !/^\/\d+$/.test(steamInstallUrl.pathname)
+  ) {
+    throw new Error('steam_install_url must use steam://run/<app-id>');
+  }
+  const storeAppId = steamStoreUrl.pathname.match(/^\/app\/(\d+)\/?$/)?.[1];
+  const installAppId = steamInstallUrl.pathname.slice(1);
+  if (storeAppId !== installAppId) {
+    throw new Error('steam_store_url and steam_install_url must use the same app ID');
+  }
   assertBranch(raw.stable_branch, 'stable_branch');
   if (!Array.isArray(raw.update_repositories) || raw.update_repositories.length !== 2) {
     throw new Error('update_repositories must contain exactly two repositories');
@@ -191,6 +211,7 @@ function loadLauncherConfig(options = {}) {
     defaultServerName,
     discordInviteUrl: raw.discord_invite_url,
     steamStoreUrl: raw.steam_store_url,
+    steamInstallUrl: raw.steam_install_url,
     stableBranch: raw.stable_branch,
     updateRepositories,
     serverHistoryRepository: parseRepository(

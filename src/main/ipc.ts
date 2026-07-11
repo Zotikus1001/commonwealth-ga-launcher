@@ -86,6 +86,15 @@ export function registerIpc(
     }
   });
 
+  ipcMain.handle(IPC.openSteamInstall, async () => {
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.steamInstallUrl);
+      return { ok: true, message: 'Steam install opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open Steam: ${(error as Error).message}` };
+    }
+  });
+
   ipcMain.handle(IPC.openLauncherLogs, async () => {
     const error = await shell.openPath(log.logDir);
     return error

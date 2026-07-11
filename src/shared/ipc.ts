@@ -14,6 +14,7 @@ export const IPC = {
   createWinePrefix: 'launcher:create-wine-prefix',
   openDiscord: 'launcher:open-discord',
   openSteamStore: 'launcher:open-steam-store',
+  openSteamInstall: 'launcher:open-steam-install',
   openLauncherLogs: 'launcher:open-launcher-logs',
   copyDiagnostics: 'launcher:copy-diagnostics',
   getLogTail: 'launcher:get-log-tail',

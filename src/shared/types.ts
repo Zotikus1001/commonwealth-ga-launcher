@@ -156,6 +156,7 @@ export interface LauncherApi {
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;
+  openSteamInstall(): Promise<ActionResult>;
   openLauncherLogs(): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;
   getLogTail(): Promise<string[]>;

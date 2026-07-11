@@ -700,7 +700,7 @@ export class Orchestrator {
       if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
       const dxvk = await this.dxvkManager.restore(install);
       this.patch({ dxvk, phase: 'ready', statusLine: 'Native graphics configuration restored.' });
-      return { ok: true, message: 'The previous graphics DLL configuration was restored.' };
+      return { ok: true, message: 'The previous graphics and DirectX configuration was restored.' };
     } catch (error) {
       const message = (error as Error).message;
       this.log.error(`DXVK restoration failed: ${message}`);
@@ -758,7 +758,8 @@ export class Orchestrator {
     }
   }
 
-  async settingsChanged(): Promise<void> {
+  async settingsChanged(restoreDxvk = false): Promise<void> {
+    if (restoreDxvk) await this.restoreNativeGraphics();
     await this.refresh();
   }
 

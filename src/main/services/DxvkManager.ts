@@ -14,7 +14,13 @@ import { x as extractTar } from 'tar';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import type { DxvkRendererSetting, DxvkState } from '@shared/types';
 import { downloadToFile, type DownloadProgress } from './Download';
-import { ensureDxvkRenderer } from './IniFixes';
+import {
+  ensureDxvkRenderer,
+  isDxvkRendererSnapshot,
+  readDxvkRendererSnapshot,
+  restoreDxvkRenderer,
+  type DxvkRendererSnapshot
+} from './IniFixes';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
@@ -47,11 +53,15 @@ interface MarkerFile {
 }
 
 interface DxvkMarker {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   owner: 'commonwealth-ga-launcher';
   version: string;
   phase: 'activating' | 'active' | 'restoring';
   files: Partial<Record<DxvkDllName, MarkerFile>>;
+  originalRenderer?: {
+    setting: DxvkRendererSetting;
+    snapshot: DxvkRendererSnapshot;
+  };
 }
 
 const MARKER_NAME = '.commonwealth-dxvk.json';
@@ -80,6 +90,11 @@ function markerFile(marker: DxvkMarker, name: DxvkDllName): MarkerFile {
   const file = marker.files[name];
   if (!file) throw new Error(`DXVK recovery marker is missing ${name} metadata`);
   return file;
+}
+
+function rendererSettingFromSnapshot(snapshot: DxvkRendererSnapshot): DxvkRendererSetting {
+  if (!snapshot.hadSystemSettings) return 'unknown';
+  return detectConfiguredRenderer(`[SystemSettings]\n${snapshot.directives.join('\n')}`);
 }
 
 function isMissing(error: unknown): boolean {
@@ -149,7 +164,7 @@ function parseMarker(value: unknown): DxvkMarker {
   }
   const marker = value as Partial<DxvkMarker>;
   if (
-    (marker.schemaVersion !== 1 && marker.schemaVersion !== 2) ||
+    (marker.schemaVersion !== 1 && marker.schemaVersion !== 2 && marker.schemaVersion !== 3) ||
     marker.owner !== 'commonwealth-ga-launcher' ||
     typeof marker.version !== 'string' ||
     !['activating', 'active', 'restoring'].includes(marker.phase ?? '') ||
@@ -161,7 +176,7 @@ function parseMarker(value: unknown): DxvkMarker {
   }
   const names = marker.schemaVersion === 1 ? DXVK_ARCHIVE_DLL_NAMES : DXVK_ACTIVE_DLL_NAMES;
   if (
-    marker.schemaVersion === 2 &&
+    marker.schemaVersion !== 1 &&
     DXVK_ARCHIVE_DLL_NAMES.some(
       (name) =>
         !(DXVK_ACTIVE_DLL_NAMES as readonly string[]).includes(name) && marker.files?.[name]
@@ -181,13 +196,24 @@ function parseMarker(value: unknown): DxvkMarker {
       throw new Error(`DXVK recovery marker has invalid ${name} metadata`);
     }
   }
+  if (marker.schemaVersion === 3) {
+    const renderer = marker.originalRenderer;
+    if (
+      !renderer ||
+      !['directx-9', 'directx-10', 'unknown'].includes(renderer.setting) ||
+      !isDxvkRendererSnapshot(renderer.snapshot) ||
+      rendererSettingFromSnapshot(renderer.snapshot) !== renderer.setting
+    ) {
+      throw new Error('DXVK recovery marker has invalid renderer metadata');
+    }
+  }
   return marker as DxvkMarker;
 }
 
 async function readRendererSetting(configDir: string): Promise<DxvkRendererSetting> {
   try {
-    const bytes = await readFile(join(configDir, 'TgEngine.ini'));
-    return detectConfiguredRenderer(bytes.toString('latin1'));
+    const text = await readFile(join(configDir, 'TgEngine.ini'), { encoding: 'utf-8' });
+    return detectConfiguredRenderer(text);
   } catch (error) {
     if (isMissing(error)) return 'unknown';
     throw error;
@@ -446,7 +472,7 @@ export class DxvkManager {
 
   private definitionMatches(marker: DxvkMarker): boolean {
     return (
-      marker.schemaVersion === 2 &&
+      marker.schemaVersion === 3 &&
       marker.version === this.definition.version &&
       DXVK_ACTIVE_DLL_NAMES.every(
         (name) => markerFile(marker, name).dxvkSha256 === this.definition.dllSha256[name]
@@ -454,7 +480,10 @@ export class DxvkManager {
     );
   }
 
-  private async activate(install: GameInstall): Promise<void> {
+  private async activate(
+    install: GameInstall,
+    originalRenderer: NonNullable<DxvkMarker['originalRenderer']>
+  ): Promise<void> {
     if (await this.hasAnyBackups(install)) {
       throw new Error('existing Commonwealth graphics backups prevent a safe DXVK activation');
     }
@@ -468,14 +497,19 @@ export class DxvkManager {
       };
     }
     const marker: DxvkMarker = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       owner: 'commonwealth-ga-launcher',
       version: this.definition.version,
       phase: 'activating',
-      files
+      files,
+      originalRenderer
     };
     await this.writeMarker(install, marker);
     try {
+      await ensureDxvkRenderer(install, this.log);
+      if ((await readRendererSetting(install.configDir)) !== 'directx-9') {
+        throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK Dev Launch.');
+      }
       for (const name of DXVK_ACTIVE_DLL_NAMES) {
         const target = join(install.binariesDir, name);
         const record = markerFile(marker, name);
@@ -554,9 +588,12 @@ export class DxvkManager {
     for (const name of markerDllNames(marker)) {
       await rm(join(install.binariesDir, `${name}.commonwealth-dxvk.tmp`), { force: true });
     }
+    if (marker.schemaVersion === 3) {
+      await restoreDxvkRenderer(install, marker.originalRenderer!.snapshot, this.log);
+    }
     await rm(this.markerPath(install));
     await rm(join(install.binariesDir, MARKER_TEMP_NAME), { force: true });
-    this.log.info('DXVK: restored the previous Windows graphics DLL state');
+    this.log.info('DXVK: restored the previous Windows graphics and renderer state');
     return true;
   }
 
@@ -571,24 +608,23 @@ export class DxvkManager {
         if (marker) await this.restoreManaged(install);
         return this.inspect(install);
       }
-      await ensureDxvkRenderer(install, this.log);
-      const rendererSetting = await readRendererSetting(install.configDir);
-      if (rendererSetting !== 'directx-9') {
-        if (marker) await this.restoreManaged(install);
-        throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK Dev Launch.');
-      }
       if (marker) {
         if (
           marker.phase === 'active' &&
           this.definitionMatches(marker) &&
           (await this.activeFilesMatch(install, marker))
         ) {
+          await ensureDxvkRenderer(install, this.log);
           return this.inspect(install);
         }
         await this.restoreManaged(install);
       }
       await this.ensurePayload(onProgress);
-      await this.activate(install);
+      const snapshot = await readDxvkRendererSnapshot(install);
+      await this.activate(install, {
+        setting: rendererSettingFromSnapshot(snapshot),
+        snapshot
+      });
       return this.inspect(install);
     } catch (error) {
       throw launchSafeError(error);

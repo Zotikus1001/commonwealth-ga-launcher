@@ -1190,9 +1190,9 @@ function DeveloperTab({
     state.dxvk.rendererSetting === 'directx-10' &&
     state.dxvk.status !== 'needs-restore' &&
     state.dxvk.status !== 'error'
-      ? 'DirectX 10 will be disabled automatically before DXVK Dev Launch.'
+      ? 'DirectX 10 will be disabled for DXVK and restored when DXVK is disabled.'
       : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
-        ? 'The launcher will configure the compatible DirectX 9 setting before DXVK Dev Launch.'
+        ? 'The launcher will preserve this renderer state before configuring DXVK.'
         : state.dxvk.detail;
   const dxvkStatusLabel: Record<LauncherState['dxvk']['status'], string> = {
     unsupported: 'Windows Only',
@@ -1334,9 +1334,9 @@ function DeveloperTab({
                   <label htmlFor="developer-dxvk">
                     <span className={styles.featureName}>Use DXVK For Dev Launch</span>
                     <span className={styles.featureDetail}>
-                      Runs the game through Vulkan for comparison testing. The compatible DirectX
-                      9 setting is selected automatically; normal Play restores the previous
-                      graphics files.
+                      Runs the game through Vulkan for comparison testing. DirectX 9 is selected
+                      while active; disabling DXVK or using normal Play restores the previous
+                      DirectX mode and graphics files.
                     </span>
                   </label>
                 </div>

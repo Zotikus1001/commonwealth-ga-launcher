@@ -21,6 +21,12 @@ export interface IniRepairResult {
   backupFiles: string[];
 }
 
+export interface DxvkRendererSnapshot {
+  hadSystemSettings: boolean;
+  trailingWhitespace: string;
+  directives: string[];
+}
+
 interface TextPatchResult {
   text: string;
   changed: boolean;
@@ -31,6 +37,7 @@ type IniPatchOptions =
   | { kind: 'login-map'; loginMap: LoginMap }
   | { kind: 'overhealing'; suppressOverhealing: boolean }
   | { kind: 'dxvk-renderer' }
+  | { kind: 'dxvk-renderer-restore'; snapshot: DxvkRendererSnapshot }
   | { kind: 'fps-smoothing'; enabled: boolean }
   | { kind: 'fps-limit'; limit: number };
 
@@ -42,6 +49,54 @@ interface IniFileEdit {
 
 function trailingLineEnding(value: string): string {
   return value.match(/(?:\r\n|\n|\r)$/)?.[0] ?? '';
+}
+
+function isDxvkRendererDirective(line: string): boolean {
+  return (
+    /^\s*-AllowD3D10\s*(?:[;#].*)?$/i.test(line) ||
+    /^\s*[+.-]?AllowD3D10\s*=.*$/i.test(line)
+  );
+}
+
+export function isDxvkRendererSnapshot(value: unknown): value is DxvkRendererSnapshot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const snapshot = value as Partial<DxvkRendererSnapshot>;
+  return (
+    typeof snapshot.hadSystemSettings === 'boolean' &&
+    typeof snapshot.trailingWhitespace === 'string' &&
+    snapshot.trailingWhitespace.length <= 4_096 &&
+    /^[ \t\r\n]*$/.test(snapshot.trailingWhitespace) &&
+    Array.isArray(snapshot.directives) &&
+    snapshot.directives.length <= 64 &&
+    (snapshot.hadSystemSettings || snapshot.directives.length === 0) &&
+    snapshot.directives.every(
+      (line) =>
+        typeof line === 'string' &&
+        line.length <= 2_048 &&
+        !/[\r\n]/.test(line) &&
+        isDxvkRendererDirective(line)
+    )
+  );
+}
+
+export function captureDxvkRendererSnapshot(text: string): DxvkRendererSnapshot {
+  let inSystemSettings = false;
+  let hadSystemSettings = false;
+  const directives: string[] = [];
+  for (const line of text.split(/\r\n|\n|\r/)) {
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inSystemSettings = section[1].trim().toLowerCase() === 'systemsettings';
+      if (inSystemSettings) hadSystemSettings = true;
+      continue;
+    }
+    if (inSystemSettings && isDxvkRendererDirective(line)) directives.push(line);
+  }
+  return {
+    hadSystemSettings,
+    trailingWhitespace: text.match(/[ \t\r\n]*$/)?.[0] ?? '',
+    directives
+  };
 }
 
 function patchEnginePlayerSection(text: string): TextPatchResult {
@@ -448,6 +503,128 @@ function verifyDxvkRenderer(text: string, fileName: string): void {
   }
 }
 
+function systemSettingsSections(lines: string[]): Array<{ start: number; end: number }> {
+  const sections: Array<{ start: number; end: number }> = [];
+  let currentStart = -1;
+  for (let index = 0; index < lines.length; index++) {
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (!section) continue;
+    if (currentStart >= 0) sections.push({ start: currentStart, end: index });
+    currentStart =
+      section[1].trim().toLowerCase() === 'systemsettings' ? index : -1;
+  }
+  if (currentStart >= 0) sections.push({ start: currentStart, end: lines.length });
+  return sections;
+}
+
+function appendSystemSettings(
+  text: string,
+  preferredLineEnding: string,
+  directives: readonly string[]
+): string {
+  let separator = '';
+  if (text.length > 0) {
+    const endsWithLineEnding = trailingLineEnding(text) !== '';
+    const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+    if (!endsWithLineEnding) separator += preferredLineEnding;
+    if (lastLine.trim() !== '') separator += preferredLineEnding;
+  }
+  return (
+    text +
+    separator +
+    `[SystemSettings]${directives.length > 0 ? preferredLineEnding : ''}` +
+    directives.join(preferredLineEnding)
+  );
+}
+
+function patchDxvkRendererRestore(
+  text: string,
+  snapshot: DxvkRendererSnapshot
+): TextPatchResult {
+  if (!isDxvkRendererSnapshot(snapshot)) throw new Error('Invalid saved DXVK renderer state');
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
+  let inSystemSettings = false;
+  const rendererLines: number[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inSystemSettings = section[1].trim().toLowerCase() === 'systemsettings';
+      continue;
+    }
+    if (inSystemSettings && isDxvkRendererDirective(line)) rendererLines.push(index);
+  }
+  for (const index of rendererLines.reverse()) lines.splice(index, 1);
+
+  const preferredLineEnding = lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  let restored = lines.join('');
+  let sections = systemSettingsSections(lines);
+  if (snapshot.directives.length > 0) {
+    if (sections.length === 0) {
+      restored = appendSystemSettings(restored, preferredLineEnding, snapshot.directives);
+    } else {
+      const insertAt = sections[0].start + 1;
+      const previousHasLineEnding = trailingLineEnding(lines[insertAt - 1]) !== '';
+      const preserveMissingTrailingNewline =
+        insertAt === lines.length && !/[\r\n]/.test(snapshot.trailingWhitespace);
+      const inserted = snapshot.directives.map((directive, index) => {
+        const prefix = index === 0 && !previousHasLineEnding ? preferredLineEnding : '';
+        const isLast = index === snapshot.directives.length - 1;
+        const suffix = isLast && preserveMissingTrailingNewline ? '' : preferredLineEnding;
+        return prefix + directive + suffix;
+      });
+      lines.splice(insertAt, 0, ...inserted);
+      restored = lines.join('');
+    }
+  } else if (snapshot.hadSystemSettings) {
+    if (sections.length === 0) {
+      restored = appendSystemSettings(restored, preferredLineEnding, []);
+    }
+  } else {
+    sections = systemSettingsSections(lines);
+    let removedEmptySection = false;
+    const section = sections.at(-1);
+    if (section?.end === lines.length) {
+      const isEmpty = lines
+        .slice(section.start + 1, section.end)
+        .every((token) => {
+          const lineEnding = trailingLineEnding(token);
+          const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+          return content.trim() === '';
+        });
+      if (isEmpty) {
+        lines.splice(section.start, section.end - section.start);
+        removedEmptySection = true;
+      }
+    }
+    restored = lines.join('');
+    if (removedEmptySection) {
+      restored = restored.replace(/[ \t\r\n]*$/, '') + snapshot.trailingWhitespace;
+    }
+  }
+  return { text: restored, changed: restored !== text };
+}
+
+function verifyDxvkRendererRestore(
+  text: string,
+  fileName: string,
+  snapshot: DxvkRendererSnapshot
+): void {
+  const restored = captureDxvkRendererSnapshot(text);
+  if (
+    restored.directives.length !== snapshot.directives.length ||
+    restored.directives.some((line, index) => line !== snapshot.directives[index]) ||
+    (snapshot.hadSystemSettings && !restored.hadSystemSettings)
+  ) {
+    throw new Error(`${fileName} did not restore its previous DirectX setting`);
+  }
+}
+
 export function unavailableClientPatches(): ClientPatchStatus[] {
   return [{ id: 'high-fps-movement-stability', applied: null }];
 }
@@ -819,6 +996,9 @@ async function patchIniFile(
     apply(patchOverhealingSection(patchedText, options.suppressOverhealing));
   }
   if (options.kind === 'dxvk-renderer') apply(patchDxvkRenderer(patchedText));
+  if (options.kind === 'dxvk-renderer-restore') {
+    apply(patchDxvkRendererRestore(patchedText, options.snapshot));
+  }
   if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
     apply(patchGameEngineFrameRate(patchedText, options));
   }
@@ -831,6 +1011,9 @@ async function patchIniFile(
       verifyOverhealingSection(text, fileName, options.suppressOverhealing);
     }
     if (options.kind === 'dxvk-renderer') verifyDxvkRenderer(text, fileName);
+    if (options.kind === 'dxvk-renderer-restore') {
+      verifyDxvkRendererRestore(text, fileName, options.snapshot);
+    }
     if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
       verifyGameEngineFrameRate(text, fileName, options);
     }
@@ -1021,6 +1204,35 @@ export async function ensureDxvkRenderer(
   );
   log.info(
     `DXVK renderer: AllowD3D10=False verified; ${result.changedFiles.length} file(s) changed`
+  );
+  return result;
+}
+
+export async function readDxvkRendererSnapshot(
+  install: GameInstall
+): Promise<DxvkRendererSnapshot> {
+  const text = await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' });
+  return captureDxvkRendererSnapshot(text);
+}
+
+export async function restoreDxvkRenderer(
+  install: GameInstall,
+  snapshot: DxvkRendererSnapshot,
+  log: IniLog
+): Promise<IniRepairResult> {
+  const result = await applyIniEdits(
+    [
+      {
+        path: join(install.configDir, 'TgEngine.ini'),
+        required: true,
+        options: { kind: 'dxvk-renderer-restore', snapshot }
+      }
+    ],
+    log
+  );
+  log.info(
+    `DXVK renderer: previous DirectX setting restored; ` +
+      `${result.changedFiles.length} file(s) changed`
   );
   return result;
 }

@@ -27,6 +27,7 @@ export function registerIpc(
   ipcMain.handle(IPC.getSettings, () => config.get());
 
   ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
+    const previous = config.get();
     const updated = await config.update(patch);
     getWindow()?.webContents.setZoomFactor(updated.uiScale);
     const uiScaleOnly =
@@ -35,7 +36,9 @@ export function registerIpc(
       Object.keys(patch).length === 1 &&
       'uiScale' in patch;
     if (!uiScaleOnly) {
-      void orchestrator.settingsChanged();
+      const restoreDxvk = previous.developer.useDxvk && !updated.developer.useDxvk;
+      if (restoreDxvk) await orchestrator.settingsChanged(true);
+      else void orchestrator.settingsChanged();
     }
     return updated;
   });

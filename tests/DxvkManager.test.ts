@@ -108,6 +108,9 @@ describe('detectConfiguredRenderer', () => {
 describe('DxvkManager graphics DLL transaction', () => {
   it('preserves an existing D3D9 wrapper, leaves unrelated DLLs alone, and restores exactly', async () => {
     const { userData, install, definition } = await fixture();
+    const originalIni = await readFile(join(install.configDir, 'TgEngine.ini'), {
+      encoding: 'utf-8'
+    });
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     await writeFile(join(install.binariesDir, 'dxgi.dll'), 'original dxgi', { encoding: 'utf-8' });
     await writeFile(
@@ -150,6 +153,9 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(await isFile(join(install.binariesDir, 'd3d10core.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, 'd3d11.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
+      originalIni
+    );
   });
 
   it('refuses to overwrite a graphics DLL changed after activation', async () => {
@@ -173,7 +179,7 @@ describe('DxvkManager graphics DLL transaction', () => {
   });
 
   it('recovers an interrupted activation from its marker and verified backups', async () => {
-    const { userData, install, definition } = await fixture();
+    const { userData, install, definition } = await fixture(true);
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     const manager = new DxvkManager(userData, logger(), definition);
     await manager.prepareForLaunch(install, true);
@@ -187,6 +193,7 @@ describe('DxvkManager graphics DLL transaction', () => {
 
     const restored = await manager.restore(install);
     expect(restored.status).toBe('external');
+    expect(restored.rendererSetting).toBe('directx-10');
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
       'original d3d9'
     );
@@ -221,10 +228,63 @@ describe('DxvkManager graphics DLL transaction', () => {
       'DXVK payload for d3d9.dll'
     );
     expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(true);
+
+    const marker = JSON.parse(
+      await readFile(join(install.binariesDir, '.commonwealth-dxvk.json'), {
+        encoding: 'utf-8'
+      })
+    ) as { schemaVersion: number; originalRenderer: { setting: string } };
+    expect(marker.schemaVersion).toBe(3);
+    expect(marker.originalRenderer.setting).toBe('directx-10');
+
+    const restartedManager = new DxvkManager(userData, logger(), definition);
+    const restored = await restartedManager.prepareForLaunch(install, false);
+    expect(restored.rendererSetting).toBe('directx-10');
+    expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
+      originalIni
+    );
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+  });
+
+  it('restores the previous renderer without reverting unrelated INI changes made while active', async () => {
+    const { userData, install, definition } = await fixture(true);
+    const manager = new DxvkManager(userData, logger(), definition);
+    await manager.prepareForLaunch(install, true);
+    const activeIni = await readFile(join(install.configDir, 'TgEngine.ini'), {
+      encoding: 'utf-8'
+    });
+    await writeFile(
+      join(install.configDir, 'TgEngine.ini'),
+      `${activeIni}[Other]\r\nKeepAfterDxvk=True\r\n`,
+      { encoding: 'utf-8' }
+    );
+
+    const restored = await manager.prepareForLaunch(install, false);
+    const restoredIni = await readFile(join(install.configDir, 'TgEngine.ini'), {
+      encoding: 'utf-8'
+    });
+    expect(restored.rendererSetting).toBe('directx-10');
+    expect(restoredIni).toContain('AllowD3D10=True');
+    expect(restoredIni).toContain('[Other]\r\nKeepAfterDxvk=True');
+  });
+
+  it('restores a renderer directive with trailing spaces and no final newline exactly', async () => {
+    const { userData, install, definition } = await fixture(true);
+    const originalIni = '[SystemSettings]\nAllowD3D10=True   ';
+    await writeFile(join(install.configDir, 'TgEngine.ini'), originalIni, { encoding: 'utf-8' });
+    const manager = new DxvkManager(userData, logger(), definition);
+
+    await manager.prepareForLaunch(install, true);
+    await manager.prepareForLaunch(install, false);
+    expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
+      originalIni
+    );
   });
 
   it.each([
     ['missing setting', '[Other]\nKeepMe=True\n'],
+    ['missing setting without a trailing newline', '[Other]\nKeepMe=True'],
+    ['missing setting with trailing blank lines', '[Other]\nKeepMe=True\n\n'],
     ['removal only', '[SystemSettings]\n-AllowD3D10\n\n[Other]\nKeepMe=True\n'],
     [
       'assignment followed by removal',
@@ -243,6 +303,12 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(updated).toContain('AllowD3D10=False');
     expect(updated).toContain('KeepMe=True');
     expect(detectConfiguredRenderer(updated)).toBe('directx-9');
+
+    const restored = await manager.prepareForLaunch(install, false);
+    expect(restored.rendererSetting).toBe('unknown');
+    expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
+      contents
+    );
   });
 
   it('restores every DLL from a legacy four-file marker before using the DX9-only flow', async () => {
@@ -296,5 +362,6 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
       'original d3d9.dll'
     );
+    expect(restored.rendererSetting).toBe('directx-10');
   });
 });

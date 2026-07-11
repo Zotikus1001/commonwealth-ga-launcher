@@ -23,8 +23,9 @@ server.
 
 **[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Allow the AppImage to run, open it, and select your game executable. The launcher can find common
-Wine runners, create or use a Wine prefix, and launch the Windows game through Wine.
+Use the AppImage on Linux instead of installing the Windows launcher inside a Wine prefix. Allow
+the AppImage to run, open it, and select your game executable. The launcher can find common Wine
+runners, create or use a Wine prefix, and launch the Windows game through Wine.
 
 The launcher keeps itself updated automatically. Install a new release manually only if the
 launcher specifically asks you to download the latest version.

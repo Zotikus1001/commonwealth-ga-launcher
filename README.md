@@ -23,31 +23,25 @@ server.
 
 **[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Use the AppImage on Linux instead of installing the Windows launcher inside a Wine prefix. Allow
-the AppImage to run, open it, and select your game executable. The launcher can find common Wine
-runners, create or use a Wine prefix, and launch the Windows game through Wine.
+Allow the AppImage to run, open it, and follow the game setup instructions.
 
-The launcher keeps itself updated automatically. Install a new release manually only if the
-launcher specifically asks you to download the latest version.
+The launcher updates itself automatically.
 
 ---
 
 ## Features
 
-| Feature | What it does for you |
-| --- | --- |
-| **Automatic launcher updates** | Shows the launcher first, then checks stable releases in the background and again when Play is pressed, without locking launcher controls. |
-| **Easy game setup** | Finds common Steam installations automatically, supports manual selection, and links directly to the Steam store or install action when needed. |
-| **Server status checks** | Detects online, offline, and invalid server addresses, blocks unavailable launches, and lets you retry an offline server immediately. |
-| **Multiple server profiles** | Lets you rename the main server, add other servers, and choose where to connect from the home screen. |
-| **High-FPS movement fix** | Applies the required client network fix for high-FPS teleporting and movement issues. |
-| **Safe game configuration** | Changes only the required INI settings, preserves unrelated settings, creates a backup, and verifies each change before launch. |
-| **Game preferences** | Offers login-screen themes, an optional FPS limit, visible overhealing and repair numbers, GPU selection, and extra launch arguments. |
-| **Faster startup** | Can skip startup movies and the splash screen, then close the launcher automatically after the game starts. |
-| **Custom launcher scaling** | Adjusts launcher text and controls from 100% to 150% and applies the new scale immediately. |
-| **Patches and diagnostics** | Shows whether required fixes are applied, lets you apply them manually, checks the runtime setup, and provides launcher logs for troubleshooting. |
-| **Agenda Stats and community updates** | Shows the Commonwealth server's live player count, opens recorded PvP, PvE, mission, and player statistics, lists recent server changes, and links to Discord. |
-| **Windows and Linux support** | Provides a Windows installer and a Linux AppImage with configurable Wine runner and prefix support. |
+- **Automatic updates** — Keeps the launcher up to date.
+- **Easy game setup** — Finds your game or lets you select it manually.
+- **Server status** — Shows whether your selected server is available.
+- **Multiple servers** — Save and choose additional servers.
+- **Client fixes** — Includes fixes for known gameplay issues.
+- **Game options** — Manage login themes, FPS limits, healing numbers, graphics, and launch options.
+- **Faster launching** — Skip startup movies and close the launcher after starting the game.
+- **UI scaling** — Adjust the launcher size for your display.
+- **Patches and diagnostics** — View installed fixes and access troubleshooting tools.
+- **Community tools** — View player counts, Agenda Stats, server updates, and Discord.
+- **Windows and Linux** — Available as a Windows installer and Linux AppImage.
 
 ---
 

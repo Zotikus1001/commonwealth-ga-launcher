@@ -71,6 +71,7 @@ export function registerIpc(
   });
   ipcMain.handle(IPC.checkServer, () => orchestrator.checkServer());
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
+  ipcMain.handle(IPC.checkLauncherUpdates, () => orchestrator.checkLauncherUpdates());
   ipcMain.handle(IPC.listWineRunners, () => listWineRunners(config.get(), log));
   ipcMain.handle(IPC.createWinePrefix, () => {
     const s = config.get();

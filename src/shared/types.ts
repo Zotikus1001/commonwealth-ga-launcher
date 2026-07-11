@@ -74,6 +74,7 @@ export type LauncherUpdateStatus =
   | 'downloading'
   | 'installing'
   | 'up-to-date'
+  | 'check-failed'
   | 'error';
 
 export interface UpdateProgress {
@@ -157,6 +158,7 @@ export interface LauncherApi {
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;
   refresh(): Promise<void>;
+  checkLauncherUpdates(): Promise<void>;
   listWineRunners(): Promise<WineRunner[]>;
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;

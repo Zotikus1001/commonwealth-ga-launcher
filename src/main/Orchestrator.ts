@@ -108,21 +108,6 @@ export class Orchestrator {
           launcherUpdateVersion: version,
           launcherUpdateError: error
         };
-        if (status === 'checking') {
-          patch.phase = 'checking';
-          patch.statusLine = 'Checking for launcher updates…';
-          patch.errorDetails = null;
-        } else if (status === 'downloading') {
-          patch.phase = 'checking';
-          patch.statusLine = `Downloading launcher ${version ? `v${version}` : 'update'}…`;
-        } else if (status === 'installing') {
-          patch.phase = 'checking';
-          patch.statusLine = `Installing launcher ${version ? `v${version}` : 'update'}…`;
-        } else if (status === 'error') {
-          patch.phase = 'error';
-          patch.statusLine = 'Launcher update check failed. Retry before playing.';
-          patch.errorDetails = error;
-        }
         this.patch(patch);
       },
       onProgress: (progress: UpdateProgress | null) => this.patch({ progress })
@@ -266,27 +251,16 @@ export class Orchestrator {
       (this.state.serverStatus === 'offline' || this.state.serverStatus === 'invalid') &&
       !this.state.launchCoolingDown &&
       !this.busy &&
-      (this.state.phase === 'ready' || this.state.launcherUpdate === 'error');
+      this.state.phase === 'ready';
     if (!shouldCheckLauncher) {
       await this.reprobe();
       return;
     }
 
     this.offlineRefreshInFlight = true;
-    const recoveringFromUpdateError = this.state.launcherUpdate === 'error';
-    const resume = {
-      phase: this.state.phase,
-      statusLine: this.state.statusLine,
-      errorDetails: this.state.errorDetails
-    };
     try {
-      if (!(await this.launcherUpdater.ensureCurrentFromNextSource())) return;
-      if (recoveringFromUpdateError) {
-        await this.refreshRuntimeState();
-      } else {
-        this.patch(resume);
-        await this.reprobe();
-      }
+      void this.launcherUpdater.ensureCurrentFromNextSource();
+      await this.reprobe();
     } finally {
       this.offlineRefreshInFlight = false;
     }
@@ -399,8 +373,7 @@ export class Orchestrator {
     this.refreshPending = false;
     this.busy = true;
     try {
-      this.patch({ phase: 'checking', statusLine: 'Checking for launcher updates…', errorDetails: null });
-      if (!(await this.launcherUpdater.ensureCurrent())) return;
+      void this.launcherUpdater.ensureCurrent();
       await this.refreshRuntimeState();
     } catch (error) {
       const message = (error as Error).message;
@@ -410,6 +383,10 @@ export class Orchestrator {
       this.busy = false;
       if (this.refreshPending) void this.refresh();
     }
+  }
+
+  async checkLauncherUpdates(): Promise<void> {
+    await this.launcherUpdater.ensureCurrent();
   }
 
   private async refreshRuntimeState(): Promise<void> {
@@ -513,8 +490,7 @@ export class Orchestrator {
     }
     this.busy = true;
     try {
-      this.patch({ phase: 'checking', statusLine: 'Checking for launcher updates…', errorDetails: null });
-      if (!(await this.launcherUpdater.ensureCurrent())) return;
+      void this.launcherUpdater.ensureCurrent();
 
       const settings = this.config.get();
       const selection = this.applyServerSelection(settings);
@@ -594,9 +570,6 @@ export class Orchestrator {
   }
 
   async applyClientPatch(id: ClientPatchId): Promise<ActionResult> {
-    if (this.state.launcherUpdate !== 'up-to-date' && this.state.launcherUpdate !== 'disabled') {
-      return { ok: false, message: 'Update the launcher before changing client files.' };
-    }
     if (this.busy) return { ok: false, message: 'The launcher is busy. Try again shortly.' };
     this.busy = true;
     try {

@@ -50,9 +50,6 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
     case 'launching':
       return { label: 'LAUNCHING…', disabled: true, action: () => {} };
   }
-  if (state.launcherUpdate !== 'up-to-date' && state.launcherUpdate !== 'disabled') {
-    return { label: 'RETRY UPDATE', disabled: false, action: () => void window.api.refresh() };
-  }
   if (!state.gamePathValid) {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
   }

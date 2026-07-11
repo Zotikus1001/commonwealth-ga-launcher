@@ -94,7 +94,7 @@ async function latestRelease(source: UpdateRepository): Promise<PublishedRelease
 }
 
 /**
- * Mandatory launcher self-update gate for packaged Windows NSIS and Linux AppImage builds.
+ * Early launcher self-update coordinator for packaged Windows NSIS and Linux AppImage builds.
  * Every configured source is required; the newest stable release wins by publication time.
  */
 export class LauncherUpdater {
@@ -158,7 +158,8 @@ export class LauncherUpdater {
     autoUpdater.on('error', (error) => {
       this.setProgress(null);
       this.log.warn(`self-update: ${error.message}`);
-      this.setStatus('error', null, error.message);
+      const status = this.selectedRelease ? 'error' : 'check-failed';
+      this.setStatus(status, null, error.message);
     });
   }
 
@@ -249,7 +250,7 @@ export class LauncherUpdater {
     return exact.publishedAt;
   }
 
-  /** Returns true only when this packaged build is confirmed current. */
+  /** Starts or joins an update check. The result never gates normal launcher use. */
   ensureCurrent(): Promise<boolean> {
     if (!app.isPackaged) {
       this.log.info('self-update: local development output; online release checks disabled');
@@ -257,7 +258,7 @@ export class LauncherUpdater {
       return Promise.resolve(true);
     }
     if (this.status === 'downloading' || this.status === 'installing') {
-      return Promise.resolve(false);
+      return Promise.resolve(true);
     }
     if (this.checkInFlight) return this.checkInFlight;
 
@@ -299,7 +300,7 @@ export class LauncherUpdater {
   ensureCurrentFromNextSource(): Promise<boolean> {
     if (!app.isPackaged) return Promise.resolve(true);
     if (this.status === 'downloading' || this.status === 'installing') {
-      return Promise.resolve(false);
+      return Promise.resolve(true);
     }
     if (this.checkInFlight) return this.checkInFlight;
 
@@ -369,7 +370,7 @@ export class LauncherUpdater {
           encodeURIComponent(selected.tag)
       });
       const result = await autoUpdater.checkForUpdates();
-      if (result?.isUpdateAvailable) return false;
+      if (result?.isUpdateAvailable) return true;
       throw new Error(
         selected.version === app.getVersion()
           ? 'Please download and install the latest launcher release.'
@@ -378,8 +379,12 @@ export class LauncherUpdater {
     } catch (error) {
       const message = (error as Error).message;
       this.log.warn(`self-update check failed: ${message}`);
-      this.setStatus('error', null, message);
-      return false;
+      if (this.selectedRelease) {
+        this.setStatus('error', this.selectedRelease.version, message);
+        return true;
+      }
+      this.setStatus('check-failed', null, message);
+      return true;
     }
   }
 }

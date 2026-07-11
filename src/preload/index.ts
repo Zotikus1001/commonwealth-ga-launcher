@@ -23,6 +23,7 @@ const api: LauncherApi = {
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),
+  checkLauncherUpdates: () => ipcRenderer.invoke(IPC.checkLauncherUpdates),
   listWineRunners: () => ipcRenderer.invoke(IPC.listWineRunners),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),
   openDiscord: () => ipcRenderer.invoke(IPC.openDiscord),

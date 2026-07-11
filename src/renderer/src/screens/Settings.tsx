@@ -1170,8 +1170,13 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
             }
           : state.launcherUpdate === 'installing'
             ? { text: 'Installing update and restarting…', tone: styles.aboutWarn }
-            : state.launcherUpdate === 'error'
-              ? { text: 'Update check failed. Try again.', tone: styles.aboutWarn }
+            : state.launcherUpdate === 'check-failed'
+              ? {
+                  text: 'Update check failed. The launcher remains available; try again.',
+                  tone: styles.aboutWarn
+                }
+              : state.launcherUpdate === 'error'
+                ? { text: 'Launcher update failed. Try again.', tone: styles.aboutWarn }
               : development
                 ? {
                     text: 'Development build — online update checks are disabled.',
@@ -1220,7 +1225,7 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <button
           className={styles.aboutUpdateButton}
           disabled={checkDisabled}
-          onClick={() => void window.api.refresh()}
+          onClick={() => void window.api.checkLauncherUpdates()}
         >
           {updateBusy ? 'Checking…' : 'Check for launcher updates'}
         </button>
@@ -1252,9 +1257,11 @@ function DiagnosticsTab({
     ? 'local out/ · online checks off'
     : state.launcherUpdate === 'up-to-date'
       ? `up to date · v${state.launcherVersion}`
-      : `${state.launcherUpdate}${state.launcherUpdateVersion ? ` · v${state.launcherUpdateVersion}` : ''}`;
+      : state.launcherUpdate === 'check-failed'
+        ? `update check failed · v${state.launcherVersion}`
+        : `${state.launcherUpdate}${state.launcherUpdateVersion ? ` · v${state.launcherUpdateVersion}` : ''}`;
   const updateStatusClass =
-    state.launcherUpdate === 'error'
+    state.launcherUpdate === 'error' || state.launcherUpdate === 'check-failed'
       ? styles.invalid
       : localDevelopment || state.launcherUpdate === 'up-to-date'
         ? styles.valid

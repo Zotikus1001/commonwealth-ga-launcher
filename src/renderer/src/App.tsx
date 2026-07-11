@@ -24,10 +24,16 @@ function launcherUpdateLabel(state: LauncherState): {
       };
     case 'installing':
       return { text: 'Installing update…', tone: 'warn', title: 'Installing launcher update' };
+    case 'check-failed':
+      return {
+        text: 'Update Check Failed',
+        tone: 'warn',
+        title: state.launcherUpdateError ?? 'Launcher update check failed'
+      };
     case 'error':
       return {
-        text: 'Update failed',
-        tone: 'error',
+        text: 'Update Failed',
+        tone: 'warn',
         title: state.launcherUpdateError ?? 'Launcher update check failed'
       };
     case 'disabled':
@@ -41,15 +47,9 @@ export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('game');
-  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const settingsRef = useRef<SettingsHandle>(null);
-  const settingsAvailable =
-    state?.launcherUpdate === 'up-to-date' ||
-    state?.launcherUpdate === 'disabled' ||
-    (state?.launcherUpdate === 'checking' && settingsUnlocked);
 
   const openSettings = (tab: SettingsTab): void => {
-    if (!settingsAvailable) return;
     setSettingsTab(tab);
     setView('settings');
   };
@@ -66,18 +66,6 @@ export default function App(): JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    if (state?.launcherUpdate === 'up-to-date' || state?.launcherUpdate === 'disabled') {
-      setSettingsUnlocked(true);
-    } else if (state?.launcherUpdate !== 'checking') {
-      setSettingsUnlocked(false);
-    }
-  }, [state?.launcherUpdate]);
-
-  useEffect(() => {
-    if (view === 'settings' && !settingsAvailable) setView('play');
-  }, [settingsAvailable, view]);
-
   if (!state) {
     return <div className={styles.boot}>COMMONWEALTH GA</div>;
   }
@@ -93,7 +81,10 @@ export default function App(): JSX.Element {
         </div>
         <div className={styles.headerRight}>
           <div className={styles.versionGroup}>
-            <span className={`mono ${styles.version}`} title="Launcher version">
+            <span
+              className={`mono ${styles.version} ${state.launcherUpdate === 'check-failed' ? styles.warn : ''}`}
+              title="Launcher version"
+            >
               v{state.launcherVersion}
             </span>
             <span
@@ -106,12 +97,6 @@ export default function App(): JSX.Element {
             </span>
           </div>
           <button
-            disabled={view === 'play' && !settingsAvailable}
-            title={
-              view === 'play' && !settingsAvailable
-                ? 'Launcher settings unlock after the update check completes.'
-                : undefined
-            }
             onClick={() => {
               if (view === 'play') openSettings('game');
               else settingsRef.current?.requestBack();

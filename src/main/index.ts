@@ -136,14 +136,13 @@ if (!app.requestSingleInstanceLock()) {
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
 
     const launcherUpdater = new LauncherUpdater(log);
-    const bootstrapUpdate = await launcherUpdater.ensureCurrentBeforeWindow();
-    if (bootstrapUpdate === 'restarting') {
-      log.info('self-update bootstrap: update installer started before window creation');
-      return;
-    }
-    if (bootstrapUpdate === 'error') {
-      log.warn('self-update bootstrap: continuing to recovery UI after update failure');
-    }
+    void launcherUpdater.ensureCurrentBeforeWindow().then((bootstrapUpdate) => {
+      if (bootstrapUpdate === 'restarting') {
+        log.info('self-update bootstrap: update installer started');
+      } else if (bootstrapUpdate === 'error') {
+        log.warn('self-update bootstrap: update failed; launcher remains available');
+      }
+    });
 
     const [{ ConfigStore, defaultSettings }, { Orchestrator }, { registerIpc }] =
       await Promise.all([

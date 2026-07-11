@@ -2,8 +2,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 22px 32px 26px;
+  gap: 0;
+  padding: 10px 32px 26px;
   overflow-y: auto;
 }
 
@@ -11,6 +11,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-bottom: 16px;
 }
 
 .discordBanner {
@@ -90,10 +91,11 @@
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 18px;
   align-items: stretch;
+  margin-bottom: 6px;
 }
 
 .updates {
-  min-height: 224px;
+  min-height: 252px;
 }
 
 .progressWrap {
@@ -393,8 +395,8 @@
   flex-direction: column;
   align-items: center;
   gap: 9px;
-  margin-top: auto;
-  padding-top: 2px;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .playControls {

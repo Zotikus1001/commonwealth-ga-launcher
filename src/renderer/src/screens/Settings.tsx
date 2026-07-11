@@ -42,7 +42,7 @@ const DEV_UNLOCK_WINDOW_MS = 4_000;
 
 const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: string }> = {
   'high-fps-movement-stability': {
-    title: 'High-FPS movement stability',
+    title: 'High-FPS Movement Stability',
     description:
       'Fixes teleporting and harsh position corrections caused by running the game at high frame rates. ' +
       'Limiting FPS to your monitor refresh rate is still recommended to avoid other potential issues.'
@@ -332,7 +332,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       <div className={styles.content}>
         {tab === 'game' && (
           <section className={styles.section}>
-            <div className="panel-title">Game install</div>
+            <div className="panel-title">Game Install</div>
             <div className={styles.fieldRow}>
               <label>GlobalAgenda.exe</label>
               <input
@@ -364,7 +364,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </span>
             </div>
 
-            <div className="panel-title">Login environment</div>
+            <div className="panel-title">Login Environment</div>
             <div className={`${styles.fieldRow} ${styles.mapPicker}`}>
               <label htmlFor="login-map">Login screen map</label>
               <select
@@ -389,7 +389,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               )}
             </div>
 
-            <div className="panel-title">Frame rate</div>
+            <div className="panel-title">Frame Rate</div>
             <div className={styles.fpsLimitControl}>
               <input
                 id="fps-limit-enabled"
@@ -403,7 +403,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 }
               />
               <label className={styles.fpsLimitDescription} htmlFor="fps-limit-enabled">
-                <span className={styles.featureName}>FPS limit</span>
+                <span className={styles.featureName}>FPS Limit</span>
                 <span className={styles.featureDetail}>
                   Uses the game&apos;s frame smoothing limiter. Set it to your monitor refresh
                   rate to reduce avoidable movement and timing issues. Applied when you press
@@ -435,7 +435,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </label>
             </div>
 
-            <div className="panel-title">Combat feedback</div>
+            <div className="panel-title">Combat Feedback</div>
             <div className={styles.featureToggle}>
               <input
                 id="show-overhealing"
@@ -446,10 +446,10 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 }
               />
               <label htmlFor="show-overhealing">
-                <span className={styles.featureName}>Show overhealing</span>
+                <span className={styles.featureName}>Show Overhealing</span>
                 <span className={styles.featureDetail}>
-                  Displays healing and repair numbers even when the target is already at full
-                  health. Applies to Medic and Robotics abilities.
+                  Shows all healing and repair amounts even at full health, including self-heals
+                  and environmental sources such as VR healing pads.
                 </span>
               </label>
             </div>
@@ -519,7 +519,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'launch' && (
           <section className={styles.section}>
-            <div className="panel-title">Launcher interface</div>
+            <div className="panel-title">Launcher Interface</div>
             <div className={styles.fieldRow}>
               <label htmlFor="launcher-ui-scale">UI scale</label>
               <select
@@ -571,7 +571,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 }
               />
               <label htmlFor="close-after-launch">
-                <span className={styles.featureName}>Automatically close launcher after launching game</span>
+                <span className={styles.featureName}>Automatically Close Launcher After Launching Game</span>
                 <span className={styles.featureDetail}>
                   Closes the launcher five seconds after it starts the game.
                 </span>
@@ -742,7 +742,7 @@ function DeveloperTab({
 
   return (
     <section className={styles.section}>
-      <div className="panel-title">Developer mode</div>
+      <div className="panel-title">Developer Mode</div>
       <div className={`${styles.featureToggle} ${styles.developerToggle}`}>
         <input
           id="developer-mode"
@@ -752,7 +752,7 @@ function DeveloperTab({
           onChange={(event) => onModeChange(event.target.checked)}
         />
         <label htmlFor="developer-mode">
-          <span className={styles.featureName}>Enable developer mode</span>
+          <span className={styles.featureName}>Enable Developer Mode</span>
           <span className={styles.featureDetail}>
             Allows multiple game instances and adds a server selector beside Play. This setting is saved immediately.
           </span>
@@ -762,7 +762,7 @@ function DeveloperTab({
 
       {settings.developer.enabled && (
         <>
-          <div className="panel-title">Dev Launch display</div>
+          <div className="panel-title">Dev Launch Display</div>
           <div className={styles.developerDisplayGrid}>
             <div className={styles.featureToggle}>
               <input
@@ -777,7 +777,7 @@ function DeveloperTab({
                 }
               />
               <label htmlFor="developer-windowed">
-                <span className={styles.featureName}>Windowed mode</span>
+                <span className={styles.featureName}>Windowed Mode</span>
                 <span className={styles.featureDetail}>
                   Dev Launch uses a movable window instead of fullscreen.
                 </span>
@@ -826,7 +826,7 @@ function DeveloperTab({
             </div>
           </div>
 
-          <div className="panel-title">Test servers</div>
+          <div className="panel-title">Test Servers</div>
           <p className={styles.hint}>
             Add named IP addresses or hostnames. The main page shows only the server name.
           </p>
@@ -935,7 +935,7 @@ function PatchesTab({ state }: { state: LauncherState }): JSX.Element {
 
   return (
     <section className={styles.section}>
-      <div className="panel-title">Client patches</div>
+      <div className="panel-title">Client Patches</div>
       <p className={styles.hint}>
         Verified against the installed game. Required fixes are checked again before every Play.
       </p>
@@ -1053,7 +1053,7 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
 
       <div className={styles.aboutUpdate}>
         <div>
-          <div className="panel-title">Launcher updates</div>
+          <div className="panel-title">Launcher Updates</div>
           <p className={`${styles.aboutStatus} ${updateStatus.tone}`}>{updateStatus.text}</p>
           {state.launchCoolingDown && (
             <p className={styles.aboutStatus}>Wait for the current game launch to finish.</p>
@@ -1105,7 +1105,7 @@ function DiagnosticsTab({
 
   return (
     <section className={styles.section}>
-      <div className="panel-title">Runtime checks</div>
+      <div className="panel-title">Runtime Checks</div>
       <dl className={styles.diagnosticGrid}>
         <div>
           <dt>Launcher status</dt>
@@ -1141,7 +1141,7 @@ function DiagnosticsTab({
         )}
       </dl>
 
-      <div className="panel-title">Launcher log</div>
+      <div className="panel-title">Launcher Log</div>
       <pre className={styles.logView}>{lines.join('\n')}</pre>
       <div className={styles.inlineButtons}>
         <button onClick={() => void window.api.openLauncherLogs().then(setActionResult)}>Open logs folder</button>

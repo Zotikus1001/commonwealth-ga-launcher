@@ -263,7 +263,7 @@ export default function Play({
                   aria-live="polite"
                 >
                   <span className={styles.agendaStatsSignal} aria-hidden="true" />
-                  {agendaStatsText}
+                  <span className={styles.agendaStatsText}>{agendaStatsText}</span>
                 </span>
               </div>
               <button

@@ -299,11 +299,15 @@
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  overflow: hidden;
   font-family: var(--font-mono);
   font-size: 10px;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agendaStatsText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agendaStatsSignal {

@@ -26,6 +26,7 @@ const api: LauncherApi = {
   checkLauncherUpdates: () => ipcRenderer.invoke(IPC.checkLauncherUpdates),
   listLinuxRuntimeOptions: () => ipcRenderer.invoke(IPC.listLinuxRuntimeOptions),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),
+  restoreNativeGraphics: () => ipcRenderer.invoke(IPC.restoreNativeGraphics),
   openDiscord: () => ipcRenderer.invoke(IPC.openDiscord),
   openAgendaStats: () => ipcRenderer.invoke(IPC.openAgendaStats),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),

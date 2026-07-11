@@ -14,6 +14,7 @@ export const IPC = {
   checkLauncherUpdates: 'launcher:check-launcher-updates',
   listLinuxRuntimeOptions: 'launcher:list-linux-runtime-options',
   createWinePrefix: 'launcher:create-wine-prefix',
+  restoreNativeGraphics: 'launcher:restore-native-graphics',
   openDiscord: 'launcher:open-discord',
   openAgendaStats: 'launcher:open-agenda-stats',
   openSteamStore: 'launcher:open-steam-store',

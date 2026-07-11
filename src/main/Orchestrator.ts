@@ -29,6 +29,7 @@ import {
   inspectGameIniSettings,
   unavailableClientPatches
 } from './services/IniFixes';
+import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -58,6 +59,7 @@ export class Orchestrator {
   private install: GameInstall | null = null;
   private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
+  private readonly dxvkManager: DxvkManager;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -79,6 +81,7 @@ export class Orchestrator {
     private readonly launcherUpdater: LauncherUpdater
   ) {
     this.gameLauncher = new GameLauncher(log);
+    this.dxvkManager = new DxvkManager(app.getPath('userData'), log);
     const launcherUpdate = launcherUpdater.getSnapshot();
     this.state = {
       phase: 'init',
@@ -94,6 +97,7 @@ export class Orchestrator {
       linuxRuntimeStatus: PLATFORM === 'linux' ? 'wine-runner-missing' : null,
       resolvedLinuxPrefix: '',
       gameModeAvailable: PLATFORM === 'linux' ? false : null,
+      dxvk: unavailableDxvkState(PLATFORM),
       launchCoolingDown: false,
       developerMode: false,
       progress: launcherUpdate.progress,
@@ -398,12 +402,17 @@ export class Orchestrator {
       });
     }
     let clientPatches = unavailableClientPatches();
+    let dxvk = unavailableDxvkState(PLATFORM);
     if (install) {
-      const [patches, gameIniSettings] = await Promise.all([
+      const [patches, gameIniSettings, inspectedDxvk] = await Promise.all([
         inspectClientPatches(install),
-        inspectGameIniSettings(install)
+        inspectGameIniSettings(install),
+        PLATFORM === 'win32'
+          ? this.dxvkManager.inspect(install)
+          : Promise.resolve(unavailableDxvkState(PLATFORM))
       ]);
       clientPatches = patches;
+      dxvk = inspectedDxvk;
       settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
     }
     this.log.info(`game install validation: ${install ? 'valid' : 'invalid or unset'}`);
@@ -414,7 +423,8 @@ export class Orchestrator {
       linuxRuntimeStatus: linuxRuntime?.status ?? null,
       resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
-      clientPatches
+      clientPatches,
+      dxvk
     });
 
     if (!selection.host) {
@@ -554,10 +564,44 @@ export class Orchestrator {
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
 
+      let useDxvk = false;
+      if (PLATFORM === 'win32') {
+        useDxvk = developerLaunch && settings.developer.useDxvk;
+        this.patch({
+          dxvk: {
+            ...this.state.dxvk,
+            status: 'preparing',
+            detail: useDxvk
+              ? `Preparing DXVK ${this.state.dxvk.version} for Dev Launch…`
+              : 'Restoring the previous Direct3D configuration…'
+          },
+          statusLine: useDxvk
+            ? `Preparing DXVK ${this.state.dxvk.version}…`
+            : 'Checking native graphics configuration…'
+        });
+        const dxvk = await this.dxvkManager.prepareForLaunch(
+          this.install,
+          useDxvk,
+          ({ transferred, total }) => {
+            const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
+            this.patch({
+              statusLine:
+                percent >= 0
+                  ? `Downloading DXVK ${this.state.dxvk.version}… ${percent}%`
+                  : `Downloading DXVK ${this.state.dxvk.version}…`
+            });
+          }
+        );
+        this.patch({ dxvk });
+      }
+
       this.patch({
         phase: 'launching',
         launchCoolingDown: true,
-        statusLine: `Launching ${selection.name}${developerLaunch ? ' with developer display settings' : ''}…`
+        statusLine:
+          `Launching ${selection.name}` +
+          (developerLaunch ? ` with developer settings${useDxvk ? ' and DXVK' : ''}` : '') +
+          '…'
       });
       this.gameLauncher.launch(
         settings,
@@ -565,18 +609,32 @@ export class Orchestrator {
         this.install.binariesDir,
         PLATFORM,
         developerLaunch,
-        this.linuxRuntime
+        this.linuxRuntime,
+        useDxvk ? this.dxvkManager.launchEnvironment() : {}
       );
       this.scheduleAutoCloseAfterLaunch();
       this.scheduleLaunchCooldown();
     } catch (error) {
       const message = (error as Error).message;
       this.log.error(`launch failed: ${message}`);
+      let dxvk = this.state.dxvk;
+      if (PLATFORM === 'win32' && this.install) {
+        try {
+          dxvk = await this.dxvkManager.inspect(this.install);
+        } catch (inspectError) {
+          dxvk = {
+            ...dxvk,
+            status: 'error',
+            detail: `DXVK inspection failed after launch error: ${(inspectError as Error).message}`
+          };
+        }
+      }
       this.patch({
         phase: 'ready',
         launchCoolingDown: false,
         statusLine: `Launch failed: ${message}`,
-        errorDetails: message
+        errorDetails: message,
+        dxvk
       });
     } finally {
       this.busy = false;
@@ -622,6 +680,44 @@ export class Orchestrator {
       this.log.warn(`manual client patch failed: ${message}`);
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
       return { ok: false, message: `Could not apply patch: ${message}` };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async restoreNativeGraphics(): Promise<ActionResult> {
+    if (PLATFORM !== 'win32') {
+      return { ok: false, message: 'DXVK Dev Launch testing is currently available only on Windows.' };
+    }
+    if (this.busy || this.state.launchCoolingDown) {
+      return { ok: false, message: 'The launcher is busy. Try again shortly.' };
+    }
+    this.busy = true;
+    try {
+      const install = await validateGameExe(this.config.get().gameExePath);
+      this.install = install;
+      if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      const dxvk = await this.dxvkManager.restore(install);
+      this.patch({ dxvk, phase: 'ready', statusLine: 'Native graphics configuration restored.' });
+      return { ok: true, message: 'The previous graphics DLL configuration was restored.' };
+    } catch (error) {
+      const message = (error as Error).message;
+      this.log.error(`DXVK restoration failed: ${message}`);
+      let dxvk = this.state.dxvk;
+      if (this.install) {
+        try {
+          dxvk = await this.dxvkManager.inspect(this.install);
+        } catch (inspectError) {
+          dxvk = {
+            ...dxvk,
+            status: 'error',
+            detail: `DXVK inspection failed after restoration error: ${(inspectError as Error).message}`
+          };
+        }
+      }
+      this.patch({ dxvk, phase: 'ready', statusLine: `Could not restore graphics configuration: ${message}` });
+      return { ok: false, message: `Could not restore graphics configuration: ${message}` };
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();

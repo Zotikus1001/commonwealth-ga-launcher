@@ -919,6 +919,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'dev' && (
           <DeveloperTab
+            state={state}
             settings={draft}
             edit={edit}
             modeSaving={developerModeSaving}
@@ -1163,18 +1164,53 @@ function ServersTab({
 }
 
 function DeveloperTab({
+  state,
   settings,
   edit,
   modeSaving,
   modeError,
   onModeChange
 }: {
+  state: LauncherState;
   settings: SettingsModel;
   edit: (fn: (settings: SettingsModel) => SettingsModel) => void;
   modeSaving: boolean;
   modeError: string | null;
   onModeChange: (enabled: boolean) => void;
 }): JSX.Element {
+  const [restoringGraphics, setRestoringGraphics] = useState(false);
+  const [graphicsResult, setGraphicsResult] = useState<ActionResult | null>(null);
+  const rendererLabel =
+    state.dxvk.rendererSetting === 'directx-10'
+      ? 'DirectX 10 Enabled'
+      : state.dxvk.rendererSetting === 'directx-9'
+        ? 'DirectX 9'
+        : 'Not Detected';
+  const dxvkStatusLabel: Record<LauncherState['dxvk']['status'], string> = {
+    unsupported: 'Windows Only',
+    native: 'Native Direct3D',
+    preparing: 'Preparing DXVK',
+    active: `DXVK ${state.dxvk.version} Files Active`,
+    external: 'Existing Graphics Wrapper',
+    'needs-restore': 'Recovery Required',
+    error: 'Inspection Failed'
+  };
+  const restoreGraphics = async (): Promise<void> => {
+    if (restoringGraphics) return;
+    setRestoringGraphics(true);
+    setGraphicsResult(null);
+    try {
+      setGraphicsResult(await window.api.restoreNativeGraphics());
+    } catch (error) {
+      setGraphicsResult({
+        ok: false,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setRestoringGraphics(false);
+    }
+  };
+
   return (
     <section className={styles.section}>
       <div className="panel-title">Developer Mode</div>
@@ -1261,6 +1297,68 @@ function DeveloperTab({
               </label>
             </div>
           </div>
+
+          {state.platform === 'win32' && (
+            <>
+              <div className="panel-title">Graphics Renderer</div>
+              <div
+                className={`${styles.dxvkPanel} ${
+                  state.dxvk.status === 'active'
+                    ? styles.dxvkActive
+                    : state.dxvk.status === 'needs-restore' || state.dxvk.status === 'error'
+                      ? styles.dxvkProblem
+                      : ''
+                }`}
+              >
+                <div className={styles.featureToggle}>
+                  <input
+                    id="developer-dxvk"
+                    type="checkbox"
+                    checked={settings.developer.useDxvk}
+                    onChange={(event) =>
+                      edit((current) => ({
+                        ...current,
+                        developer: { ...current.developer, useDxvk: event.target.checked }
+                      }))
+                    }
+                  />
+                  <label htmlFor="developer-dxvk">
+                    <span className={styles.featureName}>Use DXVK For Dev Launch</span>
+                    <span className={styles.featureDetail}>
+                      Runs the game&apos;s DirectX 9 or DirectX 10 renderer through Vulkan for
+                      comparison testing. Experimental on Windows; normal Play restores the
+                      previous graphics files.
+                    </span>
+                  </label>
+                </div>
+                <div className={styles.dxvkReadout}>
+                  <div>
+                    <span>Game Setting</span>
+                    <strong>{rendererLabel}</strong>
+                  </div>
+                  <div>
+                    <span>Graphics Files</span>
+                    <strong>{dxvkStatusLabel[state.dxvk.status]}</strong>
+                  </div>
+                </div>
+                <p className={styles.dxvkDetail}>{state.dxvk.detail}</p>
+                {state.dxvk.canRestore && (
+                  <button
+                    className={styles.dxvkRestoreButton}
+                    disabled={restoringGraphics}
+                    onClick={() => void restoreGraphics()}
+                  >
+                    {restoringGraphics ? 'Restoring…' : 'Restore Native Direct3D'}
+                  </button>
+                )}
+                {graphicsResult && (
+                  <p className={graphicsResult.ok ? styles.patchResultOk : styles.patchResultError}>
+                    {graphicsResult.message}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
         </>
       )}

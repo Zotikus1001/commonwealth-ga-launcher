@@ -36,6 +36,7 @@ The launcher updates itself automatically.
 - Client fixes and game options
 - Agenda Stats and Discord access
 - Windows support and flexible Linux compatibility options
+- Developer launch and graphics testing tools
 
 ---
 
@@ -61,7 +62,7 @@ Create local packages with `npm run dist:win` or `npm run dist:linux`. Build out
 Public launcher settings are stored in `launcher.config.yml`.
 
 To reveal the Dev tab, click the **About** tab ten times within four seconds. Developer mode adds a
-separate launch button with windowed-mode and custom-resolution controls.
+separate launch button with display controls and optional DXVK testing on Windows.
 
 Run the **Release launcher** workflow from the stable branch to publish both platforms. The
 workflow calculates and publishes the next launcher version automatically.

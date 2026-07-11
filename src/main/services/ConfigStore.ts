@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 9;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 10;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -164,6 +164,20 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 9: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 10,
+          developer: {
+            ...developer,
+            useDxvk: false
+          }
+        };
+        version = 10;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -211,7 +225,8 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       enabled: false,
       windowed: true,
       resolutionWidth: 1280,
-      resolutionHeight: 720
+      resolutionHeight: 720,
+      useDxvk: false
     }
   };
 }
@@ -320,7 +335,8 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       : fallback.resolutionWidth,
     resolutionHeight: isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)
       ? (value.resolutionHeight as number)
-      : fallback.resolutionHeight
+      : fallback.resolutionHeight,
+    useDxvk: typeof value.useDxvk === 'boolean' ? value.useDxvk : fallback.useDxvk
   };
 }
 
@@ -328,7 +344,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   if (!isPlainObject(value)) throw new Error('Developer settings are invalid.');
   if (
     typeof value.enabled !== 'boolean' ||
-    typeof value.windowed !== 'boolean'
+    typeof value.windowed !== 'boolean' ||
+    typeof value.useDxvk !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
   }
@@ -339,7 +356,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     enabled: value.enabled,
     windowed: value.windowed,
     resolutionWidth: value.resolutionWidth as number,
-    resolutionHeight: value.resolutionHeight as number
+    resolutionHeight: value.resolutionHeight as number,
+    useDxvk: value.useDxvk
   };
 }
 

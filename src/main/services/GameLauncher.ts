@@ -86,7 +86,8 @@ export class GameLauncher {
     binariesDir: string,
     platform: NodeJS.Platform,
     developerLaunch: boolean,
-    linuxRuntime: LinuxRuntimeInspection | null = null
+    linuxRuntime: LinuxRuntimeInspection | null = null,
+    windowsEnvironment: NodeJS.ProcessEnv = {}
   ): void {
     const args = buildGameArgs(settings, host, developerLaunch);
     let child: ChildProcess;
@@ -95,6 +96,7 @@ export class GameLauncher {
       this.log.info(`launching ${settings.gameExePath} with managed connection arguments`);
       child = spawn(settings.gameExePath, args, {
         cwd: binariesDir,
+        env: { ...process.env, ...windowsEnvironment },
         detached: true,
         stdio: 'ignore'
       });

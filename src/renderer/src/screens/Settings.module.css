@@ -290,6 +290,82 @@
   font-size: 11px;
 }
 
+.dxvkPanel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  background:
+    linear-gradient(90deg, rgba(64, 191, 191, 0.06), transparent 52%),
+    rgba(15, 19, 28, 0.58);
+}
+
+.dxvkPanel > .featureToggle {
+  padding: 0 0 12px;
+  border: 0;
+  background: transparent;
+}
+
+.dxvkActive {
+  border-left-color: var(--green);
+  background:
+    linear-gradient(90deg, rgba(76, 201, 143, 0.08), transparent 52%),
+    rgba(15, 19, 28, 0.58);
+}
+
+.dxvkProblem {
+  border-left-color: var(--amber);
+  background:
+    linear-gradient(90deg, rgba(240, 166, 60, 0.08), transparent 52%),
+    rgba(15, 19, 28, 0.58);
+}
+
+.dxvkReadout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dxvkReadout > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: rgba(8, 11, 17, 0.54);
+}
+
+.dxvkReadout span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.dxvkReadout strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dxvkDetail {
+  margin: 10px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dxvkRestoreButton {
+  margin-top: 11px;
+  border-color: var(--amber);
+  color: var(--amber-hi);
+}
+
 .serverProfiles {
   display: flex;
   flex-direction: column;

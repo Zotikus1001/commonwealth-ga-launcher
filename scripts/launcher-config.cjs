@@ -17,7 +17,14 @@ const CONFIG_KEYS = new Set([
   'server_history_branch',
   'server_history_count',
   'windows_installer_name',
-  'linux_appimage_name'
+  'linux_appimage_name',
+  'dxvk_version',
+  'dxvk_archive_url',
+  'dxvk_archive_sha256',
+  'dxvk_d3d9_sha256',
+  'dxvk_d3d10core_sha256',
+  'dxvk_d3d11_sha256',
+  'dxvk_dxgi_sha256'
 ]);
 
 function parseQuotedString(value, lineNumber) {
@@ -122,6 +129,12 @@ function assertServerHost(value, key) {
   }
 }
 
+function assertSha256(value, key) {
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error(`${key} must be a lowercase SHA-256 digest`);
+  }
+}
+
 function loadLauncherConfig(options = {}) {
   const configPath = options.configPath || resolve(__dirname, '..', 'launcher.config.yml');
   const raw = parseSimpleYaml(readFileSync(configPath, { encoding: 'utf-8' }));
@@ -223,6 +236,37 @@ function loadLauncherConfig(options = {}) {
 
   assertFileName(raw.windows_installer_name, '.exe', 'windows_installer_name');
   assertFileName(raw.linux_appimage_name, '.AppImage', 'linux_appimage_name');
+  if (!/^\d+\.\d+\.\d+$/.test(raw.dxvk_version)) {
+    throw new Error('dxvk_version must be a semantic version');
+  }
+  let dxvkArchiveUrl;
+  try {
+    dxvkArchiveUrl = new URL(raw.dxvk_archive_url);
+  } catch {
+    throw new Error('dxvk_archive_url must be a valid URL');
+  }
+  const expectedDxvkPath =
+    `/doitsujin/dxvk/releases/download/v${raw.dxvk_version}/dxvk-${raw.dxvk_version}.tar.gz`;
+  if (
+    dxvkArchiveUrl.protocol !== 'https:' ||
+    dxvkArchiveUrl.hostname !== 'github.com' ||
+    dxvkArchiveUrl.pathname !== expectedDxvkPath ||
+    dxvkArchiveUrl.search ||
+    dxvkArchiveUrl.hash ||
+    dxvkArchiveUrl.username ||
+    dxvkArchiveUrl.password
+  ) {
+    throw new Error('dxvk_archive_url must point to the configured official DXVK GitHub release');
+  }
+  for (const key of [
+    'dxvk_archive_sha256',
+    'dxvk_d3d9_sha256',
+    'dxvk_d3d10core_sha256',
+    'dxvk_d3d11_sha256',
+    'dxvk_dxgi_sha256'
+  ]) {
+    assertSha256(raw[key], key);
+  }
   assertBranch(raw.server_history_branch, 'server_history_branch');
   const serverHistoryCount = Number.parseInt(raw.server_history_count, 10);
   if (!/^\d+$/.test(raw.server_history_count) || serverHistoryCount < 1 || serverHistoryCount > 10) {
@@ -247,7 +291,18 @@ function loadLauncherConfig(options = {}) {
     serverHistoryBranch: raw.server_history_branch,
     serverHistoryCount,
     windowsInstallerName: raw.windows_installer_name,
-    linuxAppImageName: raw.linux_appimage_name
+    linuxAppImageName: raw.linux_appimage_name,
+    dxvk: {
+      version: raw.dxvk_version,
+      archiveUrl: raw.dxvk_archive_url,
+      archiveSha256: raw.dxvk_archive_sha256,
+      dllSha256: {
+        'd3d9.dll': raw.dxvk_d3d9_sha256,
+        'd3d10core.dll': raw.dxvk_d3d10core_sha256,
+        'd3d11.dll': raw.dxvk_d3d11_sha256,
+        'dxgi.dll': raw.dxvk_dxgi_sha256
+      }
+    }
   };
 }
 

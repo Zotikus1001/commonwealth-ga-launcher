@@ -84,6 +84,7 @@ export function registerIpc(
     if (result.ok) await orchestrator.settingsChanged();
     return result;
   });
+  ipcMain.handle(IPC.restoreNativeGraphics, () => orchestrator.restoreNativeGraphics());
 
   ipcMain.handle(IPC.openDiscord, async () => {
     try {

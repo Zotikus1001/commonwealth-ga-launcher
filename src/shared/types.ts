@@ -35,6 +35,25 @@ export interface GameIniBaseline extends GameIniSettings {
 
 export type LinuxRunnerType = 'wine' | 'proton';
 
+export type DxvkRendererSetting = 'directx-9' | 'directx-10' | 'unknown';
+
+export type DxvkStatus =
+  | 'unsupported'
+  | 'native'
+  | 'preparing'
+  | 'active'
+  | 'external'
+  | 'needs-restore'
+  | 'error';
+
+export interface DxvkState {
+  status: DxvkStatus;
+  version: string;
+  rendererSetting: DxvkRendererSetting;
+  detail: string;
+  canRestore: boolean;
+}
+
 export type LinuxRuntimeStatus =
   | 'ready'
   | 'wine-runner-missing'
@@ -85,6 +104,8 @@ export interface Settings {
     windowed: boolean;
     resolutionWidth: number;
     resolutionHeight: number;
+    /** Windows Dev Launch only; normal Play always restores the prior graphics DLLs. */
+    useDxvk: boolean;
   };
 }
 
@@ -138,6 +159,7 @@ export interface LauncherState {
   linuxRuntimeStatus: LinuxRuntimeStatus | null;
   resolvedLinuxPrefix: string;
   gameModeAvailable: boolean | null;
+  dxvk: DxvkState;
   /** True only during the five-second window after a Play launch attempt. */
   launchCoolingDown: boolean;
   developerMode: boolean;
@@ -199,6 +221,7 @@ export interface LauncherApi {
   checkLauncherUpdates(): Promise<void>;
   listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;
+  restoreNativeGraphics(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;

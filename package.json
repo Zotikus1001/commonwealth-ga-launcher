@@ -17,11 +17,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "prebuild": "npm run generate:config",
     "build": "npm run typecheck && electron-vite build",
+    "pretest": "npm run generate:config",
+    "test": "vitest run",
     "dist:win": "npm run build && electron-builder --win --config electron-builder.config.cjs",
     "dist:linux": "npm run build && electron-builder --linux --config electron-builder.config.cjs"
   },
   "dependencies": {
-    "electron-updater": "6.8.5"
+    "electron-updater": "6.8.5",
+    "tar": "7.5.19"
   },
   "devDependencies": {
     "@types/node": "^20.17.6",
@@ -34,6 +37,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "4.1.10"
   }
 }

@@ -7,6 +7,11 @@ export interface DownloadProgress {
   total: number; // 0 when the server sent no Content-Length
 }
 
+export interface DownloadOptions {
+  idleTimeoutMs?: number;
+  maxBytes?: number;
+}
+
 // electron net.fetch: follows redirects (GitHub release assets 302 to a CDN) and honors system proxy.
 // Idle timeout (no bytes for `idleTimeoutMs`) aborts — a stalled CDN connection must not hang the
 // update flow forever.
@@ -14,8 +19,10 @@ export async function downloadToFile(
   url: string,
   destPath: string,
   onProgress: (p: DownloadProgress) => void,
-  idleTimeoutMs = 30_000
+  options: DownloadOptions = {}
 ): Promise<void> {
+  const idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
+  const maxBytes = options.maxBytes ?? Number.POSITIVE_INFINITY;
   const controller = new AbortController();
   let idleTimer: NodeJS.Timeout | null = null;
   const armIdle = (): void => {
@@ -31,6 +38,9 @@ export async function downloadToFile(
     if (!res.body) throw new Error(`empty response body for ${url}`);
 
     const total = Number(res.headers.get('content-length') ?? 0) || 0;
+    if (total > maxBytes) {
+      throw new Error(`download is larger than the ${maxBytes}-byte limit`);
+    }
     let transferred = 0;
     out = createWriteStream(destPath);
     const reader = res.body.getReader();
@@ -40,6 +50,9 @@ export async function downloadToFile(
       if (done) break;
       armIdle();
       transferred += value.byteLength;
+      if (transferred > maxBytes) {
+        throw new Error(`download exceeded the ${maxBytes}-byte limit`);
+      }
       onProgress({ transferred, total });
       const okToContinue = out.write(Buffer.from(value));
       if (!okToContinue) {

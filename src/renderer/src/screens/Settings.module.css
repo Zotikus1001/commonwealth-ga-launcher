@@ -190,13 +190,6 @@
   gap: 6px;
 }
 
-.instantStatus {
-  color: var(--green);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-align: right;
-}
-
 .fpsLimitControl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) 126px;

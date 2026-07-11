@@ -688,9 +688,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                     </option>
                   ))}
                 </select>
-                <span className={uiScaleError ? styles.invalid : styles.instantStatus}>
-                  {uiScaleError ?? (uiScaleSaving ? 'Applying…' : 'Saved instantly')}
-                </span>
+                {uiScaleError && <span className={styles.invalid}>{uiScaleError}</span>}
               </div>
             </div>
 

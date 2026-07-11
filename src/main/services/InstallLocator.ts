@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { readFile, access, stat } from 'fs/promises';
+import { readFile, access, readdir, stat } from 'fs/promises';
 import { basename, dirname, join } from 'path';
 import { homedir } from 'os';
 import type { Log } from './Log';
@@ -11,6 +11,7 @@ export interface GameInstall {
   exePath: string;
   binariesDir: string;
   rootDir: string;
+  configDir: string;
 }
 
 async function isDir(p: string): Promise<boolean> {
@@ -29,9 +30,26 @@ async function isFile(p: string): Promise<boolean> {
   }
 }
 
+// GA is a Windows title; copied installs must retain Windows-style case-insensitive lookup on Linux.
+async function resolveChildDirectory(parent: string, expectedName: string): Promise<string | null> {
+  const exact = join(parent, expectedName);
+  if (await isDir(exact)) return exact;
+
+  try {
+    const matches = (await readdir(parent)).filter(
+      (entry) => entry.toLowerCase() === expectedName.toLowerCase()
+    );
+    if (matches.length !== 1) return null;
+    const resolved = join(parent, matches[0]);
+    return (await isDir(resolved)) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Validation triple carried from the frozen Win32 launcher (CommonwealthLauncher.cpp): the exe is
- * <root>/Binaries/GlobalAgenda.exe with sibling <root>/Engine and <root>/TgGame directories.
+ * <root>/Binaries/GlobalAgenda.exe with sibling Engine and TgGame directories (case-insensitive).
  */
 export async function validateGameExe(exePath: string): Promise<GameInstall | null> {
   if (!exePath) return null;
@@ -40,9 +58,12 @@ export async function validateGameExe(exePath: string): Promise<GameInstall | nu
   const binariesDir = dirname(exePath);
   if (basename(binariesDir).toLowerCase() !== 'binaries') return null;
   const rootDir = dirname(binariesDir);
-  if (!(await isDir(join(rootDir, 'Engine')))) return null;
-  if (!(await isDir(join(rootDir, 'TgGame')))) return null;
-  return { exePath, binariesDir, rootDir };
+  if (!(await resolveChildDirectory(rootDir, 'Engine'))) return null;
+  const tgGameDir = await resolveChildDirectory(rootDir, 'TgGame');
+  if (!tgGameDir) return null;
+  const configDir =
+    (await resolveChildDirectory(tgGameDir, 'Config')) ?? join(tgGameDir, 'Config');
+  return { exePath, binariesDir, rootDir, configDir };
 }
 
 // GA shipped under two Steam folder names ('Global Agenda Live' is the shape on the maintainer's

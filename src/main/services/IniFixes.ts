@@ -315,7 +315,7 @@ export async function inspectClientPatches(
 ): Promise<ClientPatchStatus[]> {
   if (!install) return unavailableClientPatches();
 
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const configDir = install.configDir;
   let applied = true;
   for (const [path, required] of [
     [join(configDir, 'TgEngine.ini'), true],
@@ -658,7 +658,7 @@ export async function applyClientPatch(
   log: Log
 ): Promise<IniRepairResult> {
   if (id !== 'high-fps-movement-stability') throw new Error(`Unsupported client patch: ${id}`);
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const configDir = install.configDir;
   const result = await applyIniEdits(
     [
       {
@@ -687,7 +687,7 @@ async function ensureLoginMap(
   log: Log
 ): Promise<IniRepairResult> {
   if (!isLoginMap(loginMap)) throw new Error(`Unsupported login map: ${loginMap}`);
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const configDir = install.configDir;
   return applyIniEdits(
     [
       {
@@ -706,7 +706,7 @@ async function ensureOverhealing(
   log: Log
 ): Promise<IniRepairResult> {
   if (typeof showOverhealing !== 'boolean') throw new Error('Invalid overhealing setting');
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const configDir = install.configDir;
   const suppressOverhealing = !showOverhealing;
   return applyIniEdits(
     [
@@ -734,7 +734,7 @@ async function ensureFpsLimit(
   if (typeof enabled !== 'boolean' || !isFpsLimit(limit)) {
     throw new Error('Invalid FPS limit setting');
   }
-  const configDir = join(install.rootDir, 'TgGame', 'Config');
+  const configDir = install.configDir;
   const files = [
     { path: join(configDir, 'TgEngine.ini'), required: true },
     { path: join(configDir, 'DefaultEngine.ini'), required: false }

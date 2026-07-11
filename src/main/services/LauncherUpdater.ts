@@ -106,7 +106,6 @@ export class LauncherUpdater {
   private readonly bootstrapWaiters = new Set<(result: BootstrapUpdateResult) => void>();
   private checkInFlight: Promise<boolean> | null = null;
   private readonly latestByRepository = new Map<string, PublishedRelease | null>();
-  private nextRepositoryIndex = 0;
   private selectedRelease: PublishedRelease | null = null;
   private readonly installedStatePath = join(app.getPath('userData'), 'launcher-release.json');
   private readonly pendingStatePath = join(app.getPath('userData'), 'launcher-release.pending.json');
@@ -268,7 +267,7 @@ export class LauncherUpdater {
     return this.checkInFlight;
   }
 
-  /** Completes before any application window is created. Updates restart without loading UI. */
+  /** Starts during application bootstrap without delaying window creation. */
   ensureCurrentBeforeWindow(): Promise<BootstrapUpdateResult> {
     return new Promise((resolve) => {
       let finished = false;
@@ -294,22 +293,6 @@ export class LauncherUpdater {
         }
       );
     });
-  }
-
-  /** Refreshes one repository per call while still comparing the newest cached release from both. */
-  ensureCurrentFromNextSource(): Promise<boolean> {
-    if (!app.isPackaged) return Promise.resolve(true);
-    if (this.status === 'downloading' || this.status === 'installing') {
-      return Promise.resolve(true);
-    }
-    if (this.checkInFlight) return this.checkInFlight;
-
-    const source = UPDATE_REPOSITORIES[this.nextRepositoryIndex];
-    this.nextRepositoryIndex = (this.nextRepositoryIndex + 1) % UPDATE_REPOSITORIES.length;
-    this.checkInFlight = this.runCheck([source]).finally(() => {
-      this.checkInFlight = null;
-    });
-    return this.checkInFlight;
   }
 
   private async runCheck(sources: readonly UpdateRepository[]): Promise<boolean> {

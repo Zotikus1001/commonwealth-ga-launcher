@@ -245,21 +245,8 @@ export class Orchestrator {
 
   private async refreshWhileServerOffline(): Promise<void> {
     if (this.offlineRefreshInFlight) return;
-    const shouldCheckLauncher =
-      app.isPackaged &&
-      !this.state.developerMode &&
-      (this.state.serverStatus === 'offline' || this.state.serverStatus === 'invalid') &&
-      !this.state.launchCoolingDown &&
-      !this.busy &&
-      this.state.phase === 'ready';
-    if (!shouldCheckLauncher) {
-      await this.reprobe();
-      return;
-    }
-
     this.offlineRefreshInFlight = true;
     try {
-      void this.launcherUpdater.ensureCurrentFromNextSource();
       await this.reprobe();
     } finally {
       this.offlineRefreshInFlight = false;
@@ -373,7 +360,6 @@ export class Orchestrator {
     this.refreshPending = false;
     this.busy = true;
     try {
-      void this.launcherUpdater.ensureCurrent();
       await this.refreshRuntimeState();
     } catch (error) {
       const message = (error as Error).message;

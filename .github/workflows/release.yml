@@ -28,7 +28,7 @@ jobs:
       windows_installer_name: ${{ steps.config.outputs.windows_installer_name }}
       linux_appimage_name: ${{ steps.config.outputs.linux_appimage_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: config
         name: Read launcher configuration
         shell: pwsh
@@ -101,8 +101,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -128,7 +128,7 @@ jobs:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
       - name: Collect Windows release files
         if: matrix.target == 'win'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: launcher-windows
           path: |
@@ -137,7 +137,7 @@ jobs:
           if-no-files-found: error
       - name: Collect Linux release files
         if: matrix.target == 'linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: launcher-linux
           path: |
@@ -154,7 +154,7 @@ jobs:
       contents: write
     steps:
       - name: Download cross-platform release files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: launcher-*
           path: release-assets

@@ -22,6 +22,7 @@ import {
   applyClientPatch as applyIniClientPatch,
   ensureClientConfiguration,
   inspectClientPatches,
+  inspectGameIniSettings,
   unavailableClientPatches
 } from './services/IniFixes';
 
@@ -377,13 +378,21 @@ export class Orchestrator {
 
   private async refreshRuntimeState(): Promise<void> {
     this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
-    const settings = this.config.get();
+    let settings = this.config.get();
     const [install, winePathValid]: [GameInstall | null, boolean | null] = await Promise.all([
       validateGameExe(settings.gameExePath),
       PLATFORM === 'linux' ? validateWineRunner(settings.linux.winePath) : Promise.resolve(null)
     ]);
     this.install = install;
-    const clientPatches = await inspectClientPatches(install);
+    let clientPatches = unavailableClientPatches();
+    if (install) {
+      const [patches, gameIniSettings] = await Promise.all([
+        inspectClientPatches(install),
+        inspectGameIniSettings(install)
+      ]);
+      clientPatches = patches;
+      settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
+    }
     this.log.info(`game install validation: ${install ? 'valid' : 'invalid or unset'}`);
     const selection = this.applyServerSelection(settings);
     this.patch({

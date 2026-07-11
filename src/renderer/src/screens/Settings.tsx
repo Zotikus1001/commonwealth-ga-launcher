@@ -88,6 +88,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     if (isLinux) void window.api.listWineRunners().then(setWineRunners);
   }, [isLinux]);
 
+  useEffect(() => {
+    if (dirty || !state.validatedGameExePath) return;
+    void window.api.getSettings().then(setDraft);
+  }, [dirty, state.gamePathValid, state.validatedGameExePath]);
+
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },

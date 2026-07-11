@@ -1,7 +1,13 @@
 import { readFile, writeFile, rename, mkdir } from 'fs/promises';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import type { CustomServer, DeepPartial, Settings } from '@shared/types';
+import type {
+  CustomServer,
+  DeepPartial,
+  GameIniBaseline,
+  GameIniSettings,
+  Settings
+} from '@shared/types';
 import { DEFAULT_LOGIN_MAP, isLoginMap } from '@shared/loginMaps';
 import {
   DEFAULT_FPS_LIMIT,
@@ -19,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 6;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 7;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -115,6 +121,15 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 6:
+        settings = {
+          ...settings,
+          schemaVersion: 7,
+          gameIniBaseline: emptyGameIniBaseline()
+        };
+        version = 7;
+        migrated = true;
+        break;
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -136,6 +151,7 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       enabled: false,
       value: DEFAULT_FPS_LIMIT
     },
+    gameIniBaseline: emptyGameIniBaseline(),
     servers: {
       builtInName,
       selectedServerId: DEFAULT_SERVER_ID,
@@ -164,6 +180,18 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function emptyGameIniBaseline(gameExePath = ''): GameIniBaseline {
+  return {
+    gameExePath,
+    loginMap: null,
+    showOverhealing: null,
+    fpsLimit: {
+      enabled: null,
+      value: null
+    }
+  };
 }
 
 // Merge stored/patch values over defaults; unknown keys are dropped (schema is the defaults shape).
@@ -295,6 +323,46 @@ function validateUpdatedFpsLimit(value: unknown): Settings['fpsLimit'] {
   return { enabled: value.enabled, value: value.value };
 }
 
+function sanitizeStoredGameIniBaseline(
+  value: unknown,
+  fallback: GameIniBaseline
+): GameIniBaseline {
+  if (!isPlainObject(value)) return structuredClone(fallback);
+  const fpsLimit = isPlainObject(value.fpsLimit) ? value.fpsLimit : {};
+  return {
+    gameExePath: typeof value.gameExePath === 'string' ? value.gameExePath : fallback.gameExePath,
+    loginMap: value.loginMap === null || isLoginMap(value.loginMap) ? value.loginMap : null,
+    showOverhealing:
+      value.showOverhealing === null || typeof value.showOverhealing === 'boolean'
+        ? value.showOverhealing
+        : null,
+    fpsLimit: {
+      enabled:
+        fpsLimit.enabled === null || typeof fpsLimit.enabled === 'boolean'
+          ? fpsLimit.enabled
+          : null,
+      value: fpsLimit.value === null || isFpsLimit(fpsLimit.value) ? fpsLimit.value : null
+    }
+  };
+}
+
+function sameGamePath(left: string, right: string): boolean {
+  return process.platform === 'win32'
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+function reconcileIniValue<T extends string | number | boolean>(
+  current: T,
+  baseline: T | null,
+  observed: T | null,
+  sameSource: boolean
+): T {
+  if (observed === null) return current;
+  if (!sameSource || baseline === null || current === baseline) return observed;
+  return current;
+}
+
 // JSON settings in userData/settings.json, merged over defaults, saved atomically (tmp + rename).
 export class ConfigStore {
   private readonly file: string;
@@ -364,6 +432,10 @@ export class ConfigStore {
       this.settings.fpsLimit,
       this.defaults.fpsLimit
     );
+    this.settings.gameIniBaseline = sanitizeStoredGameIniBaseline(
+      this.settings.gameIniBaseline,
+      this.defaults.gameIniBaseline
+    );
     if (!isUiScale(this.settings.uiScale)) this.settings.uiScale = this.defaults.uiScale;
     if (!isLoginMap(this.settings.loginMap)) this.settings.loginMap = this.defaults.loginMap;
     if (typeof this.settings.showOverhealing !== 'boolean') {
@@ -394,6 +466,7 @@ export class ConfigStore {
     if (this.readOnlyReason) throw new Error(this.readOnlyReason);
     const next = mergeInto(this.settings, patch);
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
+    next.gameIniBaseline = structuredClone(this.settings.gameIniBaseline);
     next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
@@ -407,6 +480,65 @@ export class ConfigStore {
     }
     this.settings = next;
     await this.save();
+    return this.settings;
+  }
+
+  async syncGameIniSettings(
+    gameExePath: string,
+    observed: GameIniSettings
+  ): Promise<Settings> {
+    if (this.readOnlyReason) return this.settings;
+
+    const current = this.settings;
+    const previous = current.gameIniBaseline;
+    const sameSource = sameGamePath(previous.gameExePath, gameExePath);
+    const baseline = sameSource
+      ? structuredClone(previous)
+      : emptyGameIniBaseline(gameExePath);
+    const next = structuredClone(current);
+
+    next.loginMap = reconcileIniValue(
+      current.loginMap,
+      previous.loginMap,
+      observed.loginMap,
+      sameSource
+    );
+    next.showOverhealing = reconcileIniValue(
+      current.showOverhealing,
+      previous.showOverhealing,
+      observed.showOverhealing,
+      sameSource
+    );
+    next.fpsLimit.enabled = reconcileIniValue(
+      current.fpsLimit.enabled,
+      previous.fpsLimit.enabled,
+      observed.fpsLimit.enabled,
+      sameSource
+    );
+    next.fpsLimit.value = reconcileIniValue(
+      current.fpsLimit.value,
+      previous.fpsLimit.value,
+      observed.fpsLimit.value,
+      sameSource
+    );
+
+    baseline.gameExePath = gameExePath;
+    if (observed.loginMap !== null) baseline.loginMap = observed.loginMap;
+    if (observed.showOverhealing !== null) {
+      baseline.showOverhealing = observed.showOverhealing;
+    }
+    if (observed.fpsLimit.enabled !== null) {
+      baseline.fpsLimit.enabled = observed.fpsLimit.enabled;
+    }
+    if (observed.fpsLimit.value !== null) {
+      baseline.fpsLimit.value = observed.fpsLimit.value;
+    }
+    next.gameIniBaseline = baseline;
+
+    if (JSON.stringify(next) === JSON.stringify(current)) return current;
+    this.settings = next;
+    await this.save();
+    this.log.info('launcher settings synchronized with active game INIs');
     return this.settings;
   }
 

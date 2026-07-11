@@ -1,9 +1,9 @@
 import { constants } from 'fs';
 import { access, copyFile, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, join } from 'path';
-import { isLoginMap, type LoginMap } from '@shared/loginMaps';
+import { isLoginMap, LOGIN_MAP_OPTIONS, type LoginMap } from '@shared/loginMaps';
 import { isFpsLimit } from '@shared/fpsLimit';
-import type { ClientPatchId, ClientPatchStatus } from '@shared/types';
+import type { ClientPatchId, ClientPatchStatus, GameIniSettings } from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
@@ -331,6 +331,107 @@ export async function inspectClientPatches(
   }
 
   return [{ id: 'high-fps-movement-stability', applied }];
+}
+
+function collectSectionAssignments(
+  text: string,
+  sectionName: string,
+  keys: readonly string[]
+): Map<string, string[]> {
+  const values = new Map(keys.map((key) => [key, [] as string[]]));
+  const keyLookup = new Map(keys.map((key) => [key.toLowerCase(), key]));
+  let inSection = false;
+
+  for (const line of text.split(/\r\n|\n|\r/)) {
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inSection = section[1].trim().toLowerCase() === sectionName.toLowerCase();
+      continue;
+    }
+    if (!inSection) continue;
+    const assignment = line.match(/^\s*([+.-]?)([^=;#\s]+)\s*=\s*([^;#\s]*)/);
+    if (!assignment || assignment[1] === '-') continue;
+    const key = keyLookup.get(assignment[2].toLowerCase());
+    if (key) values.get(key)?.push(assignment[3]);
+  }
+
+  return values;
+}
+
+function unanimousValue<T>(values: string[], parse: (value: string) => T | null): T | null {
+  if (values.length === 0) return null;
+  const parsed = values.map(parse);
+  if (parsed.some((value) => value === null)) return null;
+  const first = parsed[0] as T;
+  return parsed.every((value) => value === first) ? first : null;
+}
+
+function parseLoginMap(value: string): LoginMap | null {
+  return (
+    LOGIN_MAP_OPTIONS.find((option) => option.value.toLowerCase() === value.toLowerCase())
+      ?.value ?? null
+  );
+}
+
+function parseIniBoolean(value: string): boolean | null {
+  if (value.toLowerCase() === 'true') return true;
+  if (value.toLowerCase() === 'false') return false;
+  return null;
+}
+
+function inspectEngineSettings(text: string): Pick<GameIniSettings, 'loginMap' | 'fpsLimit'> {
+  const url = collectSectionAssignments(text, 'URL', LOGIN_MAP_KEYS);
+  const mapValues = LOGIN_MAP_KEYS.map((key) => url.get(key) ?? []);
+  const loginMap = mapValues.every((values) => values.length > 0)
+    ? unanimousValue(mapValues.flat(), parseLoginMap)
+    : null;
+
+  const frameRate = collectSectionAssignments(text, 'Engine.GameEngine', [
+    'bSmoothFrameRate',
+    'MaxSmoothedFrameRate'
+  ]);
+  const enabled = unanimousValue(
+    frameRate.get('bSmoothFrameRate') ?? [],
+    parseIniBoolean
+  );
+  const value = unanimousValue(frameRate.get('MaxSmoothedFrameRate') ?? [], (raw) => {
+    const parsed = Number(raw);
+    return isFpsLimit(parsed) ? parsed : null;
+  });
+
+  return { loginMap, fpsLimit: { enabled, value } };
+}
+
+function inspectUiSettings(text: string): Pick<GameIniSettings, 'showOverhealing'> {
+  const hud = collectSectionAssignments(text, 'TgClient.TgUIPrimaryHUD', [
+    'm_bSuppressOverhealing'
+  ]);
+  const suppressed = unanimousValue(
+    hud.get('m_bSuppressOverhealing') ?? [],
+    parseIniBoolean
+  );
+  return { showOverhealing: suppressed === null ? null : !suppressed };
+}
+
+async function readIniIfAvailable(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, { encoding: 'utf-8' });
+  } catch {
+    return null;
+  }
+}
+
+/** Reads active game preferences without modifying any INI file. */
+export async function inspectGameIniSettings(install: GameInstall): Promise<GameIniSettings> {
+  const [engineText, uiText] = await Promise.all([
+    readIniIfAvailable(join(install.configDir, 'TgEngine.ini')),
+    readIniIfAvailable(join(install.configDir, 'TgUI.ini'))
+  ]);
+  const engine = engineText
+    ? inspectEngineSettings(engineText)
+    : { loginMap: null, fpsLimit: { enabled: null, value: null } };
+  const ui = uiText ? inspectUiSettings(uiText) : { showOverhealing: null };
+  return { ...engine, ...ui };
 }
 
 function patchUrlSection(text: string, loginMap: LoginMap): TextPatchResult {

@@ -20,6 +20,19 @@ export interface ServerCommit {
   committedAt: string;
 }
 
+export interface GameIniSettings {
+  loginMap: LoginMap | null;
+  showOverhealing: boolean | null;
+  fpsLimit: {
+    enabled: boolean | null;
+    value: number | null;
+  };
+}
+
+export interface GameIniBaseline extends GameIniSettings {
+  gameExePath: string;
+}
+
 export interface Settings {
   schemaVersion: number;
   /** Renderer zoom controlled only through Launcher UI scale settings. */
@@ -35,6 +48,8 @@ export interface Settings {
     enabled: boolean;
     value: number;
   };
+  /** Last observed active INI values, used to preserve newer launcher choices. */
+  gameIniBaseline: GameIniBaseline;
   servers: {
     builtInName: string;
     selectedServerId: string;

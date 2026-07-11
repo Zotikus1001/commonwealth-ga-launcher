@@ -36,7 +36,7 @@ launcher specifically asks you to download the latest version.
 
 | Feature | What it does for you |
 | --- | --- |
-| **Automatic launcher updates** | Checks stable releases at startup and when Play is pressed, preserves saved settings, and installs detected updates automatically without locking launcher controls. |
+| **Automatic launcher updates** | Shows the launcher first, then checks stable releases in the background and again when Play is pressed, without locking launcher controls. |
 | **Easy game setup** | Finds common Steam installations automatically, supports manual selection, and links directly to the Steam store or install action when needed. |
 | **Server status checks** | Detects online, offline, and invalid server addresses, blocks unavailable launches, and lets you retry an offline server immediately. |
 | **Multiple server profiles** | Lets you rename the main server, add other servers, and choose where to connect from the home screen. |

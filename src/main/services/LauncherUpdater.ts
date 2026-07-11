@@ -24,8 +24,6 @@ export interface LauncherUpdateSnapshot {
   progress: UpdateProgress | null;
 }
 
-export type BootstrapUpdateResult = 'current' | 'restarting' | 'error';
-
 const NO_UPDATE_EVENTS: LauncherUpdateEvents = {
   onStatus: () => {},
   onProgress: () => {}
@@ -103,7 +101,6 @@ export class LauncherUpdater {
   private statusError: string | null = null;
   private progress: UpdateProgress | null = null;
   private events: LauncherUpdateEvents;
-  private readonly bootstrapWaiters = new Set<(result: BootstrapUpdateResult) => void>();
   private checkInFlight: Promise<boolean> | null = null;
   private readonly latestByRepository = new Map<string, PublishedRelease | null>();
   private selectedRelease: PublishedRelease | null = null;
@@ -143,7 +140,6 @@ export class LauncherUpdater {
           setTimeout(() => {
             try {
               autoUpdater.quitAndInstall(false, true);
-              this.finishBootstrap('restarting');
             } catch (error) {
               this.setStatus('error', null, (error as Error).message);
             }
@@ -180,11 +176,6 @@ export class LauncherUpdater {
     this.events.onProgress(progress);
   }
 
-  private finishBootstrap(result: BootstrapUpdateResult): void {
-    for (const resolve of this.bootstrapWaiters) resolve(result);
-    this.bootstrapWaiters.clear();
-  }
-
   private setStatus(
     status: LauncherUpdateStatus,
     version: string | null = null,
@@ -194,7 +185,6 @@ export class LauncherUpdater {
     this.statusVersion = version;
     this.statusError = error;
     this.events.onStatus(status, version, error);
-    if (status === 'error') this.finishBootstrap('error');
   }
 
   private toState(release: PublishedRelease): InstalledReleaseState {
@@ -265,34 +255,6 @@ export class LauncherUpdater {
       this.checkInFlight = null;
     });
     return this.checkInFlight;
-  }
-
-  /** Starts during application bootstrap without delaying window creation. */
-  ensureCurrentBeforeWindow(): Promise<BootstrapUpdateResult> {
-    return new Promise((resolve) => {
-      let finished = false;
-      const complete = (result: BootstrapUpdateResult): void => {
-        if (finished) return;
-        finished = true;
-        this.bootstrapWaiters.delete(complete);
-        resolve(result);
-      };
-      this.bootstrapWaiters.add(complete);
-      void this.ensureCurrent().then(
-        (current) => {
-          if (current) {
-            complete('current');
-          } else if (this.status === 'error') {
-            complete('error');
-          }
-        },
-        (error: Error) => {
-          this.log.warn(`self-update bootstrap failed unexpectedly: ${error.message}`);
-          this.setStatus('error', null, error.message);
-          complete('error');
-        }
-      );
-    });
   }
 
   private async runCheck(sources: readonly UpdateRepository[]): Promise<boolean> {

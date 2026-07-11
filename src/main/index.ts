@@ -136,13 +136,6 @@ if (!app.requestSingleInstanceLock()) {
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
 
     const launcherUpdater = new LauncherUpdater(log);
-    void launcherUpdater.ensureCurrentBeforeWindow().then((bootstrapUpdate) => {
-      if (bootstrapUpdate === 'restarting') {
-        log.info('self-update bootstrap: update installer started');
-      } else if (bootstrapUpdate === 'error') {
-        log.warn('self-update bootstrap: update failed; launcher remains available');
-      }
-    });
 
     const [{ ConfigStore, defaultSettings }, { Orchestrator }, { registerIpc }] =
       await Promise.all([
@@ -193,9 +186,14 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     lockDownBrowserWindow(mainWindow, log);
+    let startupUpdateStarted = false;
     mainWindow.webContents.on('did-finish-load', () => {
       mainWindow?.webContents.setZoomFactor(config.get().uiScale);
       mainWindow?.show();
+      if (!startupUpdateStarted) {
+        startupUpdateStarted = true;
+        setTimeout(() => void launcherUpdater.ensureCurrent(), 250);
+      }
     });
     mainWindow.webContents.on(
       'did-fail-load',

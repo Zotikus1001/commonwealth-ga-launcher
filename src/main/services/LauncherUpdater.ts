@@ -290,7 +290,7 @@ export class LauncherUpdater {
       if (result?.isUpdateAvailable) return false;
       throw new Error(
         selected.version === app.getVersion()
-          ? `newer ${selected.owner}/${selected.repo} release reuses installed version ${selected.version}; publish it with a bumped version`
+          ? 'Please download and install the latest launcher release.'
           : `electron-updater rejected the selected release ${selected.version}`
       );
     } catch (error) {

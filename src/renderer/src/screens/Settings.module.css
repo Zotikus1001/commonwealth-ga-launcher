@@ -360,10 +360,6 @@
   line-height: 1.45;
 }
 
-.dxvkCompatibility {
-  color: var(--amber-hi);
-}
-
 .dxvkRestoreButton {
   margin-top: 11px;
   border-color: var(--amber);

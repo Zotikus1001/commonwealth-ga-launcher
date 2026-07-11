@@ -8,6 +8,7 @@ import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
 export const CLIENT_NET_SPEED = 50_000;
+type IniLog = Pick<Log, 'info' | 'warn' | 'error'>;
 
 const NET_SPEED_KEYS = ['ConfiguredInternetSpeed', 'ConfiguredLanSpeed'] as const;
 type NetSpeedKey = (typeof NET_SPEED_KEYS)[number];
@@ -29,6 +30,7 @@ type IniPatchOptions =
   | { kind: 'net-speed' }
   | { kind: 'login-map'; loginMap: LoginMap }
   | { kind: 'overhealing'; suppressOverhealing: boolean }
+  | { kind: 'dxvk-renderer' }
   | { kind: 'fps-smoothing'; enabled: boolean }
   | { kind: 'fps-limit'; limit: number };
 
@@ -303,6 +305,146 @@ function verifyGameEngineFrameRate(
   }
   if (values.length === 0 || values.some((value) => !setting.matches(value))) {
     throw new Error(`${fileName} did not retain ${setting.key}=${setting.insertedValue}`);
+  }
+}
+
+function patchDxvkRenderer(text: string): TextPatchResult {
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
+  let inSystemSettings = false;
+  let firstSectionStart = -1;
+  let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
+  let assignments = 0;
+  let hasRemoval = false;
+  let lastRemovalIndex = -1;
+  let lastDirectiveWasRemoval = false;
+  let changed = false;
+
+  for (let index = 0; index < lines.length; index++) {
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      if (inSystemSettings && firstSectionEnd < 0) firstSectionEnd = index;
+      inSystemSettings = section[1].trim().toLowerCase() === 'systemsettings';
+      if (inSystemSettings && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
+      continue;
+    }
+    if (!inSystemSettings) continue;
+
+    if (/^\s*-AllowD3D10\s*(?:[;#].*)?$/i.test(line)) {
+      hasRemoval = true;
+      lastRemovalIndex = index;
+      lastDirectiveWasRemoval = true;
+      continue;
+    }
+    const assignment = line.match(
+      /^(\s*)([+.-]?)(AllowD3D10)(\s*=\s*)([^;#\s]*)(.*)$/i
+    );
+    if (!assignment) continue;
+    if (assignment[2] === '-') {
+      hasRemoval = true;
+      lastRemovalIndex = index;
+      lastDirectiveWasRemoval = true;
+      continue;
+    }
+    assignments++;
+    lastDirectiveWasRemoval = false;
+    if (assignment[5].toLowerCase() === 'false') continue;
+    lines[index] =
+      `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}False` +
+      `${assignment[6]}${lineEnding}`;
+    changed = true;
+  }
+
+  if (assignments > 0 && !lastDirectiveWasRemoval) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignment = `${hasRemoval ? '+' : ''}AllowD3D10=False`;
+  if (lastDirectiveWasRemoval) {
+    const insertAt = lastRemovalIndex + 1;
+    const previousHasLineEnding = trailingLineEnding(lines[lastRemovalIndex]) !== '';
+    const preserveMissingTrailingNewline =
+      insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+    lines.splice(
+      insertAt,
+      0,
+      `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${
+        preserveMissingTrailingNewline ? '' : preferredLineEnding
+      }`
+    );
+    return { text: lines.join(''), changed: true };
+  }
+  if (firstSectionStart < 0) {
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    const section = `[SystemSettings]${preferredLineEnding}${newAssignment}`;
+    return { text: text + separator + section, changed: true };
+  }
+
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
+  let insertAt = firstSectionEnd;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
+  }
+  const previousHasLineEnding = insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  lines.splice(
+    insertAt,
+    0,
+    `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${
+      preserveMissingTrailingNewline ? '' : preferredLineEnding
+    }`
+  );
+  return { text: lines.join(''), changed: true };
+}
+
+function verifyDxvkRenderer(text: string, fileName: string): void {
+  let inSystemSettings = false;
+  const values: string[] = [];
+  let effectiveValue: string | null = null;
+  for (const line of text.split(/\r\n|\n|\r/)) {
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inSystemSettings = section[1].trim().toLowerCase() === 'systemsettings';
+      continue;
+    }
+    if (!inSystemSettings) continue;
+    if (/^\s*-AllowD3D10\s*(?:[;#].*)?$/i.test(line)) {
+      effectiveValue = null;
+      continue;
+    }
+    const assignment = line.match(/^\s*([+.-]?)AllowD3D10\s*=\s*([^;#\s]*)/i);
+    if (!assignment) continue;
+    if (assignment[1] === '-') {
+      effectiveValue = null;
+      continue;
+    }
+    values.push(assignment[2].toLowerCase());
+    effectiveValue = assignment[2].toLowerCase();
+  }
+  if (
+    values.length === 0 ||
+    values.some((value) => value !== 'false') ||
+    effectiveValue !== 'false'
+  ) {
+    throw new Error(`${fileName} did not retain AllowD3D10=False`);
   }
 }
 
@@ -676,6 +818,7 @@ async function patchIniFile(
   if (options.kind === 'overhealing') {
     apply(patchOverhealingSection(patchedText, options.suppressOverhealing));
   }
+  if (options.kind === 'dxvk-renderer') apply(patchDxvkRenderer(patchedText));
   if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
     apply(patchGameEngineFrameRate(patchedText, options));
   }
@@ -687,6 +830,7 @@ async function patchIniFile(
     if (options.kind === 'overhealing') {
       verifyOverhealingSection(text, fileName, options.suppressOverhealing);
     }
+    if (options.kind === 'dxvk-renderer') verifyDxvkRenderer(text, fileName);
     if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
       verifyGameEngineFrameRate(text, fileName, options);
     }
@@ -719,7 +863,7 @@ async function patchIniFile(
   return { changed: true, backupPath };
 }
 
-async function applyIniEdits(edits: IniFileEdit[], log: Log): Promise<IniRepairResult> {
+async function applyIniEdits(edits: IniFileEdit[], log: IniLog): Promise<IniRepairResult> {
   const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
   for (const { path, required, options } of edits) {
     try {
@@ -859,6 +1003,26 @@ async function ensureFpsLimit(
     log
   );
   return mergeRepairResults([maximumResult, smoothingResult]);
+}
+
+export async function ensureDxvkRenderer(
+  install: GameInstall,
+  log: IniLog
+): Promise<IniRepairResult> {
+  const result = await applyIniEdits(
+    [
+      {
+        path: join(install.configDir, 'TgEngine.ini'),
+        required: true,
+        options: { kind: 'dxvk-renderer' }
+      }
+    ],
+    log
+  );
+  log.info(
+    `DXVK renderer: AllowD3D10=False verified; ${result.changedFiles.length} file(s) changed`
+  );
+  return result;
 }
 
 /** Applies each configured INI setting independently before every game launch. */

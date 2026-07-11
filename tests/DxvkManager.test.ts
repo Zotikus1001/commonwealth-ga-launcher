@@ -97,10 +97,16 @@ describe('detectConfiguredRenderer', () => {
       'unknown'
     );
   });
+
+  it('reads an active renderer assignment with an inline comment', () => {
+    expect(detectConfiguredRenderer('[SystemSettings] ; renderer\r+AllowD3D10=False ; launcher\r')).toBe(
+      'directx-9'
+    );
+  });
 });
 
 describe('DxvkManager graphics DLL transaction', () => {
-  it('preserves existing wrappers, activates all four DXVK files, and restores exactly', async () => {
+  it('preserves an existing D3D9 wrapper, leaves unrelated DLLs alone, and restores exactly', async () => {
     const { userData, install, definition } = await fixture();
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     await writeFile(join(install.binariesDir, 'dxgi.dll'), 'original dxgi', { encoding: 'utf-8' });
@@ -190,19 +196,53 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(await isFile(markerPath)).toBe(false);
   });
 
-  it('rejects DirectX 10 before changing any game graphics DLL', async () => {
+  it('switches DirectX 10 off without changing unrelated INI content before activation', async () => {
     const { userData, install, definition } = await fixture(true);
+    const originalIni =
+      '[Other]\r\nKeepMe=42\r\n[SystemSettings]\r\n' +
+      'AllowD3D10=True ; first\r\nAllowD3D10 = True\r\n';
+    await writeFile(join(install.configDir, 'TgEngine.ini'), originalIni, { encoding: 'utf-8' });
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     const manager = new DxvkManager(userData, logger(), definition);
 
-    await expect(manager.prepareForLaunch(install, true)).rejects.toThrow(
-      'DirectX 10 is incompatible with DXVK'
+    const active = await manager.prepareForLaunch(install, true);
+    expect(active.status).toBe('active');
+    expect(active.rendererSetting).toBe('directx-9');
+    expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
+      '[Other]\r\nKeepMe=42\r\n[SystemSettings]\r\n' +
+        'AllowD3D10=False ; first\r\nAllowD3D10 = False\r\n'
     );
+    expect(
+      await readFile(join(install.configDir, 'TgEngine.ini.commonwealth-backup'), {
+        encoding: 'utf-8'
+      })
+    ).toBe(originalIni);
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
-      'original d3d9'
+      'DXVK payload for d3d9.dll'
     );
-    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
-    expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(true);
+  });
+
+  it.each([
+    ['missing setting', '[Other]\nKeepMe=True\n'],
+    ['removal only', '[SystemSettings]\n-AllowD3D10\n\n[Other]\nKeepMe=True\n'],
+    [
+      'assignment followed by removal',
+      '[SystemSettings]\nAllowD3D10=True\n-AllowD3D10\n\n[Other]\nKeepMe=True\n'
+    ]
+  ])('adds the DX9 setting to SystemSettings when it has %s', async (_case, contents) => {
+    const { userData, install, definition } = await fixture();
+    await writeFile(join(install.configDir, 'TgEngine.ini'), contents, { encoding: 'utf-8' });
+    const manager = new DxvkManager(userData, logger(), definition);
+
+    const active = await manager.prepareForLaunch(install, true);
+    const updated = await readFile(join(install.configDir, 'TgEngine.ini'), {
+      encoding: 'utf-8'
+    });
+    expect(active.rendererSetting).toBe('directx-9');
+    expect(updated).toContain('AllowD3D10=False');
+    expect(updated).toContain('KeepMe=True');
+    expect(detectConfiguredRenderer(updated)).toBe('directx-9');
   });
 
   it('restores every DLL from a legacy four-file marker before using the DX9-only flow', async () => {
@@ -236,19 +276,25 @@ describe('DxvkManager graphics DLL transaction', () => {
     );
     const manager = new DxvkManager(userData, logger(), definition);
 
-    await expect(manager.prepareForLaunch(install, true)).rejects.toThrow(
-      'DirectX 10 is incompatible with DXVK'
-    );
+    const active = await manager.prepareForLaunch(install, true);
+    expect(active.status).toBe('active');
+    expect(active.rendererSetting).toBe('directx-9');
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
-      'original d3d9.dll'
+      'DXVK payload for d3d9.dll'
     );
     expect(await readFile(join(install.binariesDir, 'dxgi.dll'), { encoding: 'utf-8' })).toBe(
       'original dxgi.dll'
     );
     expect(await isFile(join(install.binariesDir, 'd3d10core.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, 'd3d11.dll'))).toBe(false);
-    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
-    expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(false);
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(true);
+    expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(true);
     expect(await isFile(join(install.binariesDir, 'dxgi.dll.commonwealth-original'))).toBe(false);
+
+    const restored = await manager.prepareForLaunch(install, false);
+    expect(restored.status).toBe('external');
+    expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
+      'original d3d9.dll'
+    );
   });
 });

@@ -63,7 +63,7 @@ Public launcher settings are stored in `launcher.config.yml`.
 
 To reveal the Dev tab, click the **About** tab ten times within four seconds. Developer mode adds a
 separate launch button with display controls and optional DXVK testing on Windows.
-DXVK testing requires the game's DirectX 9 mode; DirectX 10 remains available through normal launches.
+DXVK testing automatically selects the compatible DirectX 9 mode before launch.
 
 Run the **Release launcher** workflow from the stable branch to publish both platforms. The
 workflow calculates and publishes the next launcher version automatically.

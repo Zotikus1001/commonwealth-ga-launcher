@@ -1182,19 +1182,17 @@ function DeveloperTab({
   const [graphicsResult, setGraphicsResult] = useState<ActionResult | null>(null);
   const rendererLabel =
     state.dxvk.rendererSetting === 'directx-10'
-      ? 'DirectX 10 — DXVK Unavailable'
+      ? 'DirectX 10 — Switches Automatically'
       : state.dxvk.rendererSetting === 'directx-9'
         ? 'DirectX 9'
-        : 'Not Detected';
-  const dxvkCompatible = state.dxvk.rendererSetting === 'directx-9';
+        : 'Not Detected — Will Configure';
   const dxvkDetail =
     state.dxvk.rendererSetting === 'directx-10' &&
     state.dxvk.status !== 'needs-restore' &&
     state.dxvk.status !== 'error'
-      ? 'Global Agenda DirectX 10 is incompatible with DXVK on native Windows. ' +
-        'Launch normally, disable DirectX 10 in the game options, then return here to test DXVK.'
+      ? 'DirectX 10 will be disabled automatically before DXVK Dev Launch.'
       : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
-        ? 'DXVK testing requires the game renderer setting to be detected with DirectX 10 disabled.'
+        ? 'The launcher will configure the compatible DirectX 9 setting before DXVK Dev Launch.'
         : state.dxvk.detail;
   const dxvkStatusLabel: Record<LauncherState['dxvk']['status'], string> = {
     unsupported: 'Windows Only',
@@ -1314,8 +1312,7 @@ function DeveloperTab({
               <div
                 className={`${styles.dxvkPanel} ${
                   state.dxvk.status === 'needs-restore' ||
-                  state.dxvk.status === 'error' ||
-                  !dxvkCompatible
+                  state.dxvk.status === 'error'
                     ? styles.dxvkProblem
                     : state.dxvk.status === 'active'
                       ? styles.dxvkActive
@@ -1327,7 +1324,6 @@ function DeveloperTab({
                     id="developer-dxvk"
                     type="checkbox"
                     checked={settings.developer.useDxvk}
-                    disabled={!dxvkCompatible && !settings.developer.useDxvk}
                     onChange={(event) =>
                       edit((current) => ({
                         ...current,
@@ -1336,10 +1332,11 @@ function DeveloperTab({
                     }
                   />
                   <label htmlFor="developer-dxvk">
-                    <span className={styles.featureName}>Use DXVK For DirectX 9 Dev Launch</span>
+                    <span className={styles.featureName}>Use DXVK For Dev Launch</span>
                     <span className={styles.featureDetail}>
-                      Runs DirectX 9 through Vulkan for comparison testing. Experimental on
-                      Windows; normal Play restores the previous graphics files.
+                      Runs the game through Vulkan for comparison testing. The compatible DirectX
+                      9 setting is selected automatically; normal Play restores the previous
+                      graphics files.
                     </span>
                   </label>
                 </div>
@@ -1353,11 +1350,7 @@ function DeveloperTab({
                     <strong>{dxvkStatusLabel[state.dxvk.status]}</strong>
                   </div>
                 </div>
-                <p
-                  className={`${styles.dxvkDetail} ${
-                    !dxvkCompatible ? styles.dxvkCompatibility : ''
-                  }`}
-                >
+                <p className={styles.dxvkDetail}>
                   {dxvkDetail}
                 </p>
                 {state.dxvk.canRestore && (

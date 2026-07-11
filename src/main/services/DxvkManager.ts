@@ -14,6 +14,7 @@ import { x as extractTar } from 'tar';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import type { DxvkRendererSetting, DxvkState } from '@shared/types';
 import { downloadToFile, type DownloadProgress } from './Download';
+import { ensureDxvkRenderer } from './IniFixes';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
@@ -121,10 +122,10 @@ export async function sha256File(path: string): Promise<string> {
 export function detectConfiguredRenderer(text: string): DxvkRendererSetting {
   let section = '';
   let allowD3d10: boolean | null = null;
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.split(/\r\n|\n|\r/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('//')) continue;
-    const sectionMatch = trimmed.match(/^\[([^\]]+)]$/);
+    const sectionMatch = trimmed.match(/^\[([^\]]+)]\s*(?:[;#].*)?$/);
     if (sectionMatch) {
       section = sectionMatch[1].trim().toLowerCase();
       continue;
@@ -134,7 +135,9 @@ export function detectConfiguredRenderer(text: string): DxvkRendererSetting {
       allowD3d10 = null;
       continue;
     }
-    const assignment = trimmed.match(/^AllowD3D10\s*=\s*(True|False)\s*$/i);
+    const assignment = trimmed.match(
+      /^[+.]?AllowD3D10\s*=\s*(True|False)\s*(?:[;#].*)?$/i
+    );
     if (assignment) allowD3d10 = assignment[1].toLowerCase() === 'true';
   }
   return allowD3d10 === true ? 'directx-10' : allowD3d10 === false ? 'directx-9' : 'unknown';
@@ -568,16 +571,11 @@ export class DxvkManager {
         if (marker) await this.restoreManaged(install);
         return this.inspect(install);
       }
+      await ensureDxvkRenderer(install, this.log);
       const rendererSetting = await readRendererSetting(install.configDir);
       if (rendererSetting !== 'directx-9') {
         if (marker) await this.restoreManaged(install);
-        throw new Error(
-          rendererSetting === 'directx-10'
-            ? 'Global Agenda DirectX 10 is incompatible with DXVK on native Windows. ' +
-                'Launch normally, disable DirectX 10 in the game options, then try DXVK again.'
-            : 'The Global Agenda renderer setting could not be detected. ' +
-                'DXVK testing requires DirectX 10 to be disabled.'
-        );
+        throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK Dev Launch.');
       }
       if (marker) {
         if (

@@ -28,6 +28,38 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-color: var(--line-bright) var(--bg-raise);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg-raise);
+}
+
+*::-webkit-scrollbar-track:vertical {
+  border-left: 1px solid var(--line);
+}
+
+*::-webkit-scrollbar-track:horizontal {
+  border-top: 1px solid var(--line);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-bright);
+  border: 2px solid var(--bg-raise);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--bg-raise);
 }
 
 html,

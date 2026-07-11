@@ -572,8 +572,6 @@
   margin: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-color: var(--line-bright) var(--bg-raise);
-  scrollbar-width: thin;
   scrollbar-gutter: stable;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -585,24 +583,6 @@
   word-break: break-all;
   color: var(--text-dim);
   user-select: text;
-}
-
-.logView::-webkit-scrollbar {
-  width: 10px;
-}
-
-.logView::-webkit-scrollbar-track {
-  background: var(--bg-raise);
-  border-left: 1px solid var(--line);
-}
-
-.logView::-webkit-scrollbar-thumb {
-  background: var(--line-bright);
-  border: 2px solid var(--bg-raise);
-}
-
-.logView::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
 }
 
 .saveBar {

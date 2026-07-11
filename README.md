@@ -1,26 +1,54 @@
 # Commonwealth GA Launcher
 
-Download the launcher, select your Global Agenda installation, and play.
+The easiest way to install, configure, and launch Global Agenda for the Commonwealth private
+server.
 
-## Download and install
+---
+
+## Download and Install
 
 ### Windows
 
-**[Download the Windows installer](../../releases/latest/download/Commonwealth-GA-Launcher-Windows-x64-Setup.exe)**
+**[Download the latest Windows installer](../../releases/latest/download/Commonwealth-GA-Launcher-Windows-x64-Setup.exe)**
 
-Run the installer, open the launcher, and select `GlobalAgenda.exe` when prompted.
+1. Run the installer.
+2. Open the launcher.
+3. Select `GlobalAgenda.exe` when prompted, or let the launcher find it automatically.
+4. Press **Play**.
 
 ### Linux
 
 > [!WARNING]
-> The Linux version is currently untested.
+> The Linux version includes Wine support but has not been fully tested yet.
 
-**[Download the Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
+**[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Allow the AppImage to run, open it, and select your game executable. The launcher includes settings
-for choosing your Wine runner and prefix.
+Allow the AppImage to run, open it, and select your game executable. The launcher can find common
+Wine runners, create or use a Wine prefix, and launch the Windows game through Wine.
 
-The launcher checks for updates automatically before starting the game.
+The launcher keeps itself updated automatically. Install a new release manually only if the
+launcher specifically asks you to download the latest version.
+
+---
+
+## Features
+
+| Feature | What it does for you |
+| --- | --- |
+| **Automatic launcher updates** | Checks for stable updates before use and installs them before launching the game. |
+| **Easy game setup** | Finds common Steam installations automatically, supports manual selection, and links directly to the Steam store or install action when needed. |
+| **Server status checks** | Detects online, offline, and invalid server addresses so the game is not launched toward an unavailable server. |
+| **Multiple server profiles** | Lets you rename the main server, add other servers, and choose where to connect from the home screen. |
+| **High-FPS movement fix** | Applies the required client network fix for high-FPS teleporting and movement issues. |
+| **Safe game configuration** | Changes only the required INI settings, preserves unrelated settings, creates a backup, and verifies each change before launch. |
+| **Game preferences** | Offers login-screen themes, an optional FPS limit, visible overhealing and repair numbers, GPU selection, and extra launch arguments. |
+| **Faster startup** | Can skip startup movies and the splash screen, then close the launcher automatically after the game starts. |
+| **Custom launcher scaling** | Adjusts launcher text and controls from 100% to 150% and applies the new scale immediately. |
+| **Patches and diagnostics** | Shows whether required fixes are applied, lets you apply them manually, checks the runtime setup, and provides launcher logs for troubleshooting. |
+| **Community updates** | Shows recent game-server changes and provides direct access to the community Discord. |
+| **Windows and Linux support** | Provides a Windows installer and a Linux AppImage with configurable Wine runner and prefix support. |
+
+---
 
 ## Developers
 
@@ -34,18 +62,19 @@ npm ci
 npx --no-install install-electron --no
 npm run dev
 npm run typecheck
+npm run build
 ```
 
-To reveal the Dev tab, click the About tab ten times within four seconds. Enable Developer mode
-there to keep the tab available and use its development launch options.
+Create local packages with `npm run dist:win` or `npm run dist:linux`. Build output is written to
+`out/`; installers and AppImages are written to `dist/`. Local development uses the generated
+`out/` files and does not check online release channels.
 
-Create local packages with `npm run dist:win` or `npm run dist:linux`. Output is written to `dist/`.
+Public launcher settings are stored in `launcher.config.yml`.
 
-Public settings are stored in `launcher.config.yml`. Local development uses the generated `out/`
-files and does not check online release channels.
+To reveal the Dev tab, click the **About** tab ten times within four seconds. Developer mode adds a
+separate launch button with windowed-mode and custom-resolution controls.
 
-Run the `Release launcher` workflow from the stable branch to publish the Windows installer and
-Linux AppImage. The workflow updates the version automatically and publishes both platforms in one
-release.
+Run the **Release launcher** workflow from the stable branch to publish both platforms. The
+workflow calculates and publishes the next launcher version automatically.
 
 </details>

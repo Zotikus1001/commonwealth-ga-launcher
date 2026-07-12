@@ -1163,6 +1163,88 @@ function ServersTab({
   );
 }
 
+function DxvkVulkanPanel({
+  state,
+  settings,
+  edit
+}: {
+  state: LauncherState;
+  settings: SettingsModel;
+  edit: (fn: (settings: SettingsModel) => SettingsModel) => void;
+}): JSX.Element {
+  const rendererLabel =
+    state.dxvk.rendererSetting === 'directx-10'
+      ? 'DirectX 10 — Switches Automatically'
+      : state.dxvk.rendererSetting === 'directx-9'
+        ? 'DirectX 9'
+        : 'Not Detected — Will Configure';
+  const detail =
+    state.dxvk.rendererSetting === 'directx-10' &&
+    state.dxvk.status !== 'needs-restore' &&
+    state.dxvk.status !== 'error'
+      ? 'DirectX 10 is temporarily disabled while DXVK/Vulkan is enabled and restored when disabled.'
+      : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
+        ? 'The launcher preserves the current renderer state before configuring DXVK/Vulkan.'
+        : state.dxvk.detail;
+  const statusLabel: Record<LauncherState['dxvk']['status'], string> = {
+    unsupported: 'Windows Only',
+    native: 'Native Direct3D',
+    preparing: 'Preparing DXVK/Vulkan',
+    active: `DXVK/Vulkan ${state.dxvk.version} Active`,
+    external: 'Existing Graphics Wrapper',
+    'needs-restore': 'Recovery Required',
+    error: 'Inspection Failed'
+  };
+
+  return (
+    <>
+      <div className="panel-title">Graphics Renderer</div>
+      <div
+        className={`${styles.dxvkPanel} ${
+          state.dxvk.status === 'needs-restore' || state.dxvk.status === 'error'
+            ? styles.dxvkProblem
+            : state.dxvk.status === 'active'
+              ? styles.dxvkActive
+              : ''
+        }`}
+      >
+        <div className={styles.featureToggle}>
+          <input
+            id="developer-dxvk-vulkan"
+            type="checkbox"
+            checked={settings.developer.useDxvk}
+            onChange={(event) =>
+              edit((current) => ({
+                ...current,
+                developer: { ...current.developer, useDxvk: event.target.checked }
+              }))
+            }
+          />
+          <label htmlFor="developer-dxvk-vulkan">
+            <span className={styles.featureName}>Enable Experimental DXVK/Vulkan</span>
+            <span className={styles.featureDetail}>
+              Uses Vulkan for all game launches. Depending on hardware and drivers, it may improve
+              performance by roughly 10–40%, reduce CPU overhead and stuttering, and improve
+              stability.
+            </span>
+          </label>
+        </div>
+        <div className={styles.dxvkReadout}>
+          <div>
+            <span>Game Setting</span>
+            <strong>{rendererLabel}</strong>
+          </div>
+          <div>
+            <span>Graphics Files</span>
+            <strong>{statusLabel[state.dxvk.status]}</strong>
+          </div>
+        </div>
+        <p className={styles.dxvkDetail}>{detail}</p>
+      </div>
+    </>
+  );
+}
+
 function DeveloperTab({
   state,
   settings,
@@ -1178,47 +1260,6 @@ function DeveloperTab({
   modeError: string | null;
   onModeChange: (enabled: boolean) => void;
 }): JSX.Element {
-  const [restoringGraphics, setRestoringGraphics] = useState(false);
-  const [graphicsResult, setGraphicsResult] = useState<ActionResult | null>(null);
-  const rendererLabel =
-    state.dxvk.rendererSetting === 'directx-10'
-      ? 'DirectX 10 — Switches Automatically'
-      : state.dxvk.rendererSetting === 'directx-9'
-        ? 'DirectX 9'
-        : 'Not Detected — Will Configure';
-  const dxvkDetail =
-    state.dxvk.rendererSetting === 'directx-10' &&
-    state.dxvk.status !== 'needs-restore' &&
-    state.dxvk.status !== 'error'
-      ? 'DirectX 10 will be disabled for DXVK and restored when DXVK is disabled.'
-      : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
-        ? 'The launcher will preserve this renderer state before configuring DXVK.'
-        : state.dxvk.detail;
-  const dxvkStatusLabel: Record<LauncherState['dxvk']['status'], string> = {
-    unsupported: 'Windows Only',
-    native: 'Native Direct3D',
-    preparing: 'Preparing DXVK',
-    active: `DXVK ${state.dxvk.version} Files Active`,
-    external: 'Existing Graphics Wrapper',
-    'needs-restore': 'Recovery Required',
-    error: 'Inspection Failed'
-  };
-  const restoreGraphics = async (): Promise<void> => {
-    if (restoringGraphics) return;
-    setRestoringGraphics(true);
-    setGraphicsResult(null);
-    try {
-      setGraphicsResult(await window.api.restoreNativeGraphics());
-    } catch (error) {
-      setGraphicsResult({
-        ok: false,
-        message: error instanceof Error ? error.message : String(error)
-      });
-    } finally {
-      setRestoringGraphics(false);
-    }
-  };
-
   return (
     <section className={styles.section}>
       <div className="panel-title">Developer Mode</div>
@@ -1307,68 +1348,7 @@ function DeveloperTab({
           </div>
 
           {state.platform === 'win32' && (
-            <>
-              <div className="panel-title">Graphics Renderer</div>
-              <div
-                className={`${styles.dxvkPanel} ${
-                  state.dxvk.status === 'needs-restore' ||
-                  state.dxvk.status === 'error'
-                    ? styles.dxvkProblem
-                    : state.dxvk.status === 'active'
-                      ? styles.dxvkActive
-                      : ''
-                }`}
-              >
-                <div className={styles.featureToggle}>
-                  <input
-                    id="developer-dxvk"
-                    type="checkbox"
-                    checked={settings.developer.useDxvk}
-                    onChange={(event) =>
-                      edit((current) => ({
-                        ...current,
-                        developer: { ...current.developer, useDxvk: event.target.checked }
-                      }))
-                    }
-                  />
-                  <label htmlFor="developer-dxvk">
-                    <span className={styles.featureName}>Use DXVK For Dev Launch</span>
-                    <span className={styles.featureDetail}>
-                      Runs the game through Vulkan for comparison testing. DirectX 9 is selected
-                      while active; disabling DXVK or using normal Play restores the previous
-                      DirectX mode and graphics files.
-                    </span>
-                  </label>
-                </div>
-                <div className={styles.dxvkReadout}>
-                  <div>
-                    <span>Game Setting</span>
-                    <strong>{rendererLabel}</strong>
-                  </div>
-                  <div>
-                    <span>Graphics Files</span>
-                    <strong>{dxvkStatusLabel[state.dxvk.status]}</strong>
-                  </div>
-                </div>
-                <p className={styles.dxvkDetail}>
-                  {dxvkDetail}
-                </p>
-                {state.dxvk.canRestore && (
-                  <button
-                    className={styles.dxvkRestoreButton}
-                    disabled={restoringGraphics}
-                    onClick={() => void restoreGraphics()}
-                  >
-                    {restoringGraphics ? 'Restoring…' : 'Restore Native Direct3D'}
-                  </button>
-                )}
-                {graphicsResult && (
-                  <p className={graphicsResult.ok ? styles.patchResultOk : styles.patchResultError}>
-                    {graphicsResult.message}
-                  </p>
-                )}
-              </div>
-            </>
+            <DxvkVulkanPanel state={state} settings={settings} edit={edit} />
           )}
 
         </>

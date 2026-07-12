@@ -5,8 +5,8 @@ import {
   migrateStoredSettings
 } from '../src/main/services/ConfigStore';
 
-describe('DXVK settings migration', () => {
-  it('adds a disabled DXVK Dev Launch option without changing existing developer settings', () => {
+describe('DXVK/Vulkan settings migration', () => {
+  it('adds a disabled graphics option without changing existing developer settings', () => {
     const previous = defaultSettings();
     const schema9 = {
       ...previous,

@@ -167,7 +167,7 @@ describe('DxvkManager graphics DLL transaction', () => {
       encoding: 'utf-8'
     });
 
-    await expect(manager.restore(install)).rejects.toThrow('changed after DXVK activation');
+    await expect(manager.restore(install)).rejects.toThrow('changed after DXVK/Vulkan activation');
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
       'changed externally'
     );

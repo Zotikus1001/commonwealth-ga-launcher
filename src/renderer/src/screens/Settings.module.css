@@ -360,12 +360,6 @@
   line-height: 1.45;
 }
 
-.dxvkRestoreButton {
-  margin-top: 11px;
-  border-color: var(--amber);
-  color: var(--amber-hi);
-}
-
 .serverProfiles {
   display: flex;
   flex-direction: column;

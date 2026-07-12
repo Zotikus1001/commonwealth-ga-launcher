@@ -88,7 +88,7 @@ function markerDllNames(marker: DxvkMarker): readonly DxvkDllName[] {
 
 function markerFile(marker: DxvkMarker, name: DxvkDllName): MarkerFile {
   const file = marker.files[name];
-  if (!file) throw new Error(`DXVK recovery marker is missing ${name} metadata`);
+  if (!file) throw new Error(`DXVK/Vulkan recovery marker is missing ${name} metadata`);
   return file;
 }
 
@@ -160,7 +160,7 @@ export function detectConfiguredRenderer(text: string): DxvkRendererSetting {
 
 function parseMarker(value: unknown): DxvkMarker {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('DXVK recovery marker is not an object');
+    throw new Error('DXVK/Vulkan recovery marker is not an object');
   }
   const marker = value as Partial<DxvkMarker>;
   if (
@@ -172,7 +172,7 @@ function parseMarker(value: unknown): DxvkMarker {
     typeof marker.files !== 'object' ||
     Array.isArray(marker.files)
   ) {
-    throw new Error('DXVK recovery marker has unsupported metadata');
+    throw new Error('DXVK/Vulkan recovery marker has unsupported metadata');
   }
   const names = marker.schemaVersion === 1 ? DXVK_ARCHIVE_DLL_NAMES : DXVK_ACTIVE_DLL_NAMES;
   if (
@@ -182,7 +182,7 @@ function parseMarker(value: unknown): DxvkMarker {
         !(DXVK_ACTIVE_DLL_NAMES as readonly string[]).includes(name) && marker.files?.[name]
     )
   ) {
-    throw new Error('DXVK recovery marker contains unexpected graphics files');
+    throw new Error('DXVK/Vulkan recovery marker contains unexpected graphics files');
   }
   for (const name of names) {
     const file = marker.files[name];
@@ -193,7 +193,7 @@ function parseMarker(value: unknown): DxvkMarker {
       !SHA256_PATTERN.test(file.dxvkSha256) ||
       !(file.originalSha256 === null || SHA256_PATTERN.test(file.originalSha256))
     ) {
-      throw new Error(`DXVK recovery marker has invalid ${name} metadata`);
+      throw new Error(`DXVK/Vulkan recovery marker has invalid ${name} metadata`);
     }
   }
   if (marker.schemaVersion === 3) {
@@ -204,7 +204,7 @@ function parseMarker(value: unknown): DxvkMarker {
       !isDxvkRendererSnapshot(renderer.snapshot) ||
       rendererSettingFromSnapshot(renderer.snapshot) !== renderer.setting
     ) {
-      throw new Error('DXVK recovery marker has invalid renderer metadata');
+      throw new Error('DXVK/Vulkan recovery marker has invalid renderer metadata');
     }
   }
   return marker as DxvkMarker;
@@ -227,8 +227,8 @@ export function unavailableDxvkState(platform: NodeJS.Platform): DxvkState {
     rendererSetting: 'unknown',
     detail:
       platform === 'win32'
-        ? 'No valid game installation is available for DXVK inspection.'
-        : 'DXVK Dev Launch testing is currently available only on Windows.',
+        ? 'No valid game installation is available for DXVK/Vulkan inspection.'
+        : 'DXVK/Vulkan is currently available only on Windows.',
     canRestore: false
   };
 }
@@ -330,7 +330,7 @@ export class DxvkManager {
         status: 'error',
         version: this.definition.version,
         rendererSetting,
-        detail: `DXVK recovery metadata is invalid: ${(error as Error).message}`,
+        detail: `DXVK/Vulkan recovery metadata is invalid: ${(error as Error).message}`,
         canRestore: false
       };
     }
@@ -343,7 +343,7 @@ export class DxvkManager {
           status: 'error',
           version: marker.version,
           rendererSetting,
-          detail: `Could not inspect the managed DXVK files: ${(error as Error).message}`,
+          detail: `Could not inspect the managed DXVK/Vulkan files: ${(error as Error).message}`,
           canRestore: true
         };
       }
@@ -352,7 +352,7 @@ export class DxvkManager {
           status: 'needs-restore',
           version: marker.version,
           rendererSetting,
-          detail: 'A DXVK file change was interrupted or modified. Restore native graphics before launching.',
+          detail: 'A DXVK/Vulkan file change was interrupted or modified. The launcher will recover on the next launch attempt.',
           canRestore: true
         };
       }
@@ -360,7 +360,7 @@ export class DxvkManager {
         status: 'active',
         version: marker.version,
         rendererSetting,
-        detail: `DXVK ${marker.version} is installed for the next game launch.`,
+        detail: `DXVK/Vulkan ${marker.version} is active for game launches.`,
         canRestore: true
       };
     }
@@ -394,7 +394,7 @@ export class DxvkManager {
         status: 'external',
         version: this.definition.version,
         rendererSetting,
-        detail: 'An existing graphics wrapper is present. DXVK will preserve and restore it during testing.',
+        detail: 'An existing graphics wrapper is present. DXVK/Vulkan will preserve and restore it.',
         canRestore: false
       };
     }
@@ -436,14 +436,14 @@ export class DxvkManager {
     const archive = join(this.root, `download-${token}.tar.gz`);
     await mkdir(staging, { recursive: true });
     try {
-      this.log.info(`DXVK ${this.definition.version}: downloading pinned official archive`);
+      this.log.info(`DXVK/Vulkan ${this.definition.version}: downloading pinned official archive`);
       await downloadToFile(this.definition.archiveUrl, archive, onProgress, {
         idleTimeoutMs: 30_000,
         maxBytes: MAX_ARCHIVE_BYTES
       });
       const archiveHash = await sha256File(archive);
       if (archiveHash !== this.definition.archiveSha256) {
-        throw new Error('downloaded DXVK archive failed SHA-256 verification');
+        throw new Error('downloaded DXVK/Vulkan archive failed SHA-256 verification');
       }
       const wanted = new Set(
         DXVK_ACTIVE_DLL_NAMES.map((name) => `dxvk-${this.definition.version}/x32/${name}`)
@@ -463,7 +463,7 @@ export class DxvkManager {
         }
       }
       await rename(staging, this.payloadDir);
-      this.log.info(`DXVK ${this.definition.version}: verified x32 renderer payload cached`);
+      this.log.info(`DXVK/Vulkan ${this.definition.version}: verified x32 renderer payload cached`);
     } finally {
       await rm(archive, { force: true }).catch(() => {});
       await rm(staging, { recursive: true, force: true }).catch(() => {});
@@ -485,7 +485,7 @@ export class DxvkManager {
     originalRenderer: NonNullable<DxvkMarker['originalRenderer']>
   ): Promise<void> {
     if (await this.hasAnyBackups(install)) {
-      throw new Error('existing Commonwealth graphics backups prevent a safe DXVK activation');
+      throw new Error('existing Commonwealth graphics backups prevent safe DXVK/Vulkan activation');
     }
     const files: DxvkMarker['files'] = {};
     for (const name of DXVK_ACTIVE_DLL_NAMES) {
@@ -508,7 +508,7 @@ export class DxvkManager {
     try {
       await ensureDxvkRenderer(install, this.log);
       if ((await readRendererSetting(install.configDir)) !== 'directx-9') {
-        throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK Dev Launch.');
+        throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK/Vulkan.');
       }
       for (const name of DXVK_ACTIVE_DLL_NAMES) {
         const target = join(install.binariesDir, name);
@@ -530,7 +530,7 @@ export class DxvkManager {
       await this.writeMarker(install, marker);
       await mkdir(this.logDir, { recursive: true });
       await mkdir(this.stateCacheDir, { recursive: true });
-      this.log.info(`DXVK ${this.definition.version}: activated for Windows Dev Launch`);
+      this.log.info(`DXVK/Vulkan ${this.definition.version}: activated for Windows game launches`);
     } catch (error) {
       for (const name of DXVK_ACTIVE_DLL_NAMES) {
         await rm(join(install.binariesDir, `${name}.commonwealth-dxvk.tmp`), { force: true }).catch(
@@ -562,7 +562,7 @@ export class DxvkManager {
         if (targetHash === record.dxvkSha256) {
           await rm(target);
         } else if (targetHash !== record.originalSha256) {
-          throw new Error(`${name} changed after DXVK activation; it was left untouched`);
+          throw new Error(`${name} changed after DXVK/Vulkan activation; it was left untouched`);
         }
       }
       if (record.originalSha256 === null) {
@@ -593,7 +593,7 @@ export class DxvkManager {
     }
     await rm(this.markerPath(install));
     await rm(join(install.binariesDir, MARKER_TEMP_NAME), { force: true });
-    this.log.info('DXVK: restored the previous Windows graphics and renderer state');
+    this.log.info('DXVK/Vulkan: restored the previous Windows graphics and renderer state');
     return true;
   }
 

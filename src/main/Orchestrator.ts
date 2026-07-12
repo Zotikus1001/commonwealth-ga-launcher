@@ -566,17 +566,17 @@ export class Orchestrator {
 
       let useDxvk = false;
       if (PLATFORM === 'win32') {
-        useDxvk = developerLaunch && settings.developer.useDxvk;
+        useDxvk = settings.developer.useDxvk;
         this.patch({
           dxvk: {
             ...this.state.dxvk,
             status: 'preparing',
             detail: useDxvk
-              ? `Preparing DXVK ${this.state.dxvk.version} for Dev Launch…`
+              ? `Preparing DXVK/Vulkan ${this.state.dxvk.version} for launch…`
               : 'Restoring the previous Direct3D configuration…'
           },
           statusLine: useDxvk
-            ? `Preparing DXVK ${this.state.dxvk.version}…`
+            ? `Preparing DXVK/Vulkan ${this.state.dxvk.version}…`
             : 'Checking native graphics configuration…'
         });
         const dxvk = await this.dxvkManager.prepareForLaunch(
@@ -587,8 +587,8 @@ export class Orchestrator {
             this.patch({
               statusLine:
                 percent >= 0
-                  ? `Downloading DXVK ${this.state.dxvk.version}… ${percent}%`
-                  : `Downloading DXVK ${this.state.dxvk.version}…`
+                  ? `Downloading DXVK/Vulkan ${this.state.dxvk.version}… ${percent}%`
+                  : `Downloading DXVK/Vulkan ${this.state.dxvk.version}…`
             });
           }
         );
@@ -600,7 +600,8 @@ export class Orchestrator {
         launchCoolingDown: true,
         statusLine:
           `Launching ${selection.name}` +
-          (developerLaunch ? ` with developer settings${useDxvk ? ' and DXVK' : ''}` : '') +
+          (developerLaunch ? ' with developer settings' : '') +
+          (useDxvk ? `${developerLaunch ? ' and' : ' with'} DXVK/Vulkan` : '') +
           '…'
       });
       this.gameLauncher.launch(
@@ -625,7 +626,7 @@ export class Orchestrator {
           dxvk = {
             ...dxvk,
             status: 'error',
-            detail: `DXVK inspection failed after launch error: ${(inspectError as Error).message}`
+            detail: `DXVK/Vulkan inspection failed after launch error: ${(inspectError as Error).message}`
           };
         }
       }
@@ -686,9 +687,9 @@ export class Orchestrator {
     }
   }
 
-  async restoreNativeGraphics(): Promise<ActionResult> {
+  private async restoreDxvkVulkan(): Promise<ActionResult> {
     if (PLATFORM !== 'win32') {
-      return { ok: false, message: 'DXVK Dev Launch testing is currently available only on Windows.' };
+      return { ok: false, message: 'DXVK/Vulkan is currently available only on Windows.' };
     }
     if (this.busy || this.state.launchCoolingDown) {
       return { ok: false, message: 'The launcher is busy. Try again shortly.' };
@@ -703,7 +704,7 @@ export class Orchestrator {
       return { ok: true, message: 'The previous graphics and DirectX configuration was restored.' };
     } catch (error) {
       const message = (error as Error).message;
-      this.log.error(`DXVK restoration failed: ${message}`);
+      this.log.error(`DXVK/Vulkan restoration failed: ${message}`);
       let dxvk = this.state.dxvk;
       if (this.install) {
         try {
@@ -712,7 +713,7 @@ export class Orchestrator {
           dxvk = {
             ...dxvk,
             status: 'error',
-            detail: `DXVK inspection failed after restoration error: ${(inspectError as Error).message}`
+            detail: `DXVK/Vulkan inspection failed after restoration error: ${(inspectError as Error).message}`
           };
         }
       }
@@ -759,7 +760,7 @@ export class Orchestrator {
   }
 
   async settingsChanged(restoreDxvk = false): Promise<void> {
-    if (restoreDxvk) await this.restoreNativeGraphics();
+    if (restoreDxvk) await this.restoreDxvkVulkan();
     await this.refresh();
   }
 

@@ -543,7 +543,7 @@ function patchDxvkRendererRestore(
   text: string,
   snapshot: DxvkRendererSnapshot
 ): TextPatchResult {
-  if (!isDxvkRendererSnapshot(snapshot)) throw new Error('Invalid saved DXVK renderer state');
+  if (!isDxvkRendererSnapshot(snapshot)) throw new Error('Invalid saved DXVK/Vulkan renderer state');
   const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
     (line) => line.length > 0
   );
@@ -1203,7 +1203,7 @@ export async function ensureDxvkRenderer(
     log
   );
   log.info(
-    `DXVK renderer: AllowD3D10=False verified; ${result.changedFiles.length} file(s) changed`
+    `DXVK/Vulkan renderer: AllowD3D10=False verified; ${result.changedFiles.length} file(s) changed`
   );
   return result;
 }
@@ -1231,7 +1231,7 @@ export async function restoreDxvkRenderer(
     log
   );
   log.info(
-    `DXVK renderer: previous DirectX setting restored; ` +
+    `DXVK/Vulkan renderer: previous DirectX setting restored; ` +
       `${result.changedFiles.length} file(s) changed`
   );
   return result;

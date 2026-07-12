@@ -104,7 +104,7 @@ export interface Settings {
     windowed: boolean;
     resolutionWidth: number;
     resolutionHeight: number;
-    /** Windows Dev Launch only; normal Play always restores the prior graphics DLLs. */
+    /** Experimental Windows option configured in Dev but applied to every launch mode. */
     useDxvk: boolean;
   };
 }
@@ -221,7 +221,6 @@ export interface LauncherApi {
   checkLauncherUpdates(): Promise<void>;
   listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;
-  restoreNativeGraphics(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;

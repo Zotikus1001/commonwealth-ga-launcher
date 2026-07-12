@@ -577,22 +577,28 @@ export class Orchestrator {
 
       let clientPatchEnvironment: NodeJS.ProcessEnv = {};
       if (settings.developer.useClientPatches) {
-        this.patch({ statusLine: 'Checking experimental client patches…' });
+        this.patch({
+          statusLine: settings.developer.useLocalClientDll
+            ? 'Preparing local client DLL…'
+            : 'Checking experimental client patches…'
+        });
         try {
-          clientPatchEnvironment = await this.clientPatchManager.prepareForLaunch(
-            this.install,
-            PLATFORM,
-            ({ transferred, total }) => {
-              const percent = total > 0
-                ? Math.min(100, Math.round((transferred / total) * 100))
-                : -1;
-              this.patch({
-                statusLine: percent >= 0
-                  ? `Downloading experimental client patches… ${percent}%`
-                  : 'Downloading experimental client patches…'
-              });
-            }
-          );
+          clientPatchEnvironment = settings.developer.useLocalClientDll
+            ? await this.clientPatchManager.prepareLocalForLaunch(this.install, PLATFORM)
+            : await this.clientPatchManager.prepareForLaunch(
+                this.install,
+                PLATFORM,
+                ({ transferred, total }) => {
+                  const percent = total > 0
+                    ? Math.min(100, Math.round((transferred / total) * 100))
+                    : -1;
+                  this.patch({
+                    statusLine: percent >= 0
+                      ? `Downloading experimental client patches… ${percent}%`
+                      : 'Downloading experimental client patches…'
+                  });
+                }
+              );
         } catch (error) {
           this.log.warn(
             `client patches unavailable; continuing without them: ${(error as Error).message}`
@@ -819,31 +825,41 @@ export class Orchestrator {
     }
     this.busy = true;
     try {
-      const install = await validateGameExe(this.config.get().gameExePath);
+      const settings = this.config.get();
+      const install = await validateGameExe(settings.gameExePath);
       this.install = install;
       if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      const localDll = settings.developer.useLocalClientDll;
       this.patch({
         phase: 'checking',
         statusLine: enabled
-          ? 'Checking experimental client patches…'
-          : 'Removing experimental client patches…'
+          ? localDll
+            ? 'Preparing local client DLL…'
+            : 'Checking experimental client patches…'
+          : localDll
+            ? 'Leaving local client DLL unchanged…'
+            : 'Removing experimental client patches…'
       });
       if (enabled) {
-        await this.clientPatchManager.prepareForLaunch(
-          install,
-          PLATFORM,
-          ({ transferred, total }) => {
-            const percent = total > 0
-              ? Math.min(100, Math.round((transferred / total) * 100))
-              : -1;
-            this.patch({
-              statusLine: percent >= 0
-                ? `Downloading experimental client patches… ${percent}%`
-                : 'Downloading experimental client patches…'
-            });
-          }
-        );
-      } else {
+        if (localDll) {
+          await this.clientPatchManager.prepareLocalForLaunch(install, PLATFORM);
+        } else {
+          await this.clientPatchManager.prepareForLaunch(
+            install,
+            PLATFORM,
+            ({ transferred, total }) => {
+              const percent = total > 0
+                ? Math.min(100, Math.round((transferred / total) * 100))
+                : -1;
+              this.patch({
+                statusLine: percent >= 0
+                  ? `Downloading experimental client patches… ${percent}%`
+                  : 'Downloading experimental client patches…'
+              });
+            }
+          );
+        }
+      } else if (!localDll) {
         await this.clientPatchManager.disable(install);
       }
       this.patch({ phase: 'ready', statusLine: 'Ready.' });

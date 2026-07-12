@@ -416,6 +416,18 @@ export class ClientPatchManager {
     return environment;
   }
 
+  async prepareLocalForLaunch(
+    install: GameInstall,
+    platform: NodeJS.Platform
+  ): Promise<NodeJS.ProcessEnv> {
+    const target = await this.resolveTarget(install);
+    if (!(await isFile(target))) {
+      throw new Error('Local client DLL not found in the game Binaries folder.');
+    }
+    this.log.info('local client DLL mode: using the existing dinput8.dll without update checks');
+    return this.launchEnvironment(platform);
+  }
+
   async prepareForLaunch(
     install: GameInstall,
     platform: NodeJS.Platform,

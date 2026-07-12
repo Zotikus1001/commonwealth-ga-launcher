@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 11;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 12;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -192,6 +192,20 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 11: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 12,
+          developer: {
+            ...developer,
+            useLocalClientDll: false
+          }
+        };
+        version = 12;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -241,7 +255,8 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       resolutionWidth: 1280,
       resolutionHeight: 720,
       useDxvk: false,
-      useClientPatches: false
+      useClientPatches: false,
+      useLocalClientDll: false
     }
   };
 }
@@ -355,7 +370,11 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
     useClientPatches:
       typeof value.useClientPatches === 'boolean'
         ? value.useClientPatches
-        : fallback.useClientPatches
+        : fallback.useClientPatches,
+    useLocalClientDll:
+      typeof value.useLocalClientDll === 'boolean'
+        ? value.useLocalClientDll
+        : fallback.useLocalClientDll
   };
 }
 
@@ -365,7 +384,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     typeof value.enabled !== 'boolean' ||
     typeof value.windowed !== 'boolean' ||
     typeof value.useDxvk !== 'boolean' ||
-    typeof value.useClientPatches !== 'boolean'
+    typeof value.useClientPatches !== 'boolean' ||
+    typeof value.useLocalClientDll !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
   }
@@ -378,7 +398,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
     useDxvk: value.useDxvk,
-    useClientPatches: value.useClientPatches
+    useClientPatches: value.useClientPatches,
+    useLocalClientDll: value.useLocalClientDll
   };
 }
 

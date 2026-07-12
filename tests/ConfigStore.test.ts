@@ -27,7 +27,8 @@ describe('DXVK/Vulkan settings migration', () => {
       resolutionWidth: 1920,
       resolutionHeight: 1080,
       useDxvk: false,
-      useClientPatches: false
+      useClientPatches: false,
+      useLocalClientDll: false
     });
   });
 
@@ -51,7 +52,30 @@ describe('DXVK/Vulkan settings migration', () => {
       resolutionWidth: 1600,
       resolutionHeight: 900,
       useDxvk: true,
-      useClientPatches: false
+      useClientPatches: false,
+      useLocalClientDll: false
+    });
+  });
+
+  it('adds disabled local client DLL mode without changing patch state', () => {
+    const previous = defaultSettings();
+    const {
+      useLocalClientDll: _removedLocalClientDll,
+      ...previousDeveloper
+    } = previous.developer;
+    const schema11 = {
+      ...previous,
+      schemaVersion: 11,
+      developer: {
+        ...previousDeveloper,
+        enabled: true,
+        useClientPatches: true
+      }
+    };
+
+    expect(migrateStoredSettings(schema11).settings.developer).toEqual({
+      ...schema11.developer,
+      useLocalClientDll: false
     });
   });
 });

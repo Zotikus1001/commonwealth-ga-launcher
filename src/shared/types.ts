@@ -108,6 +108,8 @@ export interface Settings {
     useDxvk: boolean;
     /** Experimental launcher-managed client patches, applied to every launch mode when enabled. */
     useClientPatches: boolean;
+    /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
+    useLocalClientDll: boolean;
   };
 }
 

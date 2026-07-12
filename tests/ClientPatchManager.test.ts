@@ -237,6 +237,58 @@ describe('ClientPatchManager', () => {
     expect(environment.WINEDLLOVERRIDES).toBe('xaudio2_7=n,b;dinput8=n,b');
   });
 
+  it('uses a local DLL without checking, downloading, or replacing it', async () => {
+    const { userData, install } = await fixture();
+    const local = Buffer.from('local development payload');
+    let releaseChecks = 0;
+    let downloads = 0;
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), local);
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', Buffer.from('upstream payload')),
+      async () => {
+        downloads += 1;
+      },
+      async () => {
+        releaseChecks += 1;
+        return [];
+      }
+    );
+
+    expect(await manager.prepareLocalForLaunch(install, 'win32')).toEqual({});
+    expect(await readFile(join(install.binariesDir, 'dinput8.dll'))).toEqual(local);
+    expect(releaseChecks).toBe(0);
+    expect(downloads).toBe(0);
+  });
+
+  it('enables the Wine override for an existing local DLL', async () => {
+    const { userData, install } = await fixture();
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), 'local development payload');
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', Buffer.from('upstream payload'))
+    );
+
+    const environment = await manager.prepareLocalForLaunch(install, 'linux');
+
+    expect(environment.WINEDLLOVERRIDES).toBe('dinput8=n,b');
+  });
+
+  it('reports when local mode has no DLL', async () => {
+    const { userData, install } = await fixture();
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', Buffer.from('upstream payload'))
+    );
+
+    await expect(manager.prepareLocalForLaunch(install, 'linux')).rejects.toThrow(
+      'Local client DLL not found'
+    );
+  });
+
   it('checks every enabled launch and installs the newest release by publication time', async () => {
     const { userData, install } = await fixture();
     const pinned = Buffer.from('pinned payload');

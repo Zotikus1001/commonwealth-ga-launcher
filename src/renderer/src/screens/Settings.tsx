@@ -352,6 +352,41 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     }
   };
 
+  const saveLocalClientDll = async (enabled: boolean): Promise<void> => {
+    if (!draft || clientPatchesSaving) return;
+    const previous = draft.developer.useLocalClientDll;
+    setDraft((current) =>
+      current
+        ? { ...current, developer: { ...current.developer, useLocalClientDll: enabled } }
+        : current
+    );
+    setClientPatchesSaving(true);
+    setClientPatchesError(null);
+    try {
+      const updated = await window.api.updateSettings({ developer: { useLocalClientDll: enabled } });
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              developer: {
+                ...current.developer,
+                useLocalClientDll: updated.developer.useLocalClientDll
+              }
+            }
+          : current
+      );
+    } catch (error) {
+      setDraft((current) =>
+        current
+          ? { ...current, developer: { ...current.developer, useLocalClientDll: previous } }
+          : current
+      );
+      setClientPatchesError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setClientPatchesSaving(false);
+    }
+  };
+
   const commitTabSelection = (next: SettingsTab): void => {
     if (next === 'about' && draft && !draft.developer.enabled && !devUnlocked) {
       const now = Date.now();
@@ -969,6 +1004,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             clientPatchesSaving={clientPatchesSaving}
             clientPatchesError={clientPatchesError}
             onClientPatchesChange={(enabled) => void saveClientPatches(enabled)}
+            onLocalClientDllChange={(enabled) => void saveLocalClientDll(enabled)}
           />
         )}
 
@@ -1309,7 +1345,8 @@ function DeveloperTab({
   onModeChange,
   clientPatchesSaving,
   clientPatchesError,
-  onClientPatchesChange
+  onClientPatchesChange,
+  onLocalClientDllChange
 }: {
   state: LauncherState;
   settings: SettingsModel;
@@ -1320,6 +1357,7 @@ function DeveloperTab({
   clientPatchesSaving: boolean;
   clientPatchesError: string | null;
   onClientPatchesChange: (enabled: boolean) => void;
+  onLocalClientDllChange: (enabled: boolean) => void;
 }): JSX.Element {
   return (
     <section className={styles.section}>
@@ -1425,6 +1463,22 @@ function DeveloperTab({
               <span className={styles.featureDetail}>
                 Installs performance and stability fixes and checks for newer patches before Play.
                 Restart the game after changing this option.
+              </span>
+            </label>
+          </div>
+          <div className={styles.featureToggle}>
+            <input
+              id="developer-local-client-dll"
+              type="checkbox"
+              checked={settings.developer.useLocalClientDll}
+              disabled={clientPatchesSaving}
+              onChange={(event) => onLocalClientDllChange(event.target.checked)}
+            />
+            <label htmlFor="developer-local-client-dll">
+              <span className={styles.featureName}>Use Local Client DLL</span>
+              <span className={styles.featureDetail}>
+                Uses the existing dinput8.dll in the game folder without checking, downloading,
+                replacing, or removing it. Enable Client Patches to load it with the game.
               </span>
             </label>
           </div>

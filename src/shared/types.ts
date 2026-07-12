@@ -133,7 +133,9 @@ export interface UpdateProgress {
   total: number;        // bytes, 0 when unknown
 }
 
-export type ClientPatchId = 'high-fps-movement-stability';
+export type ClientPatchId =
+  | 'high-fps-movement-stability'
+  | 'adaptive-client-performance';
 
 export interface ClientPatchStatus {
   id: ClientPatchId;

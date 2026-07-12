@@ -33,7 +33,8 @@ The launcher updates itself automatically.
 - Automatic updates
 - Easy game setup and launching
 - Server status and server selection
-- Client fixes and game options
+- Automatic client performance and stability fixes
+- Useful game options
 - Agenda Stats and Discord access
 - Windows support and flexible Linux compatibility options
 

@@ -6,6 +6,7 @@ import { isFpsLimit } from '@shared/fpsLimit';
 import type { ClientPatchId, ClientPatchStatus, GameIniSettings } from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
+import { FALLBACK_TEXTURE_POOL_MB, MAX_TEXTURE_POOL_MB } from './GpuMemory';
 
 export const CLIENT_NET_SPEED = 50_000;
 type IniLog = Pick<Log, 'info' | 'warn' | 'error'>;
@@ -39,7 +40,8 @@ type IniPatchOptions =
   | { kind: 'dxvk-renderer' }
   | { kind: 'dxvk-renderer-restore'; snapshot: DxvkRendererSnapshot }
   | { kind: 'fps-smoothing'; enabled: boolean }
-  | { kind: 'fps-limit'; limit: number };
+  | { kind: 'fps-limit'; limit: number }
+  | { kind: 'adaptive-performance'; texturePoolMb: number };
 
 interface IniFileEdit {
   path: string;
@@ -214,6 +216,172 @@ function verifyEnginePlayerSection(text: string, fileName: string): void {
     if (found.length === 0 || found.some((value) => value !== CLIENT_NET_SPEED)) {
       throw new Error(`${fileName} did not retain ${key}=${CLIENT_NET_SPEED}`);
     }
+  }
+}
+
+function escapedRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function patchSectionValue(
+  text: string,
+  sectionName: string,
+  keyName: string,
+  expectedValue: string
+): TextPatchResult {
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
+  const assignmentPattern = new RegExp(
+    `^(\\s*)([+.-]?)(${escapedRegExp(keyName)})(\\s*=\\s*)([^;#\\s]*)(.*)$`,
+    'i'
+  );
+  const bareRemovalPattern = new RegExp(
+    `^\\s*-${escapedRegExp(keyName)}\\s*(?:[;#].*)?$`,
+    'i'
+  );
+  let inTargetSection = false;
+  let firstSectionStart = -1;
+  let firstSectionEnd = -1;
+  let firstSectionLineEnding = '';
+  let lastRemovalIndex = -1;
+  let lastAssignmentIndex = -1;
+  let changed = false;
+
+  for (let index = 0; index < lines.length; index++) {
+    const lineEnding = trailingLineEnding(lines[index]);
+    const line = lineEnding ? lines[index].slice(0, -lineEnding.length) : lines[index];
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      if (inTargetSection && firstSectionEnd < 0) firstSectionEnd = index;
+      inTargetSection = section[1].trim().toLowerCase() === sectionName.toLowerCase();
+      if (inTargetSection && firstSectionStart < 0) {
+        firstSectionStart = index;
+        firstSectionLineEnding = lineEnding;
+      }
+      continue;
+    }
+    if (!inTargetSection) continue;
+
+    if (bareRemovalPattern.test(line)) {
+      lastRemovalIndex = index;
+      continue;
+    }
+    const assignment = line.match(assignmentPattern);
+    if (!assignment) continue;
+    if (assignment[2] === '-') {
+      lastRemovalIndex = index;
+      continue;
+    }
+    lastAssignmentIndex = index;
+    const replacement =
+      `${assignment[1]}${assignment[2]}${assignment[3]}${assignment[4]}` +
+      `${expectedValue}${assignment[6]}`;
+    if (replacement !== line) {
+      lines[index] = replacement + lineEnding;
+      changed = true;
+    }
+  }
+
+  if (lastAssignmentIndex > lastRemovalIndex) return { text: lines.join(''), changed };
+
+  const preferredLineEnding =
+    firstSectionLineEnding || lines.map(trailingLineEnding).find(Boolean) || '\r\n';
+  const newAssignment = `${lastRemovalIndex >= 0 ? '+' : ''}${keyName}=${expectedValue}`;
+  if (lastRemovalIndex >= 0) {
+    const previousHasLineEnding = trailingLineEnding(lines[lastRemovalIndex]) !== '';
+    lines.splice(
+      lastRemovalIndex + 1,
+      0,
+      `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${preferredLineEnding}`
+    );
+    return { text: lines.join(''), changed: true };
+  }
+
+  if (firstSectionStart < 0) {
+    let separator = '';
+    if (text.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(text) !== '';
+      const lastLine = text.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    return {
+      text: text + separator + `[${sectionName}]${preferredLineEnding}${newAssignment}`,
+      changed: true
+    };
+  }
+
+  if (firstSectionEnd < 0) firstSectionEnd = lines.length;
+  let insertAt = firstSectionEnd;
+  while (insertAt > firstSectionStart + 1) {
+    const token = lines[insertAt - 1];
+    const lineEnding = trailingLineEnding(token);
+    const content = lineEnding ? token.slice(0, -lineEnding.length) : token;
+    if (content.trim() !== '') break;
+    insertAt--;
+  }
+  const previousHasLineEnding = insertAt === 0 || trailingLineEnding(lines[insertAt - 1]) !== '';
+  const preserveMissingTrailingNewline =
+    insertAt === lines.length && text.length > 0 && trailingLineEnding(text) === '';
+  lines.splice(
+    insertAt,
+    0,
+    `${previousHasLineEnding ? '' : preferredLineEnding}${newAssignment}${
+      preserveMissingTrailingNewline ? '' : preferredLineEnding
+    }`
+  );
+  return { text: lines.join(''), changed: true };
+}
+
+function effectiveSectionValues(text: string, sectionName: string, keyName: string): string[] {
+  const values: string[] = [];
+  let inTargetSection = false;
+  const assignmentPattern = new RegExp(
+    `^\\s*([+.-]?)${escapedRegExp(keyName)}\\s*=\\s*([^;#\\s]*)`,
+    'i'
+  );
+  const removalPattern = new RegExp(`^\\s*-${escapedRegExp(keyName)}\\s*(?:[;#].*)?$`, 'i');
+  for (const line of text.split(/\r\n|\n|\r/)) {
+    const section = line.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      inTargetSection = section[1].trim().toLowerCase() === sectionName.toLowerCase();
+      continue;
+    }
+    if (!inTargetSection) continue;
+    if (removalPattern.test(line)) {
+      values.length = 0;
+      continue;
+    }
+    const assignment = line.match(assignmentPattern);
+    if (!assignment) continue;
+    if (assignment[1] === '-') values.length = 0;
+    else values.push(assignment[2]);
+  }
+  return values;
+}
+
+function verifyAdaptivePerformance(
+  text: string,
+  fileName: string,
+  texturePoolMb: number | null
+): void {
+  const pools = effectiveSectionValues(text, 'TextureStreaming', 'PoolSize').map(Number);
+  const poolMatches = texturePoolMb === null
+    ? (value: number): boolean =>
+        Number.isInteger(value) && value >= FALLBACK_TEXTURE_POOL_MB && value <= MAX_TEXTURE_POOL_MB
+    : (value: number): boolean => value === texturePoolMb;
+  if (pools.length === 0 || pools.some((value) => !poolMatches(value))) {
+    throw new Error(`${fileName} did not retain the managed texture pool`);
+  }
+
+  const shaderValues = effectiveSectionValues(
+    text,
+    'Engine.ISVHacks',
+    'bInitializeShadersOnDemand'
+  );
+  if (shaderValues.length === 0 || shaderValues.some((value) => value.toLowerCase() !== 'false')) {
+    throw new Error(`${fileName} did not retain the managed shader initialization setting`);
   }
 }
 
@@ -626,7 +794,10 @@ function verifyDxvkRendererRestore(
 }
 
 export function unavailableClientPatches(): ClientPatchStatus[] {
-  return [{ id: 'high-fps-movement-stability', applied: null }];
+  return [
+    { id: 'high-fps-movement-stability', applied: null },
+    { id: 'adaptive-client-performance', applied: null }
+  ];
 }
 
 export async function inspectClientPatches(
@@ -635,21 +806,36 @@ export async function inspectClientPatches(
   if (!install) return unavailableClientPatches();
 
   const configDir = install.configDir;
-  let applied = true;
+  let networkApplied = true;
+  let performanceApplied = true;
   for (const [path, required] of [
     [join(configDir, 'TgEngine.ini'), true],
     [join(configDir, 'DefaultEngine.ini'), false]
   ] as const) {
     try {
-      verifyEnginePlayerSection(await readFile(path, { encoding: 'utf-8' }), basename(path));
+      const text = await readFile(path, { encoding: 'utf-8' });
+      try {
+        verifyEnginePlayerSection(text, basename(path));
+      } catch {
+        networkApplied = false;
+      }
+      try {
+        verifyAdaptivePerformance(text, basename(path), null);
+      } catch {
+        performanceApplied = false;
+      }
     } catch (error) {
       if (!required && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      applied = false;
+      networkApplied = false;
+      performanceApplied = false;
       break;
     }
   }
 
-  return [{ id: 'high-fps-movement-stability', applied }];
+  return [
+    { id: 'high-fps-movement-stability', applied: networkApplied },
+    { id: 'adaptive-client-performance', applied: performanceApplied }
+  ];
 }
 
 function collectSectionAssignments(
@@ -1002,6 +1188,17 @@ async function patchIniFile(
   if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
     apply(patchGameEngineFrameRate(patchedText, options));
   }
+  if (options.kind === 'adaptive-performance') {
+    apply(patchSectionValue(patchedText, 'TextureStreaming', 'PoolSize', String(options.texturePoolMb)));
+    apply(
+      patchSectionValue(
+        patchedText,
+        'Engine.ISVHacks',
+        'bInitializeShadersOnDemand',
+        'False'
+      )
+    );
+  }
 
   const verify = (text: string): void => {
     const fileName = basename(path);
@@ -1016,6 +1213,9 @@ async function patchIniFile(
     }
     if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
       verifyGameEngineFrameRate(text, fileName, options);
+    }
+    if (options.kind === 'adaptive-performance') {
+      verifyAdaptivePerformance(text, fileName, options.texturePoolMb);
     }
   };
 
@@ -1083,21 +1283,36 @@ function mergeRepairResults(results: IniRepairResult[]): IniRepairResult {
 export async function applyClientPatch(
   install: GameInstall,
   id: ClientPatchId,
-  log: Log
+  log: Log,
+  texturePoolMb = FALLBACK_TEXTURE_POOL_MB
 ): Promise<IniRepairResult> {
-  if (id !== 'high-fps-movement-stability') throw new Error(`Unsupported client patch: ${id}`);
+  if (
+    id === 'adaptive-client-performance' &&
+    (!Number.isInteger(texturePoolMb) ||
+      texturePoolMb < FALLBACK_TEXTURE_POOL_MB ||
+      texturePoolMb > MAX_TEXTURE_POOL_MB)
+  ) {
+    throw new Error('Invalid managed texture pool');
+  }
+  if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
+    throw new Error(`Unsupported client patch: ${id}`);
+  }
   const configDir = install.configDir;
+  const options: IniPatchOptions =
+    id === 'high-fps-movement-stability'
+      ? { kind: 'net-speed' }
+      : { kind: 'adaptive-performance', texturePoolMb };
   const result = await applyIniEdits(
     [
       {
         path: join(configDir, 'TgEngine.ini'),
         required: true,
-        options: { kind: 'net-speed' }
+        options
       },
       {
         path: join(configDir, 'DefaultEngine.ini'),
         required: false,
-        options: { kind: 'net-speed' }
+        options
       }
     ],
     log
@@ -1244,14 +1459,22 @@ export async function ensureClientConfiguration(
   showOverhealing: boolean,
   fpsLimitEnabled: boolean,
   fpsLimit: number,
+  texturePoolMb: number,
   log: Log
 ): Promise<IniRepairResult> {
   const networkResult = await applyClientPatch(install, 'high-fps-movement-stability', log);
+  const performanceResult = await applyClientPatch(
+    install,
+    'adaptive-client-performance',
+    log,
+    texturePoolMb
+  );
   const loginMapResult = await ensureLoginMap(install, loginMap, log);
   const overhealingResult = await ensureOverhealing(install, showOverhealing, log);
   const fpsResult = await ensureFpsLimit(install, fpsLimitEnabled, fpsLimit, log);
   const result = mergeRepairResults([
     networkResult,
+    performanceResult,
     loginMapResult,
     overhealingResult,
     fpsResult

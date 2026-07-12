@@ -30,6 +30,7 @@ import {
   unavailableClientPatches
 } from './services/IniFixes';
 import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
+import { GpuMemoryDetector } from './services/GpuMemory';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -60,6 +61,7 @@ export class Orchestrator {
   private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
   private readonly dxvkManager: DxvkManager;
+  private readonly gpuMemoryDetector: GpuMemoryDetector;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -82,6 +84,7 @@ export class Orchestrator {
   ) {
     this.gameLauncher = new GameLauncher(log);
     this.dxvkManager = new DxvkManager(app.getPath('userData'), log);
+    this.gpuMemoryDetector = new GpuMemoryDetector(PLATFORM, log);
     const launcherUpdate = launcherUpdater.getSnapshot();
     this.state = {
       phase: 'init',
@@ -555,12 +558,14 @@ export class Orchestrator {
         ) ?? selection.host;
 
       this.patch({ phase: 'checking', statusLine: 'Checking client configuration…', errorDetails: null });
+      const gpuMemory = await this.gpuMemoryDetector.select(settings.launch.gpuAdapter);
       await ensureClientConfiguration(
         this.install,
         settings.loginMap,
         settings.showOverhealing,
         settings.fpsLimit.enabled,
         settings.fpsLimit.value,
+        gpuMemory.texturePoolMb,
         this.log
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
@@ -668,7 +673,11 @@ export class Orchestrator {
         return { ok: false, message: 'Set a valid Global Agenda install path first.' };
       }
 
-      const result = await applyIniClientPatch(install, id, this.log);
+      const texturePoolMb =
+        id === 'adaptive-client-performance'
+          ? (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter)).texturePoolMb
+          : undefined;
+      const result = await applyIniClientPatch(install, id, this.log, texturePoolMb);
       const clientPatches = await inspectClientPatches(install);
       this.patch({
         gamePathValid: true,

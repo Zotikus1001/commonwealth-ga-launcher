@@ -80,7 +80,9 @@ export function registerIpc(
   ipcMain.handle(IPC.play, () => orchestrator.play());
   ipcMain.handle(IPC.playDeveloper, () => orchestrator.play(true));
   ipcMain.handle(IPC.applyClientPatch, (_event, id: unknown) => {
-    if (id !== 'high-fps-movement-stability') throw new Error('Unknown client patch.');
+    if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
+      throw new Error('Unknown client patch.');
+    }
     return orchestrator.applyClientPatch(id);
   });
   ipcMain.handle(IPC.selectServer, (_event, id: unknown) => {

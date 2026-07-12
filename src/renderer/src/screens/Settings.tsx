@@ -61,6 +61,11 @@ const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: 
     description:
       'Fixes teleporting and harsh position corrections caused by running the game at high frame rates. ' +
       'Limiting FPS to your monitor refresh rate is still recommended to avoid other potential issues.'
+  },
+  'adaptive-client-performance': {
+    title: 'Client Performance Stability',
+    description:
+      'Improves consistency in busy scenes and reduces avoidable loading stutters during play.'
   }
 };
 

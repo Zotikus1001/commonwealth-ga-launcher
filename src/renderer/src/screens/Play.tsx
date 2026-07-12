@@ -26,6 +26,14 @@ interface CtaSpec {
 }
 
 function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
+  if (state.launcherUpdate === 'downloading') {
+    return {
+      label: 'DOWNLOADING UPDATE',
+      disabled: true,
+      action: () => {},
+      loading: true
+    };
+  }
   if (state.launchCoolingDown) {
     return { label: 'LAUNCHING…', disabled: true, action: () => {} };
   }
@@ -100,6 +108,7 @@ export default function Play({
   const [, setClock] = useState(0);
   const canDevLaunch =
     state.developerMode &&
+    state.launcherUpdate !== 'downloading' &&
     state.phase === 'ready' &&
     !state.launchCoolingDown &&
     state.gamePathValid &&

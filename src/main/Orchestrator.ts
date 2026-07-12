@@ -501,6 +501,7 @@ export class Orchestrator {
       this.patch({ phase: 'ready', statusLine: 'Enable developer mode before using Dev Launch.' });
       return;
     }
+    if (this.launcherUpdater.getSnapshot().status === 'downloading') return;
     if (
       this.busy ||
       this.state.launchCoolingDown ||
@@ -593,6 +594,11 @@ export class Orchestrator {
           }
         );
         this.patch({ dxvk });
+      }
+
+      if (this.launcherUpdater.getSnapshot().status === 'downloading') {
+        this.patch({ phase: 'ready', statusLine: 'Launcher update is downloading…' });
+        return;
       }
 
       this.patch({

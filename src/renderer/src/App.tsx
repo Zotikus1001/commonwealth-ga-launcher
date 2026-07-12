@@ -87,6 +87,7 @@ export default function App(): JSX.Element {
     return <div className={styles.boot}>COMMONWEALTH GA</div>;
   }
   const launcherUpdate = launcherUpdateLabel(state);
+  const updateDownloading = state.launcherUpdate === 'downloading';
 
   return (
     <div className={styles.shell}>
@@ -111,6 +112,8 @@ export default function App(): JSX.Element {
             </span>
           </div>
           <button
+            disabled={updateDownloading}
+            title={updateDownloading ? 'Settings are unavailable while the launcher update downloads.' : undefined}
             onClick={() => {
               if (view === 'play') openSettings('game');
               else settingsRef.current?.requestBack();
@@ -125,12 +128,14 @@ export default function App(): JSX.Element {
         {view === 'play' ? (
           <Play state={state} onOpenGameSettings={() => openSettings('game')} />
         ) : (
-          <Settings
-            ref={settingsRef}
-            state={state}
-            initialTab={settingsTab}
-            onBack={() => setView('play')}
-          />
+          <fieldset className={styles.settingsGate} disabled={updateDownloading}>
+            <Settings
+              ref={settingsRef}
+              state={state}
+              initialTab={settingsTab}
+              onBack={() => setView('play')}
+            />
+          </fieldset>
         )}
       </main>
     </div>

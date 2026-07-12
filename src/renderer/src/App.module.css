@@ -103,3 +103,12 @@
   min-height: 0;
   overflow: hidden;
 }
+
+.settingsGate {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

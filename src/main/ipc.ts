@@ -36,9 +36,24 @@ export function registerIpc(
       Object.keys(patch).length === 1 &&
       'uiScale' in patch;
     if (!uiScaleOnly) {
-      const restoreDxvk = previous.developer.useDxvk && !updated.developer.useDxvk;
-      if (restoreDxvk) await orchestrator.settingsChanged(true);
-      else void orchestrator.settingsChanged();
+      const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
+      if (dxvkChanged) {
+        try {
+          await orchestrator.settingsChanged(updated.developer.useDxvk);
+        } catch (error) {
+          try {
+            await config.update({ developer: { useDxvk: previous.developer.useDxvk } });
+          } catch (rollbackError) {
+            throw new Error(
+              `${(error as Error).message}; could not restore the previous DXVK/Vulkan setting: ` +
+                (rollbackError as Error).message
+            );
+          }
+          throw error;
+        }
+      } else {
+        void orchestrator.settingsChanged();
+      }
     }
     return updated;
   });

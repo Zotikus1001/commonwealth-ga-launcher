@@ -693,7 +693,7 @@ export class Orchestrator {
     }
   }
 
-  private async restoreDxvkVulkan(): Promise<ActionResult> {
+  private async configureDxvkVulkan(enabled: boolean): Promise<ActionResult> {
     if (PLATFORM !== 'win32') {
       return { ok: false, message: 'DXVK/Vulkan is currently available only on Windows.' };
     }
@@ -705,12 +705,43 @@ export class Orchestrator {
       const install = await validateGameExe(this.config.get().gameExePath);
       this.install = install;
       if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
-      const dxvk = await this.dxvkManager.restore(install);
-      this.patch({ dxvk, phase: 'ready', statusLine: 'Native graphics configuration restored.' });
-      return { ok: true, message: 'The previous graphics and DirectX configuration was restored.' };
+      const initialDetail = enabled
+        ? `Preparing DXVK/Vulkan ${this.state.dxvk.version}…`
+        : 'Restoring the previous Direct3D configuration…';
+      this.patch({
+        dxvk: { ...this.state.dxvk, status: 'preparing', detail: initialDetail },
+        phase: 'checking',
+        statusLine: initialDetail
+      });
+      const dxvk = await this.dxvkManager.prepareForLaunch(
+        install,
+        enabled,
+        ({ transferred, total }) => {
+          const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
+          const detail =
+            percent >= 0
+              ? `Downloading DXVK/Vulkan ${this.state.dxvk.version}… ${percent}%`
+              : `Downloading DXVK/Vulkan ${this.state.dxvk.version}…`;
+          this.patch({
+            dxvk: { ...this.state.dxvk, status: 'preparing', detail },
+            statusLine: detail
+          });
+        }
+      );
+      const statusLine = enabled
+        ? `DXVK/Vulkan ${dxvk.version} is ready.`
+        : 'Native graphics configuration restored.';
+      this.patch({ dxvk, phase: 'ready', statusLine });
+      return {
+        ok: true,
+        message: enabled
+          ? `DXVK/Vulkan ${dxvk.version} is ready.`
+          : 'The previous graphics and DirectX configuration was restored.'
+      };
     } catch (error) {
       const message = (error as Error).message;
-      this.log.error(`DXVK/Vulkan restoration failed: ${message}`);
+      const action = enabled ? 'activation' : 'restoration';
+      this.log.error(`DXVK/Vulkan ${action} failed: ${message}`);
       let dxvk = this.state.dxvk;
       if (this.install) {
         try {
@@ -719,12 +750,15 @@ export class Orchestrator {
           dxvk = {
             ...dxvk,
             status: 'error',
-            detail: `DXVK/Vulkan inspection failed after restoration error: ${(inspectError as Error).message}`
+            detail: `DXVK/Vulkan inspection failed after ${action} error: ${(inspectError as Error).message}`
           };
         }
       }
-      this.patch({ dxvk, phase: 'ready', statusLine: `Could not restore graphics configuration: ${message}` });
-      return { ok: false, message: `Could not restore graphics configuration: ${message}` };
+      const failure = enabled
+        ? `Could not prepare DXVK/Vulkan: ${message}`
+        : `Could not restore graphics configuration: ${message}`;
+      this.patch({ dxvk, phase: 'ready', statusLine: failure });
+      return { ok: false, message: failure };
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();
@@ -765,8 +799,11 @@ export class Orchestrator {
     }
   }
 
-  async settingsChanged(restoreDxvk = false): Promise<void> {
-    if (restoreDxvk) await this.restoreDxvkVulkan();
+  async settingsChanged(dxvkEnabled: boolean | null = null): Promise<void> {
+    if (dxvkEnabled !== null) {
+      const result = await this.configureDxvkVulkan(dxvkEnabled);
+      if (!result.ok) throw new Error(result.message);
+    }
     await this.refresh();
   }
 

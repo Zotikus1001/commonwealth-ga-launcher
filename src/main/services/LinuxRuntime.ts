@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { constants } from 'fs';
-import { access, mkdir, readFile, readdir, stat } from 'fs/promises';
+import { access, mkdir, readFile, readdir, realpath, stat } from 'fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'path';
 import { homedir } from 'os';
 import type {
@@ -219,10 +219,16 @@ async function listProtonRunners(settings: Settings): Promise<LinuxRunnerOption[
   const seen = new Set<string>();
   const push = async (label: string, path: string): Promise<void> => {
     const resolved = await resolveProtonPath(path);
-    if (resolved && !seen.has(resolved)) {
-      seen.add(resolved);
-      runners.push({ label, path: resolved });
+    if (!resolved) return;
+    let identity: string;
+    try {
+      identity = await realpath(join(resolved, 'proton'));
+    } catch {
+      identity = join(resolved, 'proton');
     }
+    if (seen.has(identity)) return;
+    seen.add(identity);
+    runners.push({ label, path: resolved });
   };
 
   if (settings.linux.protonPath) {

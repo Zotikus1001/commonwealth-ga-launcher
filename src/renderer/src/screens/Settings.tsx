@@ -692,11 +692,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                     }
                   />
                   <label htmlFor="linux-gamemode">
-                    <span className={styles.featureName}>Use GameMode</span>
+                    <span className={styles.featureName}>Use Feral GameMode</span>
                     <span className={styles.featureDetail}>
                       {linuxRuntimeOptions.gameModePath
-                        ? `Detected at ${linuxRuntimeOptions.gameModePath}. Applies temporary Linux performance optimizations while the game runs.`
-                        : 'GameMode is not installed or could not be detected.'}
+                        ? 'Temporarily asks Linux to prioritize game performance while Global Agenda runs. Normal system settings are restored after the game closes.'
+                        : 'Optional. Feral GameMode was not detected; install it to let Linux temporarily prioritize the game while it runs.'}
                     </span>
                   </label>
                 </div>

@@ -10,6 +10,7 @@ export interface GpuMemoryDependencies {
   run(command: string, args: string[]): Promise<string>;
   readText(path: string): Promise<string>;
   listDirectory(path: string): Promise<string[]>;
+  getWindowsGpuInfo?(): Promise<unknown>;
 }
 
 export interface GpuMemorySelection {
@@ -39,7 +40,18 @@ $result = foreach ($controller in $controllers) {
     if ($null -ne $qword -and [uint64]$qword -gt $bytes) { $bytes = [uint64]$qword }
     if ($null -ne $dword -and [uint64]$dword -gt $bytes) { $bytes = [uint64]$dword }
   }
-  [pscustomobject]@{ bytes = $bytes.ToString() }
+  $vendorId = $null
+  $deviceId = $null
+  $subSysId = $null
+  if ($pnp -match 'VEN_([0-9A-F]{4})') { $vendorId = [Convert]::ToUInt32($Matches[1], 16) }
+  if ($pnp -match 'DEV_([0-9A-F]{4})') { $deviceId = [Convert]::ToUInt32($Matches[1], 16) }
+  if ($pnp -match 'SUBSYS_([0-9A-F]{8})') { $subSysId = [Convert]::ToUInt32($Matches[1], 16) }
+  [pscustomobject]@{
+    bytes = $bytes.ToString()
+    vendorId = $vendorId
+    deviceId = $deviceId
+    subSysId = $subSysId
+  }
 }
 @($result) | ConvertTo-Json -Compress
 `;
@@ -60,7 +72,11 @@ const defaultDependencies: GpuMemoryDependencies = {
       );
     }),
   readText: (path) => readFile(path, { encoding: 'utf-8' }),
-  listDirectory: (path) => readdir(path)
+  listDirectory: (path) => readdir(path),
+  getWindowsGpuInfo: async () => {
+    const { app } = await import('electron');
+    return app.getGPUInfo('complete');
+  }
 };
 
 function finitePositive(value: unknown): number | null {
@@ -74,13 +90,79 @@ export function selectTexturePoolMb(vramMb: number | null): number {
   return Math.max(FALLBACK_TEXTURE_POOL_MB, Math.min(MAX_TEXTURE_POOL_MB, quarter));
 }
 
-export function parseWindowsGpuBytes(output: string, adapterIndex: number): number | null {
+interface WindowsGpuIdentity {
+  active: boolean;
+  vendorId: number;
+  deviceId: number;
+  subSysId: number | null;
+}
+
+interface WindowsGpuMemory extends Omit<WindowsGpuIdentity, 'active'> {
+  bytes: number;
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseWindowsGpuIdentities(value: unknown): WindowsGpuIdentity[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const devices = (value as { gpuDevice?: unknown }).gpuDevice;
+  if (!Array.isArray(devices)) return [];
+  const parsed = devices.flatMap((device): WindowsGpuIdentity[] => {
+    if (!device || typeof device !== 'object' || Array.isArray(device)) return [];
+    const entry = device as Record<string, unknown>;
+    const vendorId = nonNegativeInteger(entry.vendorId);
+    const deviceId = nonNegativeInteger(entry.deviceId);
+    if (vendorId === null || deviceId === null) return [];
+    return [{
+      active: entry.active === true,
+      vendorId,
+      deviceId,
+      subSysId: nonNegativeInteger(entry.subSysId)
+    }];
+  });
+  return [...parsed.filter((device) => device.active), ...parsed.filter((device) => !device.active)];
+}
+
+function matchesGpuIdentity(memory: WindowsGpuMemory, identity: WindowsGpuIdentity): boolean {
+  return (
+    memory.vendorId === identity.vendorId &&
+    memory.deviceId === identity.deviceId &&
+    (identity.subSysId === null ||
+      memory.subSysId === null ||
+      memory.subSysId === identity.subSysId)
+  );
+}
+
+export function parseWindowsGpuBytes(
+  output: string,
+  adapterIndex: number,
+  gpuInfo?: unknown
+): number | null {
   try {
     const parsed = JSON.parse(output) as unknown;
     const entries = Array.isArray(parsed) ? parsed : [parsed];
-    const entry = entries[adapterIndex];
-    if (!entry || typeof entry !== 'object') return null;
-    return finitePositive((entry as { bytes?: unknown }).bytes);
+    const memory = entries.flatMap((entry): WindowsGpuMemory[] => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+      const value = entry as Record<string, unknown>;
+      const bytes = finitePositive(value.bytes);
+      const vendorId = nonNegativeInteger(value.vendorId);
+      const deviceId = nonNegativeInteger(value.deviceId);
+      if (!bytes) return [];
+      return [{
+        bytes,
+        vendorId: vendorId ?? 0,
+        deviceId: deviceId ?? 0,
+        subSysId: nonNegativeInteger(value.subSysId)
+      }];
+    });
+    const identities = parseWindowsGpuIdentities(gpuInfo);
+    if (identities.length === 0) return memory[adapterIndex]?.bytes ?? null;
+    const selected = identities[adapterIndex];
+    if (!selected) return null;
+    return memory.find((entry) => matchesGpuIdentity(entry, selected))?.bytes ?? null;
   } catch {
     return null;
   }
@@ -161,16 +243,22 @@ export class GpuMemoryDetector {
     let source: GpuMemorySelection['source'] = 'fallback';
     try {
       if (this.platform === 'win32') {
-        const output = await this.dependencies.run('powershell.exe', [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-Command',
-          WINDOWS_GPU_QUERY
+        const [output, gpuInfo] = await Promise.all([
+          this.dependencies.run('powershell.exe', [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            WINDOWS_GPU_QUERY
+          ]),
+          this.dependencies.getWindowsGpuInfo?.().catch((error) => {
+            this.log.warn(`GPU adapter order detection failed: ${(error as Error).message}`);
+            return null;
+          }) ?? Promise.resolve(null)
         ]);
-        bytes = parseWindowsGpuBytes(output, selectedAdapter);
+        bytes = parseWindowsGpuBytes(output, selectedAdapter, gpuInfo);
         if (bytes) source = 'windows';
       } else if (this.platform === 'linux') {
         const detected = await linuxGpuBytes(selectedAdapter, this.dependencies);

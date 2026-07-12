@@ -33,17 +33,39 @@ describe('Windows GPU memory parsing', () => {
     expect(parseWindowsGpuBytes(output, 1)).toBe(8_589_934_592);
     expect(parseWindowsGpuBytes(output, 2)).toBeNull();
   });
+
+  it('matches the primary game adapter by PCI identity instead of WMI order', () => {
+    const output = JSON.stringify([
+      { bytes: '17171480576', vendorId: 4318, deviceId: 9986, subSysId: 1360532578 },
+      { bytes: '34190917632', vendorId: 4318, deviceId: 11141, subSysId: 1392579682 }
+    ]);
+    const gpuInfo = {
+      gpuDevice: [
+        { active: false, vendorId: 4318, deviceId: 9986, subSysId: 1360532578 },
+        { active: true, vendorId: 4318, deviceId: 11141, subSysId: 1392579682 }
+      ]
+    };
+
+    expect(parseWindowsGpuBytes(output, 0, gpuInfo)).toBe(34_190_917_632);
+    expect(parseWindowsGpuBytes(output, 1, gpuInfo)).toBe(17_171_480_576);
+  });
 });
 
 describe('GpuMemoryDetector', () => {
   it('selects a Windows adapter and derives its texture budget', async () => {
     const dependencies: GpuMemoryDependencies = {
       run: vi.fn().mockResolvedValue(JSON.stringify([
-        { bytes: '2147483648' },
-        { bytes: '8589934592' }
+        { bytes: '2147483648', vendorId: 4318, deviceId: 1, subSysId: 10 },
+        { bytes: '8589934592', vendorId: 4318, deviceId: 2, subSysId: 20 }
       ])),
       readText: vi.fn(),
-      listDirectory: vi.fn()
+      listDirectory: vi.fn(),
+      getWindowsGpuInfo: vi.fn().mockResolvedValue({
+        gpuDevice: [
+          { active: true, vendorId: 4318, deviceId: 1, subSysId: 10 },
+          { active: false, vendorId: 4318, deviceId: 2, subSysId: 20 }
+        ]
+      })
     };
     const selected = await new GpuMemoryDetector('win32', logger(), dependencies).select(1);
     expect(selected).toMatchObject({

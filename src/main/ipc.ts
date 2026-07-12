@@ -37,6 +37,8 @@ export function registerIpc(
       'uiScale' in patch;
     if (!uiScaleOnly) {
       const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
+      const clientPatchesChanged =
+        previous.developer.useClientPatches !== updated.developer.useClientPatches;
       if (dxvkChanged) {
         try {
           await orchestrator.settingsChanged(updated.developer.useDxvk);
@@ -51,7 +53,25 @@ export function registerIpc(
           }
           throw error;
         }
-      } else {
+      }
+      if (clientPatchesChanged) {
+        try {
+          await orchestrator.clientPatchesChanged(updated.developer.useClientPatches);
+        } catch (error) {
+          try {
+            await config.update({
+              developer: { useClientPatches: previous.developer.useClientPatches }
+            });
+          } catch (rollbackError) {
+            throw new Error(
+              `${(error as Error).message}; could not restore the previous client-patch setting: ` +
+                (rollbackError as Error).message
+            );
+          }
+          throw error;
+        }
+      }
+      if (!dxvkChanged && !clientPatchesChanged) {
         void orchestrator.settingsChanged();
       }
     }

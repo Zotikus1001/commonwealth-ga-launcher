@@ -31,6 +31,7 @@ import {
 } from './services/IniFixes';
 import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
 import { GpuMemoryDetector } from './services/GpuMemory';
+import { ClientPatchManager } from './services/ClientPatchManager';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -62,6 +63,7 @@ export class Orchestrator {
   private readonly gameLauncher: GameLauncher;
   private readonly dxvkManager: DxvkManager;
   private readonly gpuMemoryDetector: GpuMemoryDetector;
+  private readonly clientPatchManager: ClientPatchManager;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -85,6 +87,7 @@ export class Orchestrator {
     this.gameLauncher = new GameLauncher(log);
     this.dxvkManager = new DxvkManager(app.getPath('userData'), log);
     this.gpuMemoryDetector = new GpuMemoryDetector(PLATFORM, log);
+    this.clientPatchManager = new ClientPatchManager(app.getPath('userData'), log);
     const launcherUpdate = launcherUpdater.getSnapshot();
     this.state = {
       phase: 'init',
@@ -570,6 +573,31 @@ export class Orchestrator {
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
 
+      let clientPatchEnvironment: NodeJS.ProcessEnv = {};
+      if (settings.developer.useClientPatches) {
+        this.patch({ statusLine: 'Checking experimental client patches…' });
+        try {
+          clientPatchEnvironment = await this.clientPatchManager.prepareForLaunch(
+            this.install,
+            PLATFORM,
+            ({ transferred, total }) => {
+              const percent = total > 0
+                ? Math.min(100, Math.round((transferred / total) * 100))
+                : -1;
+              this.patch({
+                statusLine: percent >= 0
+                  ? `Downloading experimental client patches… ${percent}%`
+                  : 'Downloading experimental client patches…'
+              });
+            }
+          );
+        } catch (error) {
+          this.log.warn(
+            `client patches unavailable; continuing without them: ${(error as Error).message}`
+          );
+        }
+      }
+
       let useDxvk = false;
       if (PLATFORM === 'win32') {
         useDxvk = settings.developer.useDxvk;
@@ -622,7 +650,10 @@ export class Orchestrator {
         PLATFORM,
         developerLaunch,
         this.linuxRuntime,
-        useDxvk ? this.dxvkManager.launchEnvironment() : {}
+        {
+          ...clientPatchEnvironment,
+          ...(useDxvk ? this.dxvkManager.launchEnvironment() : {})
+        }
       );
       this.scheduleAutoCloseAfterLaunch();
       this.scheduleLaunchCooldown();
@@ -774,6 +805,52 @@ export class Orchestrator {
     }
   }
 
+  private async configureClientPatches(enabled: boolean): Promise<ActionResult> {
+    if (this.busy || this.state.launchCoolingDown) {
+      return { ok: false, message: 'The launcher is busy. Try again shortly.' };
+    }
+    this.busy = true;
+    try {
+      const install = await validateGameExe(this.config.get().gameExePath);
+      this.install = install;
+      if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      this.patch({
+        phase: 'checking',
+        statusLine: enabled
+          ? 'Checking experimental client patches…'
+          : 'Removing experimental client patches…'
+      });
+      if (enabled) {
+        await this.clientPatchManager.prepareForLaunch(
+          install,
+          PLATFORM,
+          ({ transferred, total }) => {
+            const percent = total > 0
+              ? Math.min(100, Math.round((transferred / total) * 100))
+              : -1;
+            this.patch({
+              statusLine: percent >= 0
+                ? `Downloading experimental client patches… ${percent}%`
+                : 'Downloading experimental client patches…'
+            });
+          }
+        );
+      } else {
+        await this.clientPatchManager.disable(install);
+      }
+      this.patch({ phase: 'ready', statusLine: 'Ready.' });
+      return { ok: true, message: enabled ? 'Client patches enabled.' : 'Client patches disabled.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`experimental client patch change failed: ${message}`);
+      this.patch({ phase: 'ready', statusLine: `Client patch change failed: ${message}` });
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
   async selectServer(id: string): Promise<void> {
     const settings = this.config.get();
     if (
@@ -813,6 +890,12 @@ export class Orchestrator {
       const result = await this.configureDxvkVulkan(dxvkEnabled);
       if (!result.ok) throw new Error(result.message);
     }
+    await this.refresh();
+  }
+
+  async clientPatchesChanged(enabled: boolean): Promise<void> {
+    const result = await this.configureClientPatches(enabled);
+    if (!result.ok) throw new Error(result.message);
     await this.refresh();
   }
 

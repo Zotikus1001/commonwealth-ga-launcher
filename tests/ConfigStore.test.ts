@@ -26,7 +26,32 @@ describe('DXVK/Vulkan settings migration', () => {
       windowed: false,
       resolutionWidth: 1920,
       resolutionHeight: 1080,
-      useDxvk: false
+      useDxvk: false,
+      useClientPatches: false
+    });
+  });
+
+  it('adds disabled experimental client patches without changing existing settings', () => {
+    const previous = defaultSettings();
+    const schema10 = {
+      ...previous,
+      schemaVersion: 10,
+      developer: {
+        enabled: true,
+        windowed: false,
+        resolutionWidth: 1600,
+        resolutionHeight: 900,
+        useDxvk: true
+      }
+    };
+
+    expect(migrateStoredSettings(schema10).settings.developer).toEqual({
+      enabled: true,
+      windowed: false,
+      resolutionWidth: 1600,
+      resolutionHeight: 900,
+      useDxvk: true,
+      useClientPatches: false
     });
   });
 });

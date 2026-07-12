@@ -95,6 +95,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [discarding, setDiscarding] = useState(false);
   const [developerModeSaving, setDeveloperModeSaving] = useState(false);
   const [developerModeError, setDeveloperModeError] = useState<string | null>(null);
+  const [clientPatchesSaving, setClientPatchesSaving] = useState(false);
+  const [clientPatchesError, setClientPatchesError] = useState<string | null>(null);
   const aboutClicks = useRef<number[]>([]);
 
   const isLinux = window.api.platform === 'linux';
@@ -312,6 +314,41 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       setDeveloperModeError(error instanceof Error ? error.message : String(error));
     } finally {
       setDeveloperModeSaving(false);
+    }
+  };
+
+  const saveClientPatches = async (enabled: boolean): Promise<void> => {
+    if (!draft || clientPatchesSaving) return;
+    const previous = draft.developer.useClientPatches;
+    setDraft((current) =>
+      current
+        ? { ...current, developer: { ...current.developer, useClientPatches: enabled } }
+        : current
+    );
+    setClientPatchesSaving(true);
+    setClientPatchesError(null);
+    try {
+      const updated = await window.api.updateSettings({ developer: { useClientPatches: enabled } });
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              developer: {
+                ...current.developer,
+                useClientPatches: updated.developer.useClientPatches
+              }
+            }
+          : current
+      );
+    } catch (error) {
+      setDraft((current) =>
+        current
+          ? { ...current, developer: { ...current.developer, useClientPatches: previous } }
+          : current
+      );
+      setClientPatchesError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setClientPatchesSaving(false);
     }
   };
 
@@ -929,6 +966,9 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             modeSaving={developerModeSaving}
             modeError={developerModeError}
             onModeChange={(enabled) => void saveDeveloperMode(enabled)}
+            clientPatchesSaving={clientPatchesSaving}
+            clientPatchesError={clientPatchesError}
+            onClientPatchesChange={(enabled) => void saveClientPatches(enabled)}
           />
         )}
 
@@ -947,7 +987,13 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             </span>
             <button
               className={styles.saveButton}
-              disabled={saving || mapSaving || uiScaleSaving || developerModeSaving}
+              disabled={
+                saving ||
+                mapSaving ||
+                uiScaleSaving ||
+                developerModeSaving ||
+                clientPatchesSaving
+              }
               onClick={() => void save()}
             >
               {saving ? 'Saving…' : 'Save & Re-check'}
@@ -1260,7 +1306,10 @@ function DeveloperTab({
   edit,
   modeSaving,
   modeError,
-  onModeChange
+  onModeChange,
+  clientPatchesSaving,
+  clientPatchesError,
+  onClientPatchesChange
 }: {
   state: LauncherState;
   settings: SettingsModel;
@@ -1268,6 +1317,9 @@ function DeveloperTab({
   modeSaving: boolean;
   modeError: string | null;
   onModeChange: (enabled: boolean) => void;
+  clientPatchesSaving: boolean;
+  clientPatchesError: string | null;
+  onClientPatchesChange: (enabled: boolean) => void;
 }): JSX.Element {
   return (
     <section className={styles.section}>
@@ -1357,6 +1409,27 @@ function DeveloperTab({
 
           {state.platform === 'win32' && (
             <DxvkVulkanPanel state={state} settings={settings} edit={edit} />
+          )}
+
+          <div className="panel-title">Experimental Client Patches</div>
+          <div className={styles.featureToggle}>
+            <input
+              id="developer-client-patches"
+              type="checkbox"
+              checked={settings.developer.useClientPatches}
+              disabled={clientPatchesSaving}
+              onChange={(event) => onClientPatchesChange(event.target.checked)}
+            />
+            <label htmlFor="developer-client-patches">
+              <span className={styles.featureName}>Enable Experimental Client Patches</span>
+              <span className={styles.featureDetail}>
+                Installs performance and stability fixes and checks for newer patches before Play.
+                Restart the game after changing this option.
+              </span>
+            </label>
+          </div>
+          {clientPatchesError && (
+            <p className={styles.invalid}>{`Could not change client patches: ${clientPatchesError}`}</p>
           )}
 
         </>

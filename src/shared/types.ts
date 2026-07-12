@@ -106,6 +106,8 @@ export interface Settings {
     resolutionHeight: number;
     /** Experimental Windows option configured in Dev but applied to every launch mode. */
     useDxvk: boolean;
+    /** Experimental launcher-managed client patches, applied to every launch mode when enabled. */
+    useClientPatches: boolean;
   };
 }
 

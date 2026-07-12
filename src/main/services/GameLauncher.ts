@@ -75,7 +75,8 @@ export class GameLauncher {
    *  - Linux/Wine: spawn <wine> <exePath> with the resolved prefix.
    *  - Linux/Proton: spawn <umu-run> <exePath> with WINEPREFIX and PROTONPATH.
    *    Optional GameMode wraps either runner without changing its arguments.
-   *    No dinput8 override is set while client-DLL distribution is disabled.
+   *    Wine receives the launcher-managed dinput8 override only for a successfully prepared Commonwealth launch,
+   *    without changing the user's prefix configuration globally.
    *    The exe path stays NATIVE — Wine maps it via the Z: drive; no winepath translation.
    *    With wineDebug on, Wine keeps default logging and stderr is piped into the launcher log
    *    (that requires staying attached, so debug runs are not detached).
@@ -87,7 +88,7 @@ export class GameLauncher {
     platform: NodeJS.Platform,
     developerLaunch: boolean,
     linuxRuntime: LinuxRuntimeInspection | null = null,
-    windowsEnvironment: NodeJS.ProcessEnv = {}
+    launchEnvironment: NodeJS.ProcessEnv = {}
   ): void {
     const args = buildGameArgs(settings, host, developerLaunch);
     let child: ChildProcess;
@@ -96,7 +97,7 @@ export class GameLauncher {
       this.log.info(`launching ${settings.gameExePath} with managed connection arguments`);
       child = spawn(settings.gameExePath, args, {
         cwd: binariesDir,
-        env: { ...process.env, ...windowsEnvironment },
+        env: { ...process.env, ...launchEnvironment },
         detached: true,
         stdio: 'ignore'
       });
@@ -116,7 +117,7 @@ export class GameLauncher {
       );
       child = spawn(launch.command, launch.args, {
         cwd: binariesDir,
-        env: { ...process.env, ...launch.env },
+        env: { ...process.env, ...launch.env, ...launchEnvironment },
         detached: !settings.linux.wineDebug,
         stdio: settings.linux.wineDebug ? ['ignore', 'pipe', 'pipe'] : 'ignore'
       });

@@ -47,7 +47,15 @@ describe('Linux Proton discovery', () => {
     await symlink(steam, join(root, '.steam', 'root'), process.platform === 'win32' ? 'junction' : 'dir');
     await symlink(steam, join(root, '.steam', 'steam'), process.platform === 'win32' ? 'junction' : 'dir');
 
-    const options = await listLinuxRuntimeOptions(settings(), {
+    const configured = settings();
+    configured.linux.protonPath = join(
+      root,
+      '.steam',
+      'root',
+      'compatibilitytools.d',
+      'GE-Proton-Test'
+    );
+    const options = await listLinuxRuntimeOptions(configured, {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn()

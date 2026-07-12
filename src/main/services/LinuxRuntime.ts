@@ -217,7 +217,7 @@ async function listWineRunners(settings: Settings): Promise<LinuxRunnerOption[]>
 async function listProtonRunners(settings: Settings): Promise<LinuxRunnerOption[]> {
   const runners: LinuxRunnerOption[] = [];
   const seen = new Set<string>();
-  const push = async (label: string, path: string): Promise<void> => {
+  const push = async (label: string | null, path: string): Promise<void> => {
     const resolved = await resolveProtonPath(path);
     if (!resolved) return;
     let identity: string;
@@ -228,11 +228,11 @@ async function listProtonRunners(settings: Settings): Promise<LinuxRunnerOption[
     }
     if (seen.has(identity)) return;
     seen.add(identity);
-    runners.push({ label, path: resolved });
+    runners.push({ label: label ?? basename(resolved), path: resolved });
   };
 
   if (settings.linux.protonPath) {
-    await push(`Configured: ${settings.linux.protonPath}`, settings.linux.protonPath);
+    await push(null, settings.linux.protonPath);
   }
   const compatibilityParents = linuxSteamRoots().map((root) => join(root, 'compatibilitytools.d'));
   const steamToolParents = (await listSteamLibraries(settings.gameExePath)).map((library) =>

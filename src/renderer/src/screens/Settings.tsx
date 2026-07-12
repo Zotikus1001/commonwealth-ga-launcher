@@ -869,8 +869,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               <div className={styles.launcherScaleCopy}>
                 <span className={styles.featureName}>Launcher UI Scale</span>
                 <span className={styles.featureDetail}>
-                  Changes the size of launcher text and controls. The new scale is saved and
-                  applied immediately.
+                  Changes the size of launcher text and controls.
                 </span>
               </div>
               <div className={styles.launcherScaleControl}>
@@ -1279,8 +1278,7 @@ function DeveloperTab({
         <label htmlFor="developer-mode">
           <span className={styles.featureName}>Enable Developer Mode</span>
           <span className={styles.featureDetail}>
-            Allows multiple game instances and enables Dev Launch display settings. This setting
-            is saved immediately.
+            Allows multiple game instances and enables Dev Launch display settings.
           </span>
         </label>
       </div>

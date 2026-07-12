@@ -9,6 +9,7 @@ import {
 } from '../src/main/services/ClientPatchManager';
 import type { GameInstall } from '../src/main/services/InstallLocator';
 import type { Log } from '../src/main/services/Log';
+import { managedInstallStatePath } from '../src/main/services/ManagedInstallState';
 
 const roots: string[] = [];
 
@@ -104,11 +105,38 @@ describe('ClientPatchManager', () => {
     expect(environment).toEqual({});
     expect(await readFile(join(install.binariesDir, 'dinput8.dll'))).toEqual(contents);
     const marker = JSON.parse(
-      await readFile(join(install.binariesDir, '.commonwealth-client-patches.json'), {
+      await readFile(managedInstallStatePath(userData, install, 'client-patches.json'), {
         encoding: 'utf-8'
       })
     ) as { phase: string; revision: string };
     expect(marker).toMatchObject({ phase: 'active', revision: '1' });
+    await expect(
+      readFile(join(install.binariesDir, '.commonwealth-client-patches.json'))
+    ).rejects.toThrow();
+  });
+
+  it('migrates a legacy game-folder marker into launcher state', async () => {
+    const { userData, install } = await fixture();
+    const contents = Buffer.from('patch payload v1');
+    const definitionV1 = definition('1', contents);
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definitionV1,
+      downloader(contents),
+      unavailableReleases
+    );
+    await manager.prepareForLaunch(install, 'win32');
+    const statePath = managedInstallStatePath(userData, install, 'client-patches.json');
+    const marker = await readFile(statePath, { encoding: 'utf-8' });
+    await rm(statePath);
+    const legacyPath = join(install.binariesDir, '.commonwealth-client-patches.json');
+    await writeFile(legacyPath, marker, { encoding: 'utf-8' });
+
+    await manager.prepareForLaunch(install, 'win32');
+
+    expect(await readFile(statePath, { encoding: 'utf-8' })).toBe(marker);
+    await expect(readFile(legacyPath)).rejects.toThrow();
   });
 
   it('never overwrites an unmanaged dinput8.dll', async () => {
@@ -169,7 +197,7 @@ describe('ClientPatchManager', () => {
 
     await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
     await expect(
-      readFile(join(install.binariesDir, '.commonwealth-client-patches.json'))
+      readFile(managedInstallStatePath(userData, install, 'client-patches.json'))
     ).rejects.toThrow();
   });
 
@@ -273,7 +301,7 @@ describe('ClientPatchManager', () => {
       unavailableReleases
     ).prepareForLaunch(install, 'win32');
     await writeFile(
-      join(install.binariesDir, '.commonwealth-client-patches.json'),
+      managedInstallStatePath(userData, install, 'client-patches.json'),
       `${JSON.stringify({
         schemaVersion: 1,
         owner: 'commonwealth-ga-launcher',

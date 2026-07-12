@@ -1,5 +1,5 @@
 import { constants } from 'fs';
-import { access, copyFile, readFile, rename, rm, stat, writeFile } from 'fs/promises';
+import { access, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, join } from 'path';
 import { isLoginMap, LOGIN_MAP_OPTIONS, type LoginMap } from '@shared/loginMaps';
 import { isFpsLimit } from '@shared/fpsLimit';
@@ -1165,7 +1165,8 @@ function verifyOverhealingSection(
 
 async function patchIniFile(
   path: string,
-  options: IniPatchOptions
+  options: IniPatchOptions,
+  backupDirectory: string
 ): Promise<{ changed: boolean; backupPath: string | null }> {
   const original = await readFile(path, { encoding: 'utf-8' });
   let patchedText = original;
@@ -1219,16 +1220,48 @@ async function patchIniFile(
     }
   };
 
+  const legacyBackupPath = `${path}.commonwealth-backup`;
+  const backupPath = join(backupDirectory, `${basename(path)}.commonwealth-backup`);
+  let managedBackupExists = false;
+  try {
+    managedBackupExists = (await stat(backupPath)).isFile();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  let legacyBackupExists = false;
+  try {
+    legacyBackupExists = (await stat(legacyBackupPath)).isFile();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  if (legacyBackupExists) {
+    if (!managedBackupExists) {
+      await mkdir(backupDirectory, { recursive: true });
+      try {
+        await copyFile(legacyBackupPath, backupPath, constants.COPYFILE_EXCL);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      managedBackupExists = (await stat(backupPath)).isFile();
+      if (!managedBackupExists) {
+        throw new Error(`${backupPath} exists but is not a regular file`);
+      }
+    }
+    await rm(legacyBackupPath, { force: true });
+  }
+
   if (!changed) {
     verify(patchedText);
     return { changed: false, backupPath: null };
   }
 
-  const backupPath = `${path}.commonwealth-backup`;
-  try {
-    await copyFile(path, backupPath, constants.COPYFILE_EXCL);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  if (!managedBackupExists) {
+    await mkdir(backupDirectory, { recursive: true });
+    try {
+      await copyFile(path, backupPath, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
   }
 
   const temporaryPath = `${path}.commonwealth-tmp-${process.pid}`;
@@ -1246,7 +1279,11 @@ async function patchIniFile(
   return { changed: true, backupPath };
 }
 
-async function applyIniEdits(edits: IniFileEdit[], log: IniLog): Promise<IniRepairResult> {
+async function applyIniEdits(
+  edits: IniFileEdit[],
+  log: IniLog,
+  backupDirectory: string
+): Promise<IniRepairResult> {
   const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
   for (const { path, required, options } of edits) {
     try {
@@ -1260,7 +1297,7 @@ async function applyIniEdits(edits: IniFileEdit[], log: IniLog): Promise<IniRepa
     }
 
     try {
-      const patched = await patchIniFile(path, options);
+      const patched = await patchIniFile(path, options, backupDirectory);
       result.checkedFiles.push(path);
       if (patched.changed) result.changedFiles.push(path);
       if (patched.backupPath) result.backupFiles.push(patched.backupPath);
@@ -1284,6 +1321,7 @@ export async function applyClientPatch(
   install: GameInstall,
   id: ClientPatchId,
   log: Log,
+  backupDirectory: string,
   texturePoolMb = FALLBACK_TEXTURE_POOL_MB
 ): Promise<IniRepairResult> {
   if (
@@ -1315,7 +1353,8 @@ export async function applyClientPatch(
         options
       }
     ],
-    log
+    log,
+    backupDirectory
   );
   log.info(
     `client patch: ${id} verified in ${result.checkedFiles.length} file(s); ` +
@@ -1327,7 +1366,8 @@ export async function applyClientPatch(
 async function ensureLoginMap(
   install: GameInstall,
   loginMap: LoginMap,
-  log: Log
+  log: Log,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
   if (!isLoginMap(loginMap)) throw new Error(`Unsupported login map: ${loginMap}`);
   const configDir = install.configDir;
@@ -1339,14 +1379,16 @@ async function ensureLoginMap(
         options: { kind: 'login-map', loginMap }
       }
     ],
-    log
+    log,
+    backupDirectory
   );
 }
 
 async function ensureOverhealing(
   install: GameInstall,
   showOverhealing: boolean,
-  log: Log
+  log: Log,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
   if (typeof showOverhealing !== 'boolean') throw new Error('Invalid overhealing setting');
   const configDir = install.configDir;
@@ -1364,7 +1406,8 @@ async function ensureOverhealing(
         options: { kind: 'overhealing', suppressOverhealing }
       }
     ],
-    log
+    log,
+    backupDirectory
   );
 }
 
@@ -1372,7 +1415,8 @@ async function ensureFpsLimit(
   install: GameInstall,
   enabled: boolean,
   limit: number,
-  log: Log
+  log: Log,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
   if (typeof enabled !== 'boolean' || !isFpsLimit(limit)) {
     throw new Error('Invalid FPS limit setting');
@@ -1389,7 +1433,8 @@ async function ensureFpsLimit(
           required,
           options: { kind: 'fps-limit', limit } as const
         })),
-        log
+        log,
+        backupDirectory
       )
     : { checkedFiles: [], changedFiles: [], backupFiles: [] };
   const smoothingResult = await applyIniEdits(
@@ -1398,14 +1443,16 @@ async function ensureFpsLimit(
       required,
       options: { kind: 'fps-smoothing', enabled } as const
     })),
-    log
+    log,
+    backupDirectory
   );
   return mergeRepairResults([maximumResult, smoothingResult]);
 }
 
 export async function ensureDxvkRenderer(
   install: GameInstall,
-  log: IniLog
+  log: IniLog,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
   const result = await applyIniEdits(
     [
@@ -1415,7 +1462,8 @@ export async function ensureDxvkRenderer(
         options: { kind: 'dxvk-renderer' }
       }
     ],
-    log
+    log,
+    backupDirectory
   );
   log.info(
     `DXVK/Vulkan renderer: AllowD3D10=False verified; ${result.changedFiles.length} file(s) changed`
@@ -1433,7 +1481,8 @@ export async function readDxvkRendererSnapshot(
 export async function restoreDxvkRenderer(
   install: GameInstall,
   snapshot: DxvkRendererSnapshot,
-  log: IniLog
+  log: IniLog,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
   const result = await applyIniEdits(
     [
@@ -1443,7 +1492,8 @@ export async function restoreDxvkRenderer(
         options: { kind: 'dxvk-renderer-restore', snapshot }
       }
     ],
-    log
+    log,
+    backupDirectory
   );
   log.info(
     `DXVK/Vulkan renderer: previous DirectX setting restored; ` +
@@ -1460,18 +1510,36 @@ export async function ensureClientConfiguration(
   fpsLimitEnabled: boolean,
   fpsLimit: number,
   texturePoolMb: number,
-  log: Log
+  log: Log,
+  backupDirectory: string
 ): Promise<IniRepairResult> {
-  const networkResult = await applyClientPatch(install, 'high-fps-movement-stability', log);
+  const networkResult = await applyClientPatch(
+    install,
+    'high-fps-movement-stability',
+    log,
+    backupDirectory
+  );
   const performanceResult = await applyClientPatch(
     install,
     'adaptive-client-performance',
     log,
+    backupDirectory,
     texturePoolMb
   );
-  const loginMapResult = await ensureLoginMap(install, loginMap, log);
-  const overhealingResult = await ensureOverhealing(install, showOverhealing, log);
-  const fpsResult = await ensureFpsLimit(install, fpsLimitEnabled, fpsLimit, log);
+  const loginMapResult = await ensureLoginMap(install, loginMap, log, backupDirectory);
+  const overhealingResult = await ensureOverhealing(
+    install,
+    showOverhealing,
+    log,
+    backupDirectory
+  );
+  const fpsResult = await ensureFpsLimit(
+    install,
+    fpsLimitEnabled,
+    fpsLimit,
+    log,
+    backupDirectory
+  );
   const result = mergeRepairResults([
     networkResult,
     performanceResult,

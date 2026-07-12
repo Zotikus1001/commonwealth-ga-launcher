@@ -6,8 +6,7 @@ import {
   mkdir,
   readFile,
   rename,
-  rm,
-  writeFile
+  rm
 } from 'fs/promises';
 import { join } from 'path';
 import { x as extractTar } from 'tar';
@@ -23,6 +22,12 @@ import {
 } from './IniFixes';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
+import {
+  managedInstallStatePath,
+  managedIniBackupDirectory,
+  readMigratedManagedState,
+  writeManagedState
+} from './ManagedInstallState';
 
 export const DXVK_ARCHIVE_DLL_NAMES = [
   'd3d9.dll',
@@ -64,8 +69,9 @@ interface DxvkMarker {
   };
 }
 
-const MARKER_NAME = '.commonwealth-dxvk.json';
-const MARKER_TEMP_NAME = '.commonwealth-dxvk.json.tmp';
+const LEGACY_MARKER_NAME = '.commonwealth-dxvk.json';
+const LEGACY_MARKER_TEMP_NAME = '.commonwealth-dxvk.json.tmp';
+const STATE_FILE_NAME = 'dxvk.json';
 const BACKUP_SUFFIX = '.commonwealth-original';
 const PAYLOAD_DIRECTORY = 'payload';
 const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
@@ -240,7 +246,7 @@ export class DxvkManager {
   readonly stateCacheDir: string;
 
   constructor(
-    userDataDir: string,
+    private readonly userDataDir: string,
     private readonly log: Pick<Log, 'info' | 'warn' | 'error'>,
     private readonly definition: DxvkDefinition = DEFAULT_DEFINITION
   ) {
@@ -258,23 +264,26 @@ export class DxvkManager {
   }
 
   private markerPath(install: GameInstall): string {
-    return join(install.binariesDir, MARKER_NAME);
+    return managedInstallStatePath(this.userDataDir, install, STATE_FILE_NAME);
+  }
+
+  private legacyMarkerPath(install: GameInstall): string {
+    return join(install.binariesDir, LEGACY_MARKER_NAME);
   }
 
   private async readMarker(install: GameInstall): Promise<DxvkMarker | null> {
-    try {
-      const raw = await readFile(this.markerPath(install), { encoding: 'utf-8' });
-      return parseMarker(JSON.parse(raw) as unknown);
-    } catch (error) {
-      if (isMissing(error)) return null;
-      throw error;
-    }
+    const raw = await readMigratedManagedState(
+      this.markerPath(install),
+      this.legacyMarkerPath(install)
+    );
+    return raw === null ? null : parseMarker(JSON.parse(raw) as unknown);
   }
 
   private async writeMarker(install: GameInstall, marker: DxvkMarker): Promise<void> {
-    const temp = join(install.binariesDir, MARKER_TEMP_NAME);
-    await writeFile(temp, `${JSON.stringify(marker, null, 2)}\n`, { encoding: 'utf-8' });
-    await rename(temp, this.markerPath(install));
+    await writeManagedState(
+      this.markerPath(install),
+      `${JSON.stringify(marker, null, 2)}\n`
+    );
   }
 
   private async hasAnyBackups(install: GameInstall): Promise<boolean> {
@@ -506,7 +515,11 @@ export class DxvkManager {
     };
     await this.writeMarker(install, marker);
     try {
-      await ensureDxvkRenderer(install, this.log);
+      await ensureDxvkRenderer(
+        install,
+        this.log,
+        managedIniBackupDirectory(this.userDataDir, install)
+      );
       if ((await readRendererSetting(install.configDir)) !== 'directx-9') {
         throw new Error('Global Agenda could not be switched to DirectX 9 for DXVK/Vulkan.');
       }
@@ -589,10 +602,15 @@ export class DxvkManager {
       await rm(join(install.binariesDir, `${name}.commonwealth-dxvk.tmp`), { force: true });
     }
     if (marker.schemaVersion === 3) {
-      await restoreDxvkRenderer(install, marker.originalRenderer!.snapshot, this.log);
+      await restoreDxvkRenderer(
+        install,
+        marker.originalRenderer!.snapshot,
+        this.log,
+        managedIniBackupDirectory(this.userDataDir, install)
+      );
     }
     await rm(this.markerPath(install));
-    await rm(join(install.binariesDir, MARKER_TEMP_NAME), { force: true });
+    await rm(join(install.binariesDir, LEGACY_MARKER_TEMP_NAME), { force: true });
     this.log.info('DXVK/Vulkan: restored the previous Windows graphics and renderer state');
     return true;
   }
@@ -614,7 +632,11 @@ export class DxvkManager {
           this.definitionMatches(marker) &&
           (await this.activeFilesMatch(install, marker))
         ) {
-          await ensureDxvkRenderer(install, this.log);
+          await ensureDxvkRenderer(
+            install,
+            this.log,
+            managedIniBackupDirectory(this.userDataDir, install)
+          );
           return this.inspect(install);
         }
         await this.restoreManaged(install);

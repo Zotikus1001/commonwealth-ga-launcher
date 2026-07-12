@@ -4,21 +4,25 @@ import {
   copyFile,
   lstat,
   mkdir,
-  readFile,
   readdir,
   rename,
   rm,
-  stat,
-  writeFile
+  stat
 } from 'fs/promises';
 import { join } from 'path';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 import { downloadToFile, fetchJson, type DownloadProgress } from './Download';
+import {
+  managedInstallStatePath,
+  readMigratedManagedState,
+  writeManagedState
+} from './ManagedInstallState';
 
 const DLL_NAME = 'dinput8.dll';
-const MARKER_NAME = '.commonwealth-client-patches.json';
+const LEGACY_MARKER_NAME = '.commonwealth-client-patches.json';
+const STATE_FILE_NAME = 'client-patches.json';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const ASSET_NAME = 'Commonwealth-GA-Client-Patches-x86.dll';
 const MAX_PAYLOAD_BYTES = 50 * 1024 * 1024;
@@ -179,25 +183,26 @@ export class ClientPatchManager {
   ) {}
 
   private markerPath(install: GameInstall): string {
-    return join(install.binariesDir, MARKER_NAME);
+    return managedInstallStatePath(this.userDataDir, install, STATE_FILE_NAME);
+  }
+
+  private legacyMarkerPath(install: GameInstall): string {
+    return join(install.binariesDir, LEGACY_MARKER_NAME);
   }
 
   private async readMarker(install: GameInstall): Promise<ClientPatchMarker | null> {
-    try {
-      return parseMarker(
-        JSON.parse(await readFile(this.markerPath(install), { encoding: 'utf-8' })) as unknown
-      );
-    } catch (error) {
-      if (isMissing(error)) return null;
-      throw error;
-    }
+    const raw = await readMigratedManagedState(
+      this.markerPath(install),
+      this.legacyMarkerPath(install)
+    );
+    return raw === null ? null : parseMarker(JSON.parse(raw) as unknown);
   }
 
   private async writeMarker(install: GameInstall, marker: ClientPatchMarker): Promise<void> {
-    const path = this.markerPath(install);
-    const temp = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temp, `${JSON.stringify(marker, null, 2)}\n`, { encoding: 'utf-8' });
-    await rename(temp, path);
+    await writeManagedState(
+      this.markerPath(install),
+      `${JSON.stringify(marker, null, 2)}\n`
+    );
   }
 
   private async resolveTarget(install: GameInstall): Promise<string> {

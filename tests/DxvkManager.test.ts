@@ -11,6 +11,10 @@ import {
   type DxvkDefinition
 } from '../src/main/services/DxvkManager';
 import type { GameInstall } from '../src/main/services/InstallLocator';
+import {
+  managedIniBackupDirectory,
+  managedInstallStatePath
+} from '../src/main/services/ManagedInstallState';
 
 vi.mock('electron', () => ({
   net: { fetch: vi.fn(() => Promise.reject(new Error('network must not be used in this test'))) }
@@ -153,6 +157,7 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(await isFile(join(install.binariesDir, 'd3d10core.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, 'd3d11.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await isFile(managedInstallStatePath(userData, install, 'dxvk.json'))).toBe(false);
     expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
       originalIni
     );
@@ -183,7 +188,7 @@ describe('DxvkManager graphics DLL transaction', () => {
     await writeFile(join(install.binariesDir, 'd3d9.dll'), 'original d3d9', { encoding: 'utf-8' });
     const manager = new DxvkManager(userData, logger(), definition);
     await manager.prepareForLaunch(install, true);
-    const markerPath = join(install.binariesDir, '.commonwealth-dxvk.json');
+    const markerPath = managedInstallStatePath(userData, install, 'dxvk.json');
     const marker = JSON.parse(await readFile(markerPath, { encoding: 'utf-8' })) as {
       phase: string;
     };
@@ -220,17 +225,19 @@ describe('DxvkManager graphics DLL transaction', () => {
         'AllowD3D10=False ; first\r\nAllowD3D10 = False\r\n'
     );
     expect(
-      await readFile(join(install.configDir, 'TgEngine.ini.commonwealth-backup'), {
+      await readFile(join(managedIniBackupDirectory(userData, install), 'TgEngine.ini.commonwealth-backup'), {
         encoding: 'utf-8'
       })
     ).toBe(originalIni);
     expect(await readFile(join(install.binariesDir, 'd3d9.dll'), { encoding: 'utf-8' })).toBe(
       'DXVK payload for d3d9.dll'
     );
-    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(true);
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    const markerPath = managedInstallStatePath(userData, install, 'dxvk.json');
+    expect(await isFile(markerPath)).toBe(true);
 
     const marker = JSON.parse(
-      await readFile(join(install.binariesDir, '.commonwealth-dxvk.json'), {
+      await readFile(markerPath, {
         encoding: 'utf-8'
       })
     ) as { schemaVersion: number; originalRenderer: { setting: string } };
@@ -243,7 +250,7 @@ describe('DxvkManager graphics DLL transaction', () => {
     expect(await readFile(join(install.configDir, 'TgEngine.ini'), { encoding: 'utf-8' })).toBe(
       originalIni
     );
-    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await isFile(markerPath)).toBe(false);
   });
 
   it('restores the previous renderer without reverting unrelated INI changes made while active', async () => {
@@ -353,7 +360,8 @@ describe('DxvkManager graphics DLL transaction', () => {
     );
     expect(await isFile(join(install.binariesDir, 'd3d10core.dll'))).toBe(false);
     expect(await isFile(join(install.binariesDir, 'd3d11.dll'))).toBe(false);
-    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(true);
+    expect(await isFile(join(install.binariesDir, '.commonwealth-dxvk.json'))).toBe(false);
+    expect(await isFile(managedInstallStatePath(userData, install, 'dxvk.json'))).toBe(true);
     expect(await isFile(join(install.binariesDir, 'd3d9.dll.commonwealth-original'))).toBe(true);
     expect(await isFile(join(install.binariesDir, 'dxgi.dll.commonwealth-original'))).toBe(false);
 

@@ -32,6 +32,7 @@ import {
 import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
 import { GpuMemoryDetector } from './services/GpuMemory';
 import { ClientPatchManager } from './services/ClientPatchManager';
+import { managedIniBackupDirectory } from './services/ManagedInstallState';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -569,7 +570,8 @@ export class Orchestrator {
         settings.fpsLimit.enabled,
         settings.fpsLimit.value,
         gpuMemory.texturePoolMb,
-        this.log
+        this.log,
+        managedIniBackupDirectory(app.getPath('userData'), this.install)
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
 
@@ -708,7 +710,13 @@ export class Orchestrator {
         id === 'adaptive-client-performance'
           ? (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter)).texturePoolMb
           : undefined;
-      const result = await applyIniClientPatch(install, id, this.log, texturePoolMb);
+      const result = await applyIniClientPatch(
+        install,
+        id,
+        this.log,
+        managedIniBackupDirectory(app.getPath('userData'), install),
+        texturePoolMb
+      );
       const clientPatches = await inspectClientPatches(install);
       this.patch({
         gamePathValid: true,

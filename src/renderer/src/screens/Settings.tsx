@@ -1240,6 +1240,11 @@ function DxvkVulkanPanel({
           </div>
         </div>
         <p className={styles.dxvkDetail}>{detail}</p>
+        <p className={styles.dxvkDriverTip}>
+          <strong>Driver Tip</strong>
+          If the game does not launch correctly with DXVK/Vulkan enabled, update your GPU drivers
+          and try again.
+        </p>
       </div>
     </>
   );

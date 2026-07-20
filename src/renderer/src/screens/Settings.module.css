@@ -937,13 +937,11 @@
   color: #f0aaaa;
 }
 
-.patchApplied .patchIcon,
-.patchApplied .patchState {
+.patchApplied .patchIcon {
   color: var(--green);
 }
 
-.patchPending .patchIcon,
-.patchPending .patchState {
+.patchPending .patchIcon {
   color: var(--amber-hi);
 }
 
@@ -969,27 +967,16 @@
 }
 
 .patchDescription {
-  margin: 5px 0 8px;
+  margin: 5px 0 0;
   color: var(--text-dim);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.patchState {
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .patchResultError {
   margin: 7px 0 0;
-  font-size: 11px;
-}
-
-.patchResultError {
   color: var(--red);
+  font-size: 11px;
 }
 
 .infoSection {

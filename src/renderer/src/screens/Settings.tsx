@@ -1866,6 +1866,16 @@ export function manualPatchErrorMessage(result: ActionResult): string | null {
   return result.ok ? null : result.message;
 }
 
+type IniPatchCardTone = 'applied' | 'pending' | 'removed';
+
+export function iniPatchCardTone(
+  preferred: boolean,
+  applied: boolean | null
+): IniPatchCardTone {
+  if (!preferred) return 'removed';
+  return applied === true ? 'applied' : 'pending';
+}
+
 function PatchesTab({
   state,
   settings,
@@ -1916,16 +1926,6 @@ function PatchesTab({
   };
 
   const gameClientPatchEnabled = settings.patches.gameClientPatch;
-  const gameClientPatchStatus = gameClientPatchSaving
-    ? gameClientPatchEnabled
-      ? 'Applying…'
-      : 'Removing…'
-    : gameClientPatchEnabled
-      ? state.gamePathValid
-        ? 'Enabled'
-        : 'Enabled — game path required'
-      : 'Removed';
-
   return (
     <section className={styles.section}>
       <div className="panel-title">Game Patches</div>
@@ -1979,7 +1979,6 @@ function PatchesTab({
                 </li>
               </ul>
             </div>
-            <span className={styles.patchState}>{gameClientPatchStatus}</span>
             {gameClientPatchError && (
               <p className={styles.patchResultError}>
                 {`Could not change Game Client Patch: ${gameClientPatchError}`}
@@ -1996,21 +1995,11 @@ function PatchesTab({
               : 'adaptiveClientPerformance';
           const preferred = settings.patches[preferenceKey];
           const patchChanging = changing?.id === patch.id;
-          const status = patchChanging
-            ? changing.enabled
-              ? 'Applying…'
-              : 'Removing…'
-            : patch.applied === true
-              ? 'Applied'
-              : preferred
-                ? state.gamePathValid
-                  ? 'Enabled — applies before Play'
-                  : 'Enabled — game path required'
-                : 'Removed';
+          const cardTone = iniPatchCardTone(preferred, patch.applied);
           const tone =
-            patch.applied === true
+            cardTone === 'applied'
               ? styles.patchApplied
-              : preferred
+              : cardTone === 'pending'
                 ? styles.patchPending
                 : styles.patchUnknown;
           return (
@@ -2033,7 +2022,6 @@ function PatchesTab({
               <div className={styles.patchBody}>
                 <div className={styles.patchTitle}>{copy.title}</div>
                 <p className={styles.patchDescription}>{copy.description}</p>
-                <span className={styles.patchState}>{status}</span>
                 {resultError?.id === patch.id && (
                   <p className={styles.patchResultError}>{resultError.message}</p>
                 )}

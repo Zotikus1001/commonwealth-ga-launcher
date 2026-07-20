@@ -116,6 +116,27 @@ export function registerIpc(
     }
     return orchestrator.removeClientPatch(id);
   });
+  ipcMain.handle(IPC.createGameProfile, (_event, name: unknown) => {
+    if (typeof name !== 'string') throw new Error('Profile name must be a string.');
+    return orchestrator.createGameProfile(name);
+  });
+  ipcMain.handle(IPC.updateGameProfile, (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
+    return orchestrator.updateGameProfile(id);
+  });
+  ipcMain.handle(IPC.renameGameProfile, (_event, id: unknown, name: unknown) => {
+    if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
+    if (typeof name !== 'string') throw new Error('Profile name must be a string.');
+    return orchestrator.renameGameProfile(id, name);
+  });
+  ipcMain.handle(IPC.deleteGameProfile, (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
+    return orchestrator.deleteGameProfile(id);
+  });
+  ipcMain.handle(IPC.selectGameProfile, (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
+    return orchestrator.selectGameProfile(id);
+  });
   ipcMain.handle(IPC.selectServer, (_event, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Server identifier must be a string.');
     return orchestrator.selectServer(id);

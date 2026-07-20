@@ -33,6 +33,14 @@ export interface GameIniBaseline extends GameIniSettings {
   gameExePath: string;
 }
 
+export interface GameProfileSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  fileCount: number;
+}
+
 export interface PatchSettings {
   gameClientPatch: boolean;
   highFpsMovementStability: boolean;
@@ -174,6 +182,8 @@ export interface LauncherState {
   dxvk: DxvkState;
   /** True only during the five-second window after a Play launch attempt. */
   launchCoolingDown: boolean;
+  /** Game children started by this launcher that have not exited yet. */
+  activeGameInstances: number;
   developerMode: boolean;
   progress: UpdateProgress | null;
   launcherVersion: string;
@@ -181,6 +191,8 @@ export interface LauncherState {
   launcherUpdateVersion: string | null;
   launcherUpdateError: string | null;
   clientPatches: ClientPatchStatus[];
+  gameProfiles: GameProfileSummary[];
+  selectedGameProfileId: string | null;
   serverCommits: ServerCommit[];
   serverCommitsStatus: 'loading' | 'ready' | 'error';
   agendaStatsText: string | null;
@@ -228,6 +240,11 @@ export interface LauncherApi {
   playDeveloper(): Promise<void>;
   applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
   removeClientPatch(id: ClientPatchId): Promise<ActionResult>;
+  createGameProfile(name: string): Promise<ActionResult>;
+  updateGameProfile(id: string): Promise<ActionResult>;
+  renameGameProfile(id: string, name: string): Promise<ActionResult>;
+  deleteGameProfile(id: string): Promise<ActionResult>;
+  selectGameProfile(id: string): Promise<void>;
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;
   refresh(): Promise<void>;

@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import type { ChildProcess } from 'child_process';
 import type {
   ActionResult,
   ClientPatchId,
@@ -34,6 +35,8 @@ import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
 import { GpuMemoryDetector } from './services/GpuMemory';
 import { ClientPatchManager } from './services/ClientPatchManager';
 import { managedIniBackupDirectory } from './services/ManagedInstallState';
+import { GameProfileManager } from './services/GameProfileManager';
+import { GameProcessTracker } from './services/GameProcessTracker';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -44,6 +47,7 @@ const COMMIT_REFRESH_MS = 5 * 60_000;
 const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
+const GAME_PROCESS_REFRESH_MS = 3_000;
 
 function sameGameExecutable(left: string, right: string): boolean {
   return left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase();
@@ -71,6 +75,8 @@ export class Orchestrator {
   private readonly dxvkManager: DxvkManager;
   private readonly gpuMemoryDetector: GpuMemoryDetector;
   private readonly clientPatchManager: ClientPatchManager;
+  private readonly gameProfileManager: GameProfileManager;
+  private readonly gameProcessTracker: GameProcessTracker;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -83,6 +89,9 @@ export class Orchestrator {
   private agendaStatsRefreshInFlight = false;
   private autoCloseTimer: NodeJS.Timeout | null = null;
   private launchCooldownTimer: NodeJS.Timeout | null = null;
+  private readonly activeGameProcesses = new Set<ChildProcess>();
+  private gameProcessTimer: NodeJS.Timeout | null = null;
+  private gameProcessRefreshInFlight: Promise<number> | null = null;
 
   constructor(
     private readonly config: ConfigStore,
@@ -95,6 +104,8 @@ export class Orchestrator {
     this.dxvkManager = new DxvkManager(app.getPath('userData'), log);
     this.gpuMemoryDetector = new GpuMemoryDetector(PLATFORM, log);
     this.clientPatchManager = new ClientPatchManager(app.getPath('userData'), log);
+    this.gameProfileManager = new GameProfileManager(app.getPath('userData'), log);
+    this.gameProcessTracker = new GameProcessTracker(app.getPath('userData'), log);
     const launcherUpdate = launcherUpdater.getSnapshot();
     this.state = {
       phase: 'init',
@@ -112,6 +123,7 @@ export class Orchestrator {
       gameModeAvailable: PLATFORM === 'linux' ? false : null,
       dxvk: unavailableDxvkState(PLATFORM),
       launchCoolingDown: false,
+      activeGameInstances: 0,
       developerMode: false,
       progress: launcherUpdate.progress,
       launcherVersion: app.getVersion(),
@@ -119,6 +131,8 @@ export class Orchestrator {
       launcherUpdateVersion: launcherUpdate.version,
       launcherUpdateError: launcherUpdate.error,
       clientPatches: unavailableClientPatches(),
+      gameProfiles: [],
+      selectedGameProfileId: null,
       serverCommits: [],
       serverCommitsStatus: 'loading',
       agendaStatsText: null,
@@ -229,6 +243,12 @@ export class Orchestrator {
       this.agendaStatsTimer = setInterval(
         () => void this.refreshAgendaStats(),
         AGENDA_STATS_REFRESH_MS
+      );
+    }
+    if (!this.gameProcessTimer) {
+      this.gameProcessTimer = setInterval(
+        () => void this.refreshTrackedGameProcesses(),
+        GAME_PROCESS_REFRESH_MS
       );
     }
   }
@@ -402,6 +422,8 @@ export class Orchestrator {
 
   private async refreshRuntimeState(): Promise<void> {
     this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
+    await this.gameProfileManager.load();
+    await this.refreshTrackedGameProcesses();
     let settings = this.config.get();
     const [install, linuxRuntime] = await Promise.all([
       validateGameExe(settings.gameExePath),
@@ -439,6 +461,7 @@ export class Orchestrator {
     }
     this.log.info(`game install validation: ${install ? 'valid' : 'invalid or unset'}`);
     const selection = this.applyServerSelection(settings);
+    const profileSnapshot = this.gameProfileManager.getSnapshot();
     this.patch({
       gamePathValid: install !== null,
       validatedGameExePath: settings.gameExePath,
@@ -446,7 +469,9 @@ export class Orchestrator {
       resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
       clientPatches,
-      dxvk
+      dxvk,
+      gameProfiles: profileSnapshot.profiles,
+      selectedGameProfileId: profileSnapshot.selectedProfileId
     });
 
     if (!selection.host) {
@@ -582,6 +607,68 @@ export class Orchestrator {
     }, LAUNCH_COOLDOWN_MS);
   }
 
+  private trackedGameProcessCount(): number {
+    const pids = new Set(this.gameProcessTracker.getPids());
+    let withoutPid = 0;
+    for (const child of this.activeGameProcesses) {
+      if (child.pid && child.pid > 0) pids.add(child.pid);
+      else withoutPid += 1;
+    }
+    return pids.size + withoutPid;
+  }
+
+  private refreshTrackedGameProcesses(): Promise<number> {
+    if (this.gameProcessRefreshInFlight) return this.gameProcessRefreshInFlight;
+    this.gameProcessRefreshInFlight = (async () => {
+      await this.gameProcessTracker.refresh();
+      const count = this.trackedGameProcessCount();
+      if (count !== this.state.activeGameInstances) {
+        this.patch({ activeGameInstances: count });
+      }
+      return count;
+    })().finally(() => {
+      this.gameProcessRefreshInFlight = null;
+    });
+    return this.gameProcessRefreshInFlight;
+  }
+
+  private async trackGameProcess(child: ChildProcess): Promise<void> {
+    this.activeGameProcesses.add(child);
+    this.patch({ activeGameInstances: this.trackedGameProcessCount() });
+    let tracked = true;
+    const release = (): void => {
+      if (!tracked) return;
+      tracked = false;
+      child.removeListener('exit', release);
+      child.removeListener('error', release);
+      this.activeGameProcesses.delete(child);
+      if (!child.pid) {
+        this.patch({ activeGameInstances: this.trackedGameProcessCount() });
+        return;
+      }
+      void this.gameProcessTracker.remove(child.pid).then(
+        () => this.patch({ activeGameInstances: this.trackedGameProcessCount() }),
+        (error) => {
+          this.log.warn(`game process exit tracking could not be saved: ${(error as Error).message}`);
+          void this.refreshTrackedGameProcesses();
+        }
+      );
+    };
+    child.once('exit', release);
+    child.once('error', release);
+    if (child.pid) {
+      try {
+        await this.gameProcessTracker.add(child.pid);
+      } catch (error) {
+        this.log.warn(`game process launch tracking could not be saved: ${(error as Error).message}`);
+      }
+    } else {
+      this.log.warn('game process launch returned no process identifier; tracking is session-only');
+    }
+    if (child.exitCode !== null || child.signalCode !== null) release();
+    else if (tracked) this.patch({ activeGameInstances: this.trackedGameProcessCount() });
+  }
+
   async play(developerLaunch = false): Promise<void> {
     const initialSettings = this.config.get();
     if (developerLaunch && !initialSettings.developer.enabled) {
@@ -640,6 +727,33 @@ export class Orchestrator {
         this.hostCandidates(selection).find(
           (candidate) => candidate.toLowerCase() === this.state.resolvedHost.toLowerCase()
         ) ?? selection.host;
+
+      const activeProfile = this.gameProfileManager.getSelectedSummary();
+      if (activeProfile) {
+        this.patch({
+          phase: 'checking',
+          statusLine: `Applying game profile ${activeProfile.name}…`,
+          errorDetails: null
+        });
+        await this.gameProfileManager.applySelected(this.install);
+        const backupDirectory = managedIniBackupDirectory(app.getPath('userData'), this.install);
+        if (!settings.patches.highFpsMovementStability) {
+          await removeIniClientPatch(
+            this.install,
+            'high-fps-movement-stability',
+            this.log,
+            backupDirectory
+          );
+        }
+        if (!settings.patches.adaptiveClientPerformance) {
+          await removeIniClientPatch(
+            this.install,
+            'adaptive-client-performance',
+            this.log,
+            backupDirectory
+          );
+        }
+      }
 
       this.patch({ phase: 'checking', statusLine: 'Checking client configuration…', errorDetails: null });
       const gpuMemory = await this.gpuMemoryDetector.select(settings.launch.gpuAdapter);
@@ -732,7 +846,7 @@ export class Orchestrator {
           (useDxvk ? `${developerLaunch ? ' and' : ' with'} DXVK/Vulkan` : '') +
           '…'
       });
-      this.gameLauncher.launch(
+      const child = this.gameLauncher.launch(
         settings,
         launchHost,
         this.install.binariesDir,
@@ -744,6 +858,7 @@ export class Orchestrator {
           ...(useDxvk ? this.dxvkManager.launchEnvironment() : {})
         }
       );
+      await this.trackGameProcess(child);
       this.scheduleAutoCloseAfterLaunch();
       this.scheduleLaunchCooldown();
     } catch (error) {
@@ -1046,6 +1161,134 @@ export class Orchestrator {
     await this.refreshRuntimeState();
   }
 
+  private async beginProfileAction(): Promise<ActionResult | null> {
+    if (this.activeGameProcesses.size > 0 || this.state.activeGameInstances > 0) {
+      return {
+        ok: false,
+        message: 'Close every game instance launched by this launcher before changing profiles.'
+      };
+    }
+    if (this.busy || this.state.launchCoolingDown || this.state.phase === 'launching') {
+      return { ok: false, message: 'The launcher is busy. Try again shortly.' };
+    }
+    this.busy = true;
+    try {
+      if ((await this.refreshTrackedGameProcesses()) > 0) {
+        this.busy = false;
+        return {
+          ok: false,
+          message: 'Close every game instance launched by this launcher before changing profiles.'
+        };
+      }
+    } catch (error) {
+      this.busy = false;
+      const message = `Could not verify whether the game is still running: ${(error as Error).message}`;
+      this.log.warn(message);
+      return { ok: false, message };
+    }
+    return null;
+  }
+
+  private patchProfileSnapshot(statusLine: string): void {
+    const snapshot = this.gameProfileManager.getSnapshot();
+    this.patch({
+      phase: 'ready',
+      statusLine,
+      errorDetails: null,
+      gameProfiles: snapshot.profiles,
+      selectedGameProfileId: snapshot.selectedProfileId
+    });
+  }
+
+  async createGameProfile(name: string): Promise<ActionResult> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) return unavailable;
+    try {
+      const install = await validateGameExe(this.config.get().gameExePath);
+      if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      this.install = install;
+      this.patch({ phase: 'checking', statusLine: 'Saving current game settings…' });
+      const profile = await this.gameProfileManager.create(name, install);
+      this.patchProfileSnapshot(`Profile ${profile.name} saved and selected.`);
+      return { ok: true, message: `Profile ${profile.name} saved.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`game profile creation failed: ${message}`);
+      this.patch({ phase: 'ready', statusLine: `Could not save game profile: ${message}` });
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async updateGameProfile(id: string): Promise<ActionResult> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) return unavailable;
+    try {
+      const install = await validateGameExe(this.config.get().gameExePath);
+      if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      this.install = install;
+      this.patch({ phase: 'checking', statusLine: 'Updating saved game settings…' });
+      const profile = await this.gameProfileManager.overwrite(id, install);
+      this.patchProfileSnapshot(`Profile ${profile.name} updated.`);
+      return { ok: true, message: `Profile ${profile.name} updated from the current game settings.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`game profile update failed: ${message}`);
+      this.patch({ phase: 'ready', statusLine: `Could not update game profile: ${message}` });
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async renameGameProfile(id: string, name: string): Promise<ActionResult> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) return unavailable;
+    try {
+      const profile = await this.gameProfileManager.renameProfile(id, name);
+      this.patchProfileSnapshot(`Profile renamed to ${profile.name}.`);
+      return { ok: true, message: `Profile renamed to ${profile.name}.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async deleteGameProfile(id: string): Promise<ActionResult> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) return unavailable;
+    try {
+      await this.gameProfileManager.deleteProfile(id);
+      this.patchProfileSnapshot('Game profile removed.');
+      return { ok: true, message: 'Game profile removed.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async selectGameProfile(id: string): Promise<void> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) throw new Error(unavailable.message);
+    try {
+      await this.gameProfileManager.select(id);
+      const profile = this.gameProfileManager.getSelectedSummary();
+      this.patchProfileSnapshot(profile ? `Profile ${profile.name} selected.` : 'Ready.');
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
   async checkServer(): Promise<void> {
     if (
       this.busy ||
@@ -1094,6 +1337,12 @@ export class Orchestrator {
     this.busy = true;
     let completed = false;
     try {
+      if ((await this.refreshTrackedGameProcesses()) > 0) {
+        return {
+          ok: false,
+          message: 'Close every game instance launched by this launcher before resetting it.'
+        };
+      }
       this.patch({ phase: 'checking', statusLine: 'Resetting launcher settings…' });
       const settings = this.config.get();
       const gameExePath = typeof settings.gameExePath === 'string' ? settings.gameExePath : '';
@@ -1105,6 +1354,8 @@ export class Orchestrator {
         this.log.warn('launcher reset: configured game install is unavailable; game cleanup skipped');
       }
 
+      await this.gameProfileManager.reset();
+      await this.gameProcessTracker.reset();
       await this.config.resetToDefaults();
       completed = true;
       this.log.info('launcher reset complete; restarting');

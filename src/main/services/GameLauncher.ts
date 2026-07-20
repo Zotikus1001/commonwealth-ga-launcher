@@ -89,7 +89,7 @@ export class GameLauncher {
     developerLaunch: boolean,
     linuxRuntime: LinuxRuntimeInspection | null = null,
     launchEnvironment: NodeJS.ProcessEnv = {}
-  ): void {
+  ): ChildProcess {
     const args = buildGameArgs(settings, host, developerLaunch);
     let child: ChildProcess;
 
@@ -134,5 +134,6 @@ export class GameLauncher {
     child.once('error', (e) => {
       this.log.error(`game process error: ${e.message}`);
     });
+    return child;
   }
 }

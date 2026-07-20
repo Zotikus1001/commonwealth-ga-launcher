@@ -21,6 +21,12 @@ const api: LauncherApi = {
   playDeveloper: () => ipcRenderer.invoke(IPC.playDeveloper),
   applyClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.applyClientPatch, id),
   removeClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.removeClientPatch, id),
+  createGameProfile: (name: string) => ipcRenderer.invoke(IPC.createGameProfile, name),
+  updateGameProfile: (id: string) => ipcRenderer.invoke(IPC.updateGameProfile, id),
+  renameGameProfile: (id: string, name: string) =>
+    ipcRenderer.invoke(IPC.renameGameProfile, id, name),
+  deleteGameProfile: (id: string) => ipcRenderer.invoke(IPC.deleteGameProfile, id),
+  selectGameProfile: (id: string) => ipcRenderer.invoke(IPC.selectGameProfile, id),
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),

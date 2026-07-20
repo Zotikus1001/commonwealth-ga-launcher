@@ -33,6 +33,7 @@ const api: LauncherApi = {
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),
   getLogTail: () => ipcRenderer.invoke(IPC.getLogTail),
+  resetLauncher: () => ipcRenderer.invoke(IPC.resetLauncher),
   onState: (cb: (state: LauncherState) => void) => {
     const handler = (_e: unknown, state: LauncherState): void => cb(state);
     ipcRenderer.on(IPC.evState, handler);

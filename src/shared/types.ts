@@ -234,6 +234,7 @@ export interface LauncherApi {
   openLauncherLogs(): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;
   getLogTail(): Promise<string[]>;
+  resetLauncher(): Promise<ActionResult>;
   onState(cb: (state: LauncherState) => void): () => void;
   onLogLine(cb: (line: string) => void): () => void;
 }

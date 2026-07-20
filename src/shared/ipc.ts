@@ -21,6 +21,7 @@ export const IPC = {
   openLauncherLogs: 'launcher:open-launcher-logs',
   copyDiagnostics: 'launcher:copy-diagnostics',
   getLogTail: 'launcher:get-log-tail',
+  resetLauncher: 'launcher:reset-launcher',
   // main -> renderer events
   evState: 'launcher:ev-state',
   evLog: 'launcher:ev-log'

@@ -923,6 +923,48 @@ export class Orchestrator {
     await this.refresh();
   }
 
+  async resetLauncher(): Promise<ActionResult> {
+    const updateBusy =
+      this.state.launcherUpdate === 'checking' ||
+      this.state.launcherUpdate === 'downloading' ||
+      this.state.launcherUpdate === 'installing';
+    if (this.busy || this.state.launchCoolingDown || updateBusy) {
+      return { ok: false, message: 'The launcher is busy. Try the reset again shortly.' };
+    }
+
+    this.busy = true;
+    let completed = false;
+    try {
+      this.patch({ phase: 'checking', statusLine: 'Resetting launcher settings…' });
+      const settings = this.config.get();
+      const gameExePath = typeof settings.gameExePath === 'string' ? settings.gameExePath : '';
+      const install = await validateGameExe(gameExePath);
+      if (install) {
+        if (settings.developer.useLocalClientDll) {
+          this.log.info('launcher reset: local client DLL left untouched');
+        } else {
+          await this.clientPatchManager.removeManaged(install);
+        }
+        if (PLATFORM === 'win32') await this.dxvkManager.restore(install);
+      } else if (gameExePath.trim()) {
+        this.log.warn('launcher reset: configured game install is unavailable; game cleanup skipped');
+      }
+
+      await this.config.resetToDefaults();
+      completed = true;
+      this.log.info('launcher reset complete; restarting');
+      return { ok: true, message: 'Launcher settings reset. Restarting…' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error(`launcher reset failed: ${message}`);
+      this.patch({ phase: 'ready', statusLine: `Launcher reset failed: ${message}` });
+      return { ok: false, message: `Could not reset the launcher: ${message}` };
+    } finally {
+      this.busy = false;
+      if (!completed && this.refreshPending) void this.refresh();
+    }
+  }
+
   async autoDetect(): Promise<string | null> {
     const settings = this.config.get();
     const existingPrefix =

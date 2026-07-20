@@ -1669,6 +1669,9 @@ function DiagnosticsTab({
 }): JSX.Element {
   const [lines, setLines] = useState<string[]>([]);
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<ActionResult | null>(null);
 
   useEffect(() => {
     void window.api.getLogTail().then(setLines);
@@ -1678,7 +1681,29 @@ function DiagnosticsTab({
     return unsubscribe;
   }, []);
 
+  const resetLauncher = async (): Promise<void> => {
+    if (resetting) return;
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const result = await window.api.resetLauncher();
+      setResetResult(result);
+      if (!result.ok) setResetting(false);
+    } catch (error) {
+      setResetResult({
+        ok: false,
+        message: `Could not reset the launcher: ${error instanceof Error ? error.message : String(error)}`
+      });
+      setResetting(false);
+    }
+  };
+
   const localDevelopment = state.launcherUpdate === 'disabled';
+  const launcherBusy =
+    state.launchCoolingDown ||
+    state.launcherUpdate === 'checking' ||
+    state.launcherUpdate === 'downloading' ||
+    state.launcherUpdate === 'installing';
   const updateStatus = localDevelopment
     ? 'local out/ · online checks off'
     : state.launcherUpdate === 'up-to-date'
@@ -1774,6 +1799,78 @@ function DiagnosticsTab({
       </div>
       {actionResult && (
         <p className={actionResult.ok ? styles.valid : styles.invalid}>{actionResult.message}</p>
+      )}
+
+      <div className="panel-title">Recovery</div>
+      <div className={styles.resetPanel}>
+        <div className={styles.resetCopy}>
+          <div className={styles.resetTitle}>Reset launcher settings</div>
+          <p>
+            Clear every saved option and restart from initial setup. The launcher-managed client
+            patch DLL and DXVK/Vulkan files are cleaned up; game INIs, logs, caches, backups, and
+            unmanaged or local DLLs stay intact.
+          </p>
+        </div>
+        <button
+          className={styles.resetButton}
+          disabled={launcherBusy || resetting}
+          onClick={() => {
+            setResetResult(null);
+            setResetConfirming(true);
+          }}
+        >
+          Reset all settings…
+        </button>
+      </div>
+      {!resetConfirming && resetResult && (
+        <p className={resetResult.ok ? styles.valid : styles.invalid}>{resetResult.message}</p>
+      )}
+
+      {resetConfirming && (
+        <div className={styles.confirmBackdrop}>
+          <div
+            className={styles.confirmDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-launcher-title"
+          >
+            <span className={styles.confirmEyebrow}>Recovery reset</span>
+            <h2 id="reset-launcher-title">Start the launcher from scratch?</h2>
+            <p>
+              This replaces the saved game path, servers, launcher options, game options, and
+              developer settings with defaults, then restarts the launcher.
+            </p>
+            <p>
+              The launcher removes only its managed client patch DLL and restores its managed
+              DXVK/Vulkan files. If the configured game install is unavailable, game cleanup is
+              skipped. Game INIs and unmanaged or local DLLs are never removed.
+            </p>
+            {resetResult && (
+              <p className={resetResult.ok ? styles.valid : styles.confirmError}>
+                {resetResult.message}
+              </p>
+            )}
+            <div className={styles.confirmActions}>
+              <button
+                className={styles.discardButton}
+                disabled={resetting}
+                autoFocus
+                onClick={() => {
+                  setResetConfirming(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.resetConfirmButton}
+                disabled={resetting}
+                onClick={() => void resetLauncher()}
+              >
+                {resetting ? 'Resetting…' : 'Reset and restart'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

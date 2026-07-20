@@ -777,6 +777,50 @@
   user-select: text;
 }
 
+.resetPanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(240, 166, 60, 0.32);
+  background:
+    linear-gradient(120deg, rgba(240, 166, 60, 0.06), transparent 52%),
+    rgba(15, 19, 28, 0.72);
+}
+
+.resetCopy {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.resetTitle {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.resetPanel p {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.resetButton {
+  flex: 0 0 auto;
+}
+
+.resetButton:not(:disabled),
+.resetConfirmButton:not(:disabled) {
+  border-color: var(--amber);
+  background: rgba(240, 166, 60, 0.11);
+  color: var(--amber-hi);
+}
+
 .saveBar {
   margin-top: auto;
   padding-top: 20px;

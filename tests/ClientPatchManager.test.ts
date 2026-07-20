@@ -181,7 +181,7 @@ describe('ClientPatchManager', () => {
     expect(await readFile(join(install.binariesDir, 'dinput8.dll'))).toEqual(second);
   });
 
-  it('removes only the launcher-managed payload when disabled', async () => {
+  it('removes the launcher-managed payload during reset cleanup', async () => {
     const { userData, install } = await fixture();
     const contents = Buffer.from('patch payload v1');
     const manager = new ClientPatchManager(
@@ -193,7 +193,7 @@ describe('ClientPatchManager', () => {
     );
     await manager.prepareForLaunch(install, 'win32');
 
-    await manager.disable(install);
+    await expect(manager.removeManaged(install)).resolves.toBe(true);
 
     await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
     await expect(
@@ -201,7 +201,24 @@ describe('ClientPatchManager', () => {
     ).rejects.toThrow();
   });
 
-  it('refuses to remove a modified managed payload', async () => {
+  it('leaves an unmanaged local DLL untouched during reset cleanup', async () => {
+    const { userData, install } = await fixture();
+    const managed = Buffer.from('patch payload v1');
+    const local = Buffer.from('local development payload');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), local);
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+
+    await expect(manager.removeManaged(install)).resolves.toBe(false);
+    expect(await readFile(join(install.binariesDir, 'dinput8.dll'))).toEqual(local);
+  });
+
+  it('refuses to remove a modified managed payload during reset cleanup', async () => {
     const { userData, install } = await fixture();
     const contents = Buffer.from('patch payload v1');
     const manager = new ClientPatchManager(
@@ -214,10 +231,46 @@ describe('ClientPatchManager', () => {
     await manager.prepareForLaunch(install, 'win32');
     await writeFile(join(install.binariesDir, 'dinput8.dll'), 'modified payload');
 
-    await expect(manager.disable(install)).rejects.toThrow('unmanaged or modified');
+    await expect(manager.removeManaged(install)).rejects.toThrow('unmanaged or modified');
     expect(await readFile(join(install.binariesDir, 'dinput8.dll'), { encoding: 'utf-8' })).toBe(
       'modified payload'
     );
+  });
+
+  it('keeps ownership metadata when the managed DLL path is no longer a file', async () => {
+    const { userData, install } = await fixture();
+    const managed = Buffer.from('patch payload v1');
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+    await manager.prepareForLaunch(install, 'win32');
+    const target = join(install.binariesDir, 'dinput8.dll');
+    const marker = managedInstallStatePath(userData, install, 'client-patches.json');
+    await rm(target);
+    await mkdir(target);
+
+    await expect(manager.removeManaged(install)).rejects.toThrow('not a regular file');
+    await expect(readFile(marker)).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('retains disable recovery for a known payload whose marker is missing', async () => {
+    const { userData, install } = await fixture();
+    const managed = Buffer.from('patch payload v1');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), managed);
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+
+    await manager.disable(install);
+    await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
   });
 
   it('adds the Wine override without replacing existing overrides', async () => {

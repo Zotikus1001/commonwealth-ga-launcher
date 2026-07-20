@@ -1,9 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ConfigStore,
   CURRENT_SETTINGS_SCHEMA_VERSION,
   defaultSettings,
   migrateStoredSettings
 } from '../src/main/services/ConfigStore';
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 describe('DXVK/Vulkan settings migration', () => {
   it('adds a disabled graphics option without changing existing developer settings', () => {
@@ -76,6 +86,38 @@ describe('DXVK/Vulkan settings migration', () => {
     expect(migrateStoredSettings(schema11).settings.developer).toEqual({
       ...schema11.developer,
       useLocalClientDll: false
+    });
+  });
+});
+
+describe('launcher settings reset', () => {
+  it('overwrites future-schema settings with defaults and restores write access', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'commonwealth-config-reset-'));
+    roots.push(root);
+    const defaults = defaultSettings();
+    const file = join(root, 'settings.json');
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...defaults,
+        schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION + 1,
+        gameExePath: 'future-launcher-path'
+      }),
+      { encoding: 'utf-8' }
+    );
+    const store = new ConfigStore(root, defaults, {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as never);
+
+    await store.load();
+    await expect(store.update({ gameExePath: 'blocked' })).rejects.toThrow('newer launcher');
+
+    await expect(store.resetToDefaults()).resolves.toEqual(defaults);
+    expect(JSON.parse(await readFile(file, { encoding: 'utf-8' }))).toEqual(defaults);
+    await expect(store.update({ gameExePath: 'new-path' })).resolves.toMatchObject({
+      gameExePath: 'new-path'
     });
   });
 });

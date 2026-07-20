@@ -595,6 +595,15 @@ export class ConfigStore {
     return this.settings;
   }
 
+  async resetToDefaults(): Promise<Settings> {
+    const next = structuredClone(this.defaults);
+    await this.save(next);
+    this.settings = next;
+    this.readOnlyReason = null;
+    this.log.info('launcher settings reset to defaults');
+    return this.settings;
+  }
+
   async update(patch: DeepPartial<Settings>): Promise<Settings> {
     if (this.readOnlyReason) throw new Error(this.readOnlyReason);
     const next = mergeInto(this.settings, patch);
@@ -689,11 +698,11 @@ export class ConfigStore {
     }
   }
 
-  private async save(): Promise<void> {
+  private async save(settings = this.settings): Promise<void> {
     try {
       await mkdir(dirname(this.file), { recursive: true });
       const tmp = this.file + '.tmp';
-      await writeFile(tmp, JSON.stringify(this.settings, null, 2), { encoding: 'utf-8' });
+      await writeFile(tmp, JSON.stringify(settings, null, 2), { encoding: 'utf-8' });
       await rename(tmp, this.file);
     } catch (e) {
       this.log.error(`settings save failed: ${(e as Error).message}`);

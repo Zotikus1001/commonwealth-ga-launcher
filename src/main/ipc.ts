@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { DeepPartial, Settings } from '@shared/types';
 import { IPC } from '@shared/ipc';
 import type { Orchestrator } from './Orchestrator';
@@ -15,6 +15,8 @@ export function registerIpc(
   config: ConfigStore,
   log: Log
 ): void {
+  let resetInProgress = false;
+
   // main -> renderer pushes
   orchestrator.setBroadcast((state) => {
     getWindow()?.webContents.send(IPC.evState, state);
@@ -177,4 +179,35 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.getLogTail, () => log.tail());
+
+  ipcMain.handle(IPC.resetLauncher, async () => {
+    if (resetInProgress) {
+      return { ok: false, message: 'Launcher reset is already in progress.' };
+    }
+    resetInProgress = true;
+    let resetCompleted = false;
+    try {
+      const result = await orchestrator.resetLauncher();
+      if (!result.ok) {
+        resetInProgress = false;
+        return result;
+      }
+      resetCompleted = true;
+      app.relaunch();
+      setTimeout(() => app.exit(0), 100);
+      return result;
+    } catch (error) {
+      resetInProgress = false;
+      const message = error instanceof Error ? error.message : String(error);
+      log.error(
+        `${resetCompleted ? 'launcher restart after reset' : 'launcher reset request'} failed: ${message}`
+      );
+      return {
+        ok: false,
+        message: resetCompleted
+          ? 'Settings were reset, but automatic restart failed. Close and reopen the launcher.'
+          : `Could not reset the launcher: ${message}`
+      };
+    }
+  });
 }

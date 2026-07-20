@@ -36,6 +36,7 @@ The launcher updates itself automatically.
 - Automatic game performance and stability patches
 - Useful game options
 - Agenda Stats and Discord access
+- Diagnostics and a one-click recovery reset
 - Windows support and flexible Linux compatibility options
 
 ---
@@ -57,7 +58,8 @@ npm run build
 
 Create local packages with `npm run dist:win` or `npm run dist:linux`. Build output is written to
 `out/`; installers and AppImages are written to `dist/`. Local development uses the generated
-`out/` files and does not check online release channels.
+`out/` files, keeps its settings separate from installed builds, and does not check online release
+channels.
 
 Public launcher settings are stored in `launcher.config.yml`.
 

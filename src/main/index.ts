@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Log } from './services/Log';
 import { LauncherUpdater } from './services/LauncherUpdater';
+import { configureDevelopmentProfile } from './services/DevelopmentProfile';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 
 const BROWSER_KEYS = new Set([
@@ -43,6 +44,9 @@ const SHIFT_EDITING_KEYS = new Set([
 ]);
 
 let mainWindow: BrowserWindow | null = null;
+
+// Prevent newer local settings schemas from making an installed launcher profile read-only.
+configureDevelopmentProfile(app);
 
 function shouldBlockBrowserInput(input: Input): boolean {
   if (input.type !== 'keyDown' || input.isComposing) return false;

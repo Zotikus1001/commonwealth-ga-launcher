@@ -341,14 +341,28 @@ export class ClientPatchManager {
     }
   }
 
-  async disable(install: GameInstall): Promise<void> {
-    const target = await this.resolveTarget(install);
+  private async removeOwned(install: GameInstall, requireMarker: boolean): Promise<boolean> {
     const marker = await this.readMarker(install);
+    if (requireMarker && !marker) {
+      await this.cleanupTransactionFiles(install);
+      this.log.info('client patches: no launcher-managed DLL to remove');
+      return false;
+    }
+    const target = await this.resolveTarget(install);
     const targetExists = await isFile(target);
+    if (!targetExists) {
+      try {
+        await lstat(target);
+        throw new Error('dinput8.dll is not a regular file; it was left untouched');
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
+    }
     const targetHash = targetExists ? await sha256File(target) : null;
 
     if (targetHash) {
-      const ownedHashes = new Set<string>([this.definition.sha256]);
+      const ownedHashes = new Set<string>();
+      if (!requireMarker) ownedHashes.add(this.definition.sha256);
       if (marker?.installedSha256) ownedHashes.add(marker.installedSha256);
       if (marker?.pendingSha256) ownedHashes.add(marker.pendingSha256);
       if (!ownedHashes.has(targetHash)) {
@@ -359,6 +373,15 @@ export class ClientPatchManager {
     if (marker) await rm(this.markerPath(install));
     await this.cleanupTransactionFiles(install);
     this.log.info('client patches: launcher-managed DLL removed');
+    return true;
+  }
+
+  async disable(install: GameInstall): Promise<void> {
+    await this.removeOwned(install, false);
+  }
+
+  async removeManaged(install: GameInstall): Promise<boolean> {
+    return this.removeOwned(install, true);
   }
 
   private async validManagedMarker(install: GameInstall): Promise<ClientPatchMarker | null> {

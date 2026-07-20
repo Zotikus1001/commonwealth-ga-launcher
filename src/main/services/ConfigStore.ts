@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 12;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 13;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -206,6 +206,24 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 12: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        const remainingDeveloper = { ...developer };
+        delete remainingDeveloper.useClientPatches;
+        settings = {
+          ...settings,
+          schemaVersion: 13,
+          patches: {
+            gameClientPatch: true,
+            highFpsMovementStability: true,
+            adaptiveClientPerformance: true
+          },
+          developer: remainingDeveloper
+        };
+        version = 13;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -228,6 +246,11 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       value: DEFAULT_FPS_LIMIT
     },
     gameIniBaseline: emptyGameIniBaseline(),
+    patches: {
+      gameClientPatch: true,
+      highFpsMovementStability: true,
+      adaptiveClientPerformance: true
+    },
     servers: {
       builtInName,
       selectedServerId: DEFAULT_SERVER_ID,
@@ -255,7 +278,6 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       resolutionWidth: 1280,
       resolutionHeight: 720,
       useDxvk: false,
-      useClientPatches: false,
       useLocalClientDll: false
     }
   };
@@ -367,10 +389,6 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       ? (value.resolutionHeight as number)
       : fallback.resolutionHeight,
     useDxvk: typeof value.useDxvk === 'boolean' ? value.useDxvk : fallback.useDxvk,
-    useClientPatches:
-      typeof value.useClientPatches === 'boolean'
-        ? value.useClientPatches
-        : fallback.useClientPatches,
     useLocalClientDll:
       typeof value.useLocalClientDll === 'boolean'
         ? value.useLocalClientDll
@@ -384,7 +402,6 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     typeof value.enabled !== 'boolean' ||
     typeof value.windowed !== 'boolean' ||
     typeof value.useDxvk !== 'boolean' ||
-    typeof value.useClientPatches !== 'boolean' ||
     typeof value.useLocalClientDll !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
@@ -398,8 +415,41 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
     useDxvk: value.useDxvk,
-    useClientPatches: value.useClientPatches,
     useLocalClientDll: value.useLocalClientDll
+  };
+}
+
+function sanitizeStoredPatches(value: unknown, fallback: Settings['patches']): Settings['patches'] {
+  if (!isPlainObject(value)) return structuredClone(fallback);
+  return {
+    gameClientPatch:
+      typeof value.gameClientPatch === 'boolean'
+        ? value.gameClientPatch
+        : fallback.gameClientPatch,
+    highFpsMovementStability:
+      typeof value.highFpsMovementStability === 'boolean'
+        ? value.highFpsMovementStability
+        : fallback.highFpsMovementStability,
+    adaptiveClientPerformance:
+      typeof value.adaptiveClientPerformance === 'boolean'
+        ? value.adaptiveClientPerformance
+        : fallback.adaptiveClientPerformance
+  };
+}
+
+function validateUpdatedPatches(value: unknown): Settings['patches'] {
+  if (
+    !isPlainObject(value) ||
+    typeof value.gameClientPatch !== 'boolean' ||
+    typeof value.highFpsMovementStability !== 'boolean' ||
+    typeof value.adaptiveClientPerformance !== 'boolean'
+  ) {
+    throw new Error('Game patch settings are invalid.');
+  }
+  return {
+    gameClientPatch: value.gameClientPatch,
+    highFpsMovementStability: value.highFpsMovementStability,
+    adaptiveClientPerformance: value.adaptiveClientPerformance
   };
 }
 
@@ -560,6 +610,7 @@ export class ConfigStore {
       this.settings.developer,
       this.defaults.developer
     );
+    this.settings.patches = sanitizeStoredPatches(this.settings.patches, this.defaults.patches);
     this.settings.fpsLimit = sanitizeStoredFpsLimit(
       this.settings.fpsLimit,
       this.defaults.fpsLimit
@@ -611,6 +662,7 @@ export class ConfigStore {
     next.gameIniBaseline = structuredClone(this.settings.gameIniBaseline);
     next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
+    next.patches = validateUpdatedPatches(next.patches);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
     next.linux = validateUpdatedLinux(next.linux);
     if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');

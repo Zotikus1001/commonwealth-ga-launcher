@@ -8,6 +8,7 @@ export const IPC = {
   play: 'launcher:play',
   playDeveloper: 'launcher:play-developer',
   applyClientPatch: 'launcher:apply-client-patch',
+  removeClientPatch: 'launcher:remove-client-patch',
   selectServer: 'launcher:select-server',
   checkServer: 'launcher:check-server',
   refresh: 'launcher:refresh',

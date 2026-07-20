@@ -20,6 +20,7 @@ const api: LauncherApi = {
   play: () => ipcRenderer.invoke(IPC.play),
   playDeveloper: () => ipcRenderer.invoke(IPC.playDeveloper),
   applyClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.applyClientPatch, id),
+  removeClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.removeClientPatch, id),
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),

@@ -3,7 +3,12 @@ import { access, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from '
 import { basename, join } from 'path';
 import { isLoginMap, LOGIN_MAP_OPTIONS, type LoginMap } from '@shared/loginMaps';
 import { isFpsLimit } from '@shared/fpsLimit';
-import type { ClientPatchId, ClientPatchStatus, GameIniSettings } from '@shared/types';
+import type {
+  ClientPatchId,
+  ClientPatchStatus,
+  GameIniSettings,
+  PatchSettings
+} from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 import { FALLBACK_TEXTURE_POOL_MB, MAX_TEXTURE_POOL_MB } from './GpuMemory';
@@ -47,6 +52,16 @@ interface IniFileEdit {
   path: string;
   required: boolean;
   options: IniPatchOptions;
+}
+
+interface IniPatchTarget {
+  sectionName: string;
+  keys: readonly string[];
+}
+
+interface IniSectionBlock {
+  name: string | null;
+  lines: string[];
 }
 
 function trailingLineEnding(value: string): string {
@@ -838,6 +853,171 @@ export async function inspectClientPatches(
   ];
 }
 
+function splitIniSectionBlocks(text: string): IniSectionBlock[] {
+  const lines = (text.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).filter(
+    (line) => line.length > 0
+  );
+  const blocks: IniSectionBlock[] = [{ name: null, lines: [] }];
+  for (const line of lines) {
+    const lineEnding = trailingLineEnding(line);
+    const content = lineEnding ? line.slice(0, -lineEnding.length) : line;
+    const section = content.match(/^\uFEFF?\s*\[([^\]]+)]\s*(?:[;#].*)?$/);
+    if (section) {
+      blocks.push({ name: section[1].trim().toLowerCase(), lines: [line] });
+    } else {
+      blocks.at(-1)!.lines.push(line);
+    }
+  }
+  return blocks;
+}
+
+function patchDirectivePattern(keys: readonly string[]): RegExp {
+  const choices = keys.map(escapedRegExp).join('|');
+  return new RegExp(
+    `^\\s*(?:[+.-]?(?:${choices})\\s*=|-(?:${choices})\\s*(?:[;#].*)?$)`,
+    'i'
+  );
+}
+
+function targetDirectiveLines(block: IniSectionBlock, pattern: RegExp): string[] {
+  return block.lines.slice(1).filter((line) => {
+    const ending = trailingLineEnding(line);
+    return pattern.test(ending ? line.slice(0, -ending.length) : line);
+  });
+}
+
+function restoreTargetBlock(
+  current: IniSectionBlock,
+  backup: IniSectionBlock | null,
+  pattern: RegExp
+): IniSectionBlock | null {
+  const currentBody = current.lines.slice(1);
+  const backupDirectives = backup ? targetDirectiveLines(backup, pattern) : [];
+  const currentDirectiveIndexes = currentBody.flatMap((line, index) => {
+    const ending = trailingLineEnding(line);
+    const content = ending ? line.slice(0, -ending.length) : line;
+    return pattern.test(content) ? [index] : [];
+  });
+  if (backupDirectives.length > 0 && currentDirectiveIndexes.length === 0) {
+    throw new Error(`The current [${current.name}] patch directives were changed externally.`);
+  }
+
+  const lastDirectiveIndex = currentDirectiveIndexes.at(-1) ?? -1;
+  const restoredBody: string[] = [];
+  let backupIndex = 0;
+  for (let index = 0; index < currentBody.length; index++) {
+    if (!currentDirectiveIndexes.includes(index)) {
+      restoredBody.push(currentBody[index]);
+      continue;
+    }
+    if (backupIndex < backupDirectives.length) {
+      restoredBody.push(backupDirectives[backupIndex++]);
+    }
+    if (index === lastDirectiveIndex) {
+      restoredBody.push(...backupDirectives.slice(backupIndex));
+      backupIndex = backupDirectives.length;
+    }
+  }
+
+  if (!backup && restoredBody.every((line) => line.trim() === '')) return null;
+  return { ...current, lines: [current.lines[0], ...restoredBody] };
+}
+
+function targetSignature(blocks: IniSectionBlock[], target: IniPatchTarget): string[] {
+  const pattern = patchDirectivePattern(target.keys);
+  return blocks
+    .filter((block) => block.name === target.sectionName.toLowerCase())
+    .flatMap((block) => targetDirectiveLines(block, pattern))
+    .map((line) => {
+      const ending = trailingLineEnding(line);
+      return ending ? line.slice(0, -ending.length) : line;
+    });
+}
+
+function restorePatchTarget(
+  currentText: string,
+  backupText: string,
+  target: IniPatchTarget
+): string {
+  const currentBlocks = splitIniSectionBlocks(currentText);
+  const backupBlocks = splitIniSectionBlocks(backupText).filter(
+    (block) => block.name === target.sectionName.toLowerCase()
+  );
+  const pattern = patchDirectivePattern(target.keys);
+  let occurrence = 0;
+  const restoredBlocks: IniSectionBlock[] = [];
+  for (const block of currentBlocks) {
+    if (block.name !== target.sectionName.toLowerCase()) {
+      restoredBlocks.push(block);
+      continue;
+    }
+    const restored = restoreTargetBlock(block, backupBlocks[occurrence] ?? null, pattern);
+    occurrence++;
+    if (restored) {
+      restoredBlocks.push(restored);
+      continue;
+    }
+
+    const preferredLineEnding = trailingLineEnding(block.lines[0]) || '\r\n';
+    let insertedSeparator = '';
+    if (backupText.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(backupText) !== '';
+      const lastLine = backupText.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) insertedSeparator += preferredLineEnding;
+      if (lastLine.trim() !== '') insertedSeparator += preferredLineEnding;
+    }
+    const previous = restoredBlocks.at(-1);
+    if (previous && insertedSeparator) {
+      const previousText = previous.lines.join('');
+      if (previousText.endsWith(insertedSeparator)) {
+        previous.lines = (
+          previousText.slice(0, -insertedSeparator.length).match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []
+        ).filter((line) => line.length > 0);
+      }
+    }
+  }
+  for (; occurrence < backupBlocks.length; occurrence++) {
+    if (targetDirectiveLines(backupBlocks[occurrence], pattern).length > 0) {
+      throw new Error(`The current [${target.sectionName}] section was changed externally.`);
+    }
+  }
+
+  const restored = restoredBlocks.flatMap((block) => block.lines).join('');
+  if (
+    JSON.stringify(targetSignature(restoredBlocks, target)) !==
+    JSON.stringify(targetSignature(splitIniSectionBlocks(backupText), target))
+  ) {
+    throw new Error(`The [${target.sectionName}] patch directives could not be restored.`);
+  }
+  return restored;
+}
+
+function clientPatchTargets(id: ClientPatchId): IniPatchTarget[] {
+  if (id === 'high-fps-movement-stability') {
+    return [{ sectionName: 'Engine.Player', keys: NET_SPEED_KEYS }];
+  }
+  if (id === 'adaptive-client-performance') {
+    return [
+      { sectionName: 'TextureStreaming', keys: ['PoolSize'] },
+      { sectionName: 'Engine.ISVHacks', keys: ['bInitializeShadersOnDemand'] }
+    ];
+  }
+  throw new Error(`Unsupported client patch: ${id}`);
+}
+
+function restoreClientPatchText(
+  currentText: string,
+  backupText: string,
+  id: ClientPatchId
+): TextPatchResult {
+  // Later inserted sections own separators relative to earlier inserted sections.
+  const restored = clientPatchTargets(id).reduceRight(
+    (text, target) => restorePatchTarget(text, backupText, target),
+    currentText
+  );
+  return { text: restored, changed: restored !== currentText };
+}
+
 function collectSectionAssignments(
   text: string,
   sectionName: string,
@@ -1363,6 +1543,77 @@ export async function applyClientPatch(
   return result;
 }
 
+async function restoreClientPatchFile(
+  path: string,
+  id: ClientPatchId,
+  backupDirectory: string
+): Promise<boolean> {
+  const backupPath = join(backupDirectory, `${basename(path)}.commonwealth-backup`);
+  let backupText: string;
+  try {
+    backupText = await readFile(backupPath, { encoding: 'utf-8' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Without a launcher backup there are no owned prior values to restore safely.
+      return false;
+    }
+    throw error;
+  }
+
+  const currentText = await readFile(path, { encoding: 'utf-8' });
+  const restored = restoreClientPatchText(currentText, backupText, id);
+  if (!restored.changed) return false;
+
+  const temporaryPath = `${path}.commonwealth-restore-${process.pid}`;
+  const mode = (await stat(path)).mode;
+  try {
+    await writeFile(temporaryPath, restored.text, { encoding: 'utf-8', mode });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => {});
+    throw error;
+  }
+
+  const verified = await readFile(path, { encoding: 'utf-8' });
+  const verification = restoreClientPatchText(verified, backupText, id);
+  if (verification.changed) throw new Error(`${basename(path)} did not retain the restored values.`);
+  return true;
+}
+
+export async function removeClientPatch(
+  install: GameInstall,
+  id: ClientPatchId,
+  log: Log,
+  backupDirectory: string
+): Promise<IniRepairResult> {
+  clientPatchTargets(id);
+  const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
+  for (const [path, required] of [
+    [join(install.configDir, 'TgEngine.ini'), true],
+    [join(install.configDir, 'DefaultEngine.ini'), false]
+  ] as const) {
+    try {
+      await access(path, constants.R_OK | constants.W_OK);
+    } catch (error) {
+      if (!required && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
+    }
+
+    try {
+      const changed = await restoreClientPatchFile(path, id, backupDirectory);
+      result.checkedFiles.push(path);
+      if (changed) result.changedFiles.push(path);
+    } catch (error) {
+      throw new Error(`Cannot remove patch from ${basename(path)}: ${(error as Error).message}`);
+    }
+  }
+  log.info(
+    `client patch: ${id} removed from ${result.checkedFiles.length} file(s); ` +
+      `${result.changedFiles.length} changed`
+  );
+  return result;
+}
+
 async function ensureLoginMap(
   install: GameInstall,
   loginMap: LoginMap,
@@ -1510,22 +1761,27 @@ export async function ensureClientConfiguration(
   fpsLimitEnabled: boolean,
   fpsLimit: number,
   texturePoolMb: number,
+  patches: PatchSettings,
   log: Log,
   backupDirectory: string
 ): Promise<IniRepairResult> {
-  const networkResult = await applyClientPatch(
-    install,
-    'high-fps-movement-stability',
-    log,
-    backupDirectory
-  );
-  const performanceResult = await applyClientPatch(
-    install,
-    'adaptive-client-performance',
-    log,
-    backupDirectory,
-    texturePoolMb
-  );
+  const networkResult = patches.highFpsMovementStability
+    ? await applyClientPatch(
+        install,
+        'high-fps-movement-stability',
+        log,
+        backupDirectory
+      )
+    : { checkedFiles: [], changedFiles: [], backupFiles: [] };
+  const performanceResult = patches.adaptiveClientPerformance
+    ? await applyClientPatch(
+        install,
+        'adaptive-client-performance',
+        log,
+        backupDirectory,
+        texturePoolMb
+      )
+    : { checkedFiles: [], changedFiles: [], backupFiles: [] };
   const loginMapResult = await ensureLoginMap(install, loginMap, log, backupDirectory);
   const overhealingResult = await ensureOverhealing(
     install,

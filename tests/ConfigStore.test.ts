@@ -37,12 +37,16 @@ describe('DXVK/Vulkan settings migration', () => {
       resolutionWidth: 1920,
       resolutionHeight: 1080,
       useDxvk: false,
-      useClientPatches: false,
       useLocalClientDll: false
+    });
+    expect(migrated.patches).toEqual({
+      gameClientPatch: true,
+      highFpsMovementStability: true,
+      adaptiveClientPerformance: true
     });
   });
 
-  it('adds disabled experimental client patches without changing existing settings', () => {
+  it('enables release patches without changing existing developer settings', () => {
     const previous = defaultSettings();
     const schema10 = {
       ...previous,
@@ -62,8 +66,12 @@ describe('DXVK/Vulkan settings migration', () => {
       resolutionWidth: 1600,
       resolutionHeight: 900,
       useDxvk: true,
-      useClientPatches: false,
       useLocalClientDll: false
+    });
+    expect(migrateStoredSettings(schema10).settings.patches).toEqual({
+      gameClientPatch: true,
+      highFpsMovementStability: true,
+      adaptiveClientPerformance: true
     });
   });
 
@@ -84,8 +92,25 @@ describe('DXVK/Vulkan settings migration', () => {
     };
 
     expect(migrateStoredSettings(schema11).settings.developer).toEqual({
-      ...schema11.developer,
+      enabled: true,
+      windowed: schema11.developer.windowed,
+      resolutionWidth: schema11.developer.resolutionWidth,
+      resolutionHeight: schema11.developer.resolutionHeight,
+      useDxvk: schema11.developer.useDxvk,
       useLocalClientDll: false
+    });
+    expect(migrateStoredSettings(schema11).settings.patches).toEqual({
+      gameClientPatch: true,
+      highFpsMovementStability: true,
+      adaptiveClientPerformance: true
+    });
+  });
+
+  it('defaults every optional game patch on', () => {
+    expect(defaultSettings().patches).toEqual({
+      gameClientPatch: true,
+      highFpsMovementStability: true,
+      adaptiveClientPerformance: true
     });
   });
 });
@@ -118,6 +143,37 @@ describe('launcher settings reset', () => {
     expect(JSON.parse(await readFile(file, { encoding: 'utf-8' }))).toEqual(defaults);
     await expect(store.update({ gameExePath: 'new-path' })).resolves.toMatchObject({
       gameExePath: 'new-path'
+    });
+  });
+});
+
+describe('game patch settings', () => {
+  it('persists independent patch opt-outs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'commonwealth-config-patches-'));
+    roots.push(root);
+    const defaults = defaultSettings();
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as never;
+    const store = new ConfigStore(root, defaults, log);
+
+    await store.load();
+    await store.update({
+      patches: {
+        gameClientPatch: false,
+        adaptiveClientPerformance: false
+      }
+    });
+
+    const reloaded = new ConfigStore(root, defaults, log);
+    await expect(reloaded.load()).resolves.toMatchObject({
+      patches: {
+        gameClientPatch: false,
+        highFpsMovementStability: true,
+        adaptiveClientPerformance: false
+      }
     });
   });
 });

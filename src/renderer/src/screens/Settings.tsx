@@ -95,8 +95,10 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [discarding, setDiscarding] = useState(false);
   const [developerModeSaving, setDeveloperModeSaving] = useState(false);
   const [developerModeError, setDeveloperModeError] = useState<string | null>(null);
-  const [clientPatchesSaving, setClientPatchesSaving] = useState(false);
-  const [clientPatchesError, setClientPatchesError] = useState<string | null>(null);
+  const [gameClientPatchSaving, setGameClientPatchSaving] = useState(false);
+  const [gameClientPatchError, setGameClientPatchError] = useState<string | null>(null);
+  const [localClientDllSaving, setLocalClientDllSaving] = useState(false);
+  const [localClientDllError, setLocalClientDllError] = useState<string | null>(null);
   const aboutClicks = useRef<number[]>([]);
 
   const isLinux = window.api.platform === 'linux';
@@ -317,51 +319,48 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     }
   };
 
-  const saveClientPatches = async (enabled: boolean): Promise<void> => {
-    if (!draft || clientPatchesSaving) return;
-    const previous = draft.developer.useClientPatches;
+  const saveGameClientPatch = async (enabled: boolean): Promise<void> => {
+    if (!draft || gameClientPatchSaving) return;
+    const previous = draft.patches.gameClientPatch;
     setDraft((current) =>
       current
-        ? { ...current, developer: { ...current.developer, useClientPatches: enabled } }
+        ? { ...current, patches: { ...current.patches, gameClientPatch: enabled } }
         : current
     );
-    setClientPatchesSaving(true);
-    setClientPatchesError(null);
+    setGameClientPatchSaving(true);
+    setGameClientPatchError(null);
     try {
-      const updated = await window.api.updateSettings({ developer: { useClientPatches: enabled } });
+      const updated = await window.api.updateSettings({ patches: { gameClientPatch: enabled } });
       setDraft((current) =>
         current
           ? {
               ...current,
-              developer: {
-                ...current.developer,
-                useClientPatches: updated.developer.useClientPatches
-              }
+              patches: { ...current.patches, gameClientPatch: updated.patches.gameClientPatch }
             }
           : current
       );
     } catch (error) {
       setDraft((current) =>
         current
-          ? { ...current, developer: { ...current.developer, useClientPatches: previous } }
+          ? { ...current, patches: { ...current.patches, gameClientPatch: previous } }
           : current
       );
-      setClientPatchesError(error instanceof Error ? error.message : String(error));
+      setGameClientPatchError(error instanceof Error ? error.message : String(error));
     } finally {
-      setClientPatchesSaving(false);
+      setGameClientPatchSaving(false);
     }
   };
 
   const saveLocalClientDll = async (enabled: boolean): Promise<void> => {
-    if (!draft || clientPatchesSaving) return;
+    if (!draft || localClientDllSaving) return;
     const previous = draft.developer.useLocalClientDll;
     setDraft((current) =>
       current
         ? { ...current, developer: { ...current.developer, useLocalClientDll: enabled } }
         : current
     );
-    setClientPatchesSaving(true);
-    setClientPatchesError(null);
+    setLocalClientDllSaving(true);
+    setLocalClientDllError(null);
     try {
       const updated = await window.api.updateSettings({ developer: { useLocalClientDll: enabled } });
       setDraft((current) =>
@@ -381,9 +380,9 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           ? { ...current, developer: { ...current.developer, useLocalClientDll: previous } }
           : current
       );
-      setClientPatchesError(error instanceof Error ? error.message : String(error));
+      setLocalClientDllError(error instanceof Error ? error.message : String(error));
     } finally {
-      setClientPatchesSaving(false);
+      setLocalClientDllSaving(false);
     }
   };
 
@@ -935,7 +934,29 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           </section>
         )}
 
-        {tab === 'patches' && <PatchesTab state={state} />}
+        {tab === 'patches' && (
+          <PatchesTab
+            state={state}
+            settings={draft}
+            gameClientPatchSaving={gameClientPatchSaving}
+            gameClientPatchError={gameClientPatchError}
+            onGameClientPatchChange={(enabled) => void saveGameClientPatch(enabled)}
+            onPatchPreferenceChange={(id, enabled) => {
+              const preferenceKey =
+                id === 'high-fps-movement-stability'
+                  ? 'highFpsMovementStability'
+                  : 'adaptiveClientPerformance';
+              setDraft((current) =>
+                current
+                  ? {
+                      ...current,
+                      patches: { ...current.patches, [preferenceKey]: enabled }
+                    }
+                  : current
+              );
+            }}
+          />
+        )}
 
         {tab === 'servers' && <ServersTab settings={draft} edit={edit} />}
 
@@ -1001,9 +1022,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             modeSaving={developerModeSaving}
             modeError={developerModeError}
             onModeChange={(enabled) => void saveDeveloperMode(enabled)}
-            clientPatchesSaving={clientPatchesSaving}
-            clientPatchesError={clientPatchesError}
-            onClientPatchesChange={(enabled) => void saveClientPatches(enabled)}
+            localClientDllSaving={localClientDllSaving}
+            localClientDllError={localClientDllError}
             onLocalClientDllChange={(enabled) => void saveLocalClientDll(enabled)}
           />
         )}
@@ -1028,7 +1048,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 mapSaving ||
                 uiScaleSaving ||
                 developerModeSaving ||
-                clientPatchesSaving
+                gameClientPatchSaving ||
+                localClientDllSaving
               }
               onClick={() => void save()}
             >
@@ -1343,9 +1364,8 @@ function DeveloperTab({
   modeSaving,
   modeError,
   onModeChange,
-  clientPatchesSaving,
-  clientPatchesError,
-  onClientPatchesChange,
+  localClientDllSaving,
+  localClientDllError,
   onLocalClientDllChange
 }: {
   state: LauncherState;
@@ -1354,9 +1374,8 @@ function DeveloperTab({
   modeSaving: boolean;
   modeError: string | null;
   onModeChange: (enabled: boolean) => void;
-  clientPatchesSaving: boolean;
-  clientPatchesError: string | null;
-  onClientPatchesChange: (enabled: boolean) => void;
+  localClientDllSaving: boolean;
+  localClientDllError: string | null;
   onLocalClientDllChange: (enabled: boolean) => void;
 }): JSX.Element {
   return (
@@ -1449,41 +1468,26 @@ function DeveloperTab({
             <DxvkVulkanPanel state={state} settings={settings} edit={edit} />
           )}
 
-          <div className="panel-title">Experimental Client Patches</div>
-          <div className={styles.featureToggle}>
-            <input
-              id="developer-client-patches"
-              type="checkbox"
-              checked={settings.developer.useClientPatches}
-              disabled={clientPatchesSaving}
-              onChange={(event) => onClientPatchesChange(event.target.checked)}
-            />
-            <label htmlFor="developer-client-patches">
-              <span className={styles.featureName}>Enable Experimental Client Patches</span>
-              <span className={styles.featureDetail}>
-                Installs performance and stability fixes and checks for newer patches before Play.
-                Restart the game after changing this option.
-              </span>
-            </label>
-          </div>
+          <div className="panel-title">Local Client Patch Testing</div>
           <div className={styles.featureToggle}>
             <input
               id="developer-local-client-dll"
               type="checkbox"
               checked={settings.developer.useLocalClientDll}
-              disabled={clientPatchesSaving}
+              disabled={localClientDllSaving}
               onChange={(event) => onLocalClientDllChange(event.target.checked)}
             />
             <label htmlFor="developer-local-client-dll">
               <span className={styles.featureName}>Use Local Client DLL</span>
               <span className={styles.featureDetail}>
                 Uses the existing dinput8.dll in the game folder without checking, downloading,
-                replacing, or removing it. Enable Client Patches to load it with the game.
+                replacing, or removing it. Apply Game Client Patch in the Patches tab to load it
+                with the game.
               </span>
             </label>
           </div>
-          {clientPatchesError && (
-            <p className={styles.invalid}>{`Could not change client patches: ${clientPatchesError}`}</p>
+          {localClientDllError && (
+            <p className={styles.invalid}>{`Could not change the local client DLL: ${localClientDllError}`}</p>
           )}
 
         </>
@@ -1492,74 +1496,172 @@ function DeveloperTab({
   );
 }
 
-function PatchesTab({ state }: { state: LauncherState }): JSX.Element {
-  const [applying, setApplying] = useState<ClientPatchStatus['id'] | null>(null);
+function PatchesTab({
+  state,
+  settings,
+  gameClientPatchSaving,
+  gameClientPatchError,
+  onGameClientPatchChange,
+  onPatchPreferenceChange
+}: {
+  state: LauncherState;
+  settings: SettingsModel;
+  gameClientPatchSaving: boolean;
+  gameClientPatchError: string | null;
+  onGameClientPatchChange: (enabled: boolean) => void;
+  onPatchPreferenceChange: (id: ClientPatchStatus['id'], enabled: boolean) => void;
+}): JSX.Element {
+  const [changing, setChanging] = useState<{
+    id: ClientPatchStatus['id'];
+    enabled: boolean;
+  } | null>(null);
   const [result, setResult] = useState<
     { id: ClientPatchStatus['id']; value: ActionResult } | null
   >(null);
 
-  const applyPatch = async (id: ClientPatchStatus['id']): Promise<void> => {
-    if (applying) return;
-    setApplying(id);
+  const changePatch = async (
+    id: ClientPatchStatus['id'],
+    enabled: boolean
+  ): Promise<void> => {
+    if (changing || gameClientPatchSaving) return;
+    setChanging({ id, enabled });
     setResult(null);
     try {
-      setResult({ id, value: await window.api.applyClientPatch(id) });
+      const value = enabled
+        ? await window.api.applyClientPatch(id)
+        : await window.api.removeClientPatch(id);
+      setResult({ id, value });
+      if (value.ok) onPatchPreferenceChange(id, enabled);
     } catch (error) {
       setResult({
         id,
         value: {
           ok: false,
-          message: `Could not apply patch: ${error instanceof Error ? error.message : String(error)}`
+          message:
+            `Could not ${enabled ? 'apply' : 'remove'} patch: ` +
+            (error instanceof Error ? error.message : String(error))
         }
       });
     } finally {
-      setApplying(null);
+      setChanging(null);
     }
   };
 
+  const gameClientPatchEnabled = settings.patches.gameClientPatch;
+  const gameClientPatchStatus = gameClientPatchSaving
+    ? gameClientPatchEnabled
+      ? 'Applying…'
+      : 'Removing…'
+    : gameClientPatchEnabled
+      ? state.gamePathValid
+        ? 'Enabled'
+        : 'Enabled — game path required'
+      : 'Removed';
+
   return (
     <section className={styles.section}>
-      <div className="panel-title">Client Patches</div>
+      <div className="panel-title">Game Patches</div>
       <p className={styles.hint}>
-        Verified against the installed game. Required fixes are checked again before every Play.
+        All patches are enabled by default. Apply or remove each one independently to compare the
+        game with and without it; your choice is kept for future launches.
       </p>
       <div className={styles.patchList}>
+        <article
+          className={`${styles.patchCard} ${
+            gameClientPatchEnabled ? styles.patchApplied : styles.patchUnknown
+          }`}
+        >
+          <button
+            className={`${styles.patchIcon} ${styles.patchApplyButton} ${
+              gameClientPatchEnabled ? styles.patchRemoveButton : ''
+            }`}
+            disabled={
+              gameClientPatchSaving || changing !== null || state.launchCoolingDown
+            }
+            aria-label={`${gameClientPatchEnabled ? 'Remove' : 'Apply'} Game Client Patch`}
+            title={
+              state.launchCoolingDown
+                ? 'Wait for launch to finish.'
+                : `${gameClientPatchEnabled ? 'Remove' : 'Apply'} Game Client Patch`
+            }
+            onClick={() => onGameClientPatchChange(!gameClientPatchEnabled)}
+          >
+            {gameClientPatchSaving ? '…' : gameClientPatchEnabled ? 'REMOVE' : 'APPLY'}
+          </button>
+          <div className={styles.patchBody}>
+            <div className={styles.patchTitle}>Game Client Patch</div>
+            <p className={styles.patchDescription}>
+              Installs the managed client DLL and checks for updated releases before Play. Restart
+              the game after applying or removing it.
+            </p>
+            <div className={styles.patchFixDetails}>
+              <div className={styles.patchFixHeader}>
+                <span>Current fixes</span>
+                <span>1 shipped fix</span>
+              </div>
+              <ul className={styles.patchFixList}>
+                <li>
+                  <span className={styles.patchFixIndex} aria-hidden="true">
+                    01
+                  </span>
+                  <span className={styles.patchFixCopy}>
+                    <strong>Smoother scope transitions</strong>
+                    <small>Fixes client stutters when scoping in or out.</small>
+                  </span>
+                </li>
+              </ul>
+            </div>
+            <span className={styles.patchState}>{gameClientPatchStatus}</span>
+            {gameClientPatchError && (
+              <p className={styles.patchResultError}>
+                {`Could not change Game Client Patch: ${gameClientPatchError}`}
+              </p>
+            )}
+          </div>
+        </article>
+
         {state.clientPatches.map((patch) => {
           const copy = PATCH_COPY[patch.id];
-          const patchApplying = applying === patch.id;
-          const status =
-            patch.applied === true
+          const preferenceKey =
+            patch.id === 'high-fps-movement-stability'
+              ? 'highFpsMovementStability'
+              : 'adaptiveClientPerformance';
+          const preferred = settings.patches[preferenceKey];
+          const patchChanging = changing?.id === patch.id;
+          const status = patchChanging
+            ? changing.enabled
+              ? 'Applying…'
+              : 'Removing…'
+            : patch.applied === true
               ? 'Applied'
-              : patch.applied === false
-                ? patchApplying
-                  ? 'Applying…'
-                  : state.launchCoolingDown
-                    ? 'Wait for launch to finish'
-                    : 'Ready to apply'
-                : 'Game path required';
+              : preferred
+                ? state.gamePathValid
+                  ? 'Enabled — applies before Play'
+                  : 'Enabled — game path required'
+                : 'Removed';
           const tone =
             patch.applied === true
               ? styles.patchApplied
-              : patch.applied === false
+              : preferred
                 ? styles.patchPending
                 : styles.patchUnknown;
           return (
             <article key={patch.id} className={`${styles.patchCard} ${tone}`}>
-              {patch.applied === false ? (
-                <button
-                  className={`${styles.patchIcon} ${styles.patchApplyButton}`}
-                  disabled={patchApplying || state.launchCoolingDown}
-                  aria-label={`Apply ${copy.title} patch`}
-                  title={state.launchCoolingDown ? 'Wait for launch to finish.' : 'Apply patch'}
-                  onClick={() => void applyPatch(patch.id)}
-                >
-                  {patchApplying ? '…' : 'APPLY'}
-                </button>
-              ) : (
-                <span className={styles.patchIcon} aria-hidden="true">
-                  {patch.applied === true ? '✓' : '—'}
-                </span>
-              )}
+              <button
+                className={`${styles.patchIcon} ${styles.patchApplyButton} ${
+                  preferred ? styles.patchRemoveButton : ''
+                }`}
+                disabled={changing !== null || gameClientPatchSaving || state.launchCoolingDown}
+                aria-label={`${preferred ? 'Remove' : 'Apply'} ${copy.title} patch`}
+                title={
+                  state.launchCoolingDown
+                    ? 'Wait for launch to finish.'
+                    : `${preferred ? 'Remove' : 'Apply'} patch`
+                }
+                onClick={() => void changePatch(patch.id, !preferred)}
+              >
+                {patchChanging ? '…' : preferred ? 'REMOVE' : 'APPLY'}
+              </button>
               <div className={styles.patchBody}>
                 <div className={styles.patchTitle}>{copy.title}</div>
                 <p className={styles.patchDescription}>{copy.description}</p>
@@ -1620,7 +1722,7 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <div>
           <div className={styles.aboutTitle}>Commonwealth GA Launcher</div>
           <p className={styles.aboutTagline}>
-            Private server access, client fixes, and automatic updates.
+            Private server access, game patches, and automatic updates.
           </p>
         </div>
       </div>

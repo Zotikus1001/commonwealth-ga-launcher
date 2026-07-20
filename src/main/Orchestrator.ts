@@ -27,6 +27,7 @@ import {
   ensureClientConfiguration,
   inspectClientPatches,
   inspectGameIniSettings,
+  removeClientPatch as removeIniClientPatch,
   unavailableClientPatches
 } from './services/IniFixes';
 import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
@@ -44,6 +45,10 @@ const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
 
+function sameGameExecutable(left: string, right: string): boolean {
+  return left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase();
+}
+
 interface ServerSelection {
   id: string;
   name: string;
@@ -60,6 +65,7 @@ interface CandidateProbeResult {
 export class Orchestrator {
   private state: LauncherState;
   private install: GameInstall | null = null;
+  private patchesPreparedGameExePath = '';
   private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
   private readonly dxvkManager: DxvkManager;
@@ -408,6 +414,15 @@ export class Orchestrator {
         linux: { winePrefix: linuxRuntime.suggestedPrefixPath }
       });
     }
+    if (!install) {
+      this.patchesPreparedGameExePath = '';
+    } else if (
+      !this.patchesPreparedGameExePath ||
+      !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
+    ) {
+      await this.applyEnabledPatchesForInstall(install, settings);
+      this.patchesPreparedGameExePath = install.exePath;
+    }
     let clientPatches = unavailableClientPatches();
     let dxvk = unavailableDxvkState(PLATFORM);
     if (install) {
@@ -457,6 +472,71 @@ export class Orchestrator {
       return;
     }
     this.patch({ phase: 'ready', statusLine: 'Ready.' });
+  }
+
+  private async applyEnabledPatchesForInstall(
+    install: GameInstall,
+    settings: Settings
+  ): Promise<void> {
+    const backupDirectory = managedIniBackupDirectory(app.getPath('userData'), install);
+    if (settings.patches.highFpsMovementStability) {
+      this.patch({ statusLine: 'Applying High-FPS Movement Stability…' });
+      try {
+        await applyIniClientPatch(
+          install,
+          'high-fps-movement-stability',
+          this.log,
+          backupDirectory
+        );
+      } catch (error) {
+        this.log.warn(`automatic high-FPS patch failed: ${(error as Error).message}`);
+      }
+    }
+    if (settings.patches.adaptiveClientPerformance) {
+      this.patch({ statusLine: 'Applying Client Performance Stability…' });
+      try {
+        const texturePoolMb = (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter))
+          .texturePoolMb;
+        await applyIniClientPatch(
+          install,
+          'adaptive-client-performance',
+          this.log,
+          backupDirectory,
+          texturePoolMb
+        );
+      } catch (error) {
+        this.log.warn(`automatic client performance patch failed: ${(error as Error).message}`);
+      }
+    }
+    if (!settings.patches.gameClientPatch) return;
+
+    this.patch({
+      statusLine: settings.developer.useLocalClientDll
+        ? 'Preparing local client DLL…'
+        : 'Applying Game Client Patch…'
+    });
+    try {
+      if (settings.developer.useLocalClientDll) {
+        await this.clientPatchManager.prepareLocalForLaunch(install, PLATFORM);
+      } else {
+        await this.clientPatchManager.prepareForLaunch(
+          install,
+          PLATFORM,
+          ({ transferred, total }) => {
+            const percent = total > 0
+              ? Math.min(100, Math.round((transferred / total) * 100))
+              : -1;
+            this.patch({
+              statusLine: percent >= 0
+                ? `Downloading Game Client Patch… ${percent}%`
+                : 'Downloading Game Client Patch…'
+            });
+          }
+        );
+      }
+    } catch (error) {
+      this.log.warn(`automatic Game Client Patch failed: ${(error as Error).message}`);
+    }
   }
 
   private shouldAutoClose(settings: Settings): boolean {
@@ -570,17 +650,18 @@ export class Orchestrator {
         settings.fpsLimit.enabled,
         settings.fpsLimit.value,
         gpuMemory.texturePoolMb,
+        settings.patches,
         this.log,
         managedIniBackupDirectory(app.getPath('userData'), this.install)
       );
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
 
       let clientPatchEnvironment: NodeJS.ProcessEnv = {};
-      if (settings.developer.useClientPatches) {
+      if (settings.patches.gameClientPatch) {
         this.patch({
           statusLine: settings.developer.useLocalClientDll
             ? 'Preparing local client DLL…'
-            : 'Checking experimental client patches…'
+            : 'Checking Game Client Patch…'
         });
         try {
           clientPatchEnvironment = settings.developer.useLocalClientDll
@@ -594,8 +675,8 @@ export class Orchestrator {
                     : -1;
                   this.patch({
                     statusLine: percent >= 0
-                      ? `Downloading experimental client patches… ${percent}%`
-                      : 'Downloading experimental client patches…'
+                      ? `Downloading Game Client Patch… ${percent}%`
+                      : 'Downloading Game Client Patch…'
                   });
                 }
               );
@@ -693,14 +774,34 @@ export class Orchestrator {
     }
   }
 
-  async applyClientPatch(id: ClientPatchId): Promise<ActionResult> {
+  private async changeIniClientPatch(
+    id: ClientPatchId,
+    enabled: boolean
+  ): Promise<ActionResult> {
     if (this.busy) return { ok: false, message: 'The launcher is busy. Try again shortly.' };
     this.busy = true;
+    let previousEnabled: boolean | null = null;
+    let preferenceChanged = false;
     try {
       if (this.state.launchCoolingDown) {
         return { ok: false, message: 'Wait for the current game launch to finish.' };
       }
       const settings = this.config.get();
+      const preferenceKey =
+        id === 'high-fps-movement-stability'
+          ? 'highFpsMovementStability'
+          : 'adaptiveClientPerformance';
+      previousEnabled = settings.patches[preferenceKey];
+      if (previousEnabled !== enabled) {
+        await this.config.update({
+          patches:
+            preferenceKey === 'highFpsMovementStability'
+              ? { highFpsMovementStability: enabled }
+              : { adaptiveClientPerformance: enabled }
+        });
+        preferenceChanged = true;
+      }
+
       const install = await validateGameExe(settings.gameExePath);
       this.install = install;
       if (!install) {
@@ -709,42 +810,90 @@ export class Orchestrator {
           validatedGameExePath: settings.gameExePath,
           clientPatches: unavailableClientPatches()
         });
-        return { ok: false, message: 'Set a valid Global Agenda install path first.' };
+        return {
+          ok: true,
+          message: enabled
+            ? 'Patch enabled. It will apply after a valid game location is set.'
+            : 'Patch removed.'
+        };
       }
 
-      const texturePoolMb =
-        id === 'adaptive-client-performance'
-          ? (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter)).texturePoolMb
-          : undefined;
-      const result = await applyIniClientPatch(
-        install,
-        id,
-        this.log,
-        managedIniBackupDirectory(app.getPath('userData'), install),
-        texturePoolMb
-      );
+      const backupDirectory = managedIniBackupDirectory(app.getPath('userData'), install);
+      const result = enabled
+        ? await applyIniClientPatch(
+            install,
+            id,
+            this.log,
+            backupDirectory,
+            id === 'adaptive-client-performance'
+              ? (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter)).texturePoolMb
+              : undefined
+          )
+        : await removeIniClientPatch(install, id, this.log, backupDirectory);
       const clientPatches = await inspectClientPatches(install);
       this.patch({
         gamePathValid: true,
         validatedGameExePath: settings.gameExePath,
         clientPatches
       });
-      if (!clientPatches.find((patch) => patch.id === id)?.applied) {
+      if (enabled && clientPatches.find((patch) => patch.id === id)?.applied !== true) {
         throw new Error('The patch could not be verified after writing it.');
       }
       return {
         ok: true,
-        message: result.changedFiles.length > 0 ? 'Patch applied.' : 'Patch is already applied.'
+        message:
+          result.changedFiles.length > 0
+            ? enabled
+              ? 'Patch applied.'
+              : 'Patch removed.'
+            : enabled
+              ? 'Patch is already applied.'
+              : 'Patch is already removed.'
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.log.warn(`manual client patch failed: ${message}`);
+      let message = error instanceof Error ? error.message : String(error);
+      if (enabled && preferenceChanged && previousEnabled === false && this.install) {
+        try {
+          await removeIniClientPatch(
+            this.install,
+            id,
+            this.log,
+            managedIniBackupDirectory(app.getPath('userData'), this.install)
+          );
+        } catch (cleanupError) {
+          message += `; could not clean up the partial patch: ${(cleanupError as Error).message}`;
+        }
+      }
+      if (preferenceChanged && previousEnabled !== null) {
+        try {
+          await this.config.update({
+            patches:
+              id === 'high-fps-movement-stability'
+                ? { highFpsMovementStability: previousEnabled }
+                : { adaptiveClientPerformance: previousEnabled }
+          });
+        } catch (rollbackError) {
+          message += `; could not restore the previous patch preference: ${(rollbackError as Error).message}`;
+        }
+      }
+      this.log.warn(`manual client patch ${enabled ? 'apply' : 'remove'} failed: ${message}`);
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
-      return { ok: false, message: `Could not apply patch: ${message}` };
+      return {
+        ok: false,
+        message: `Could not ${enabled ? 'apply' : 'remove'} patch: ${message}`
+      };
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();
     }
+  }
+
+  async applyClientPatch(id: ClientPatchId): Promise<ActionResult> {
+    return this.changeIniClientPatch(id, true);
+  }
+
+  async removeClientPatch(id: ClientPatchId): Promise<ActionResult> {
+    return this.changeIniClientPatch(id, false);
   }
 
   private async configureDxvkVulkan(enabled: boolean): Promise<ActionResult> {
@@ -828,17 +977,24 @@ export class Orchestrator {
       const settings = this.config.get();
       const install = await validateGameExe(settings.gameExePath);
       this.install = install;
-      if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      if (!install) {
+        return {
+          ok: true,
+          message: enabled
+            ? 'Game Client Patch enabled. It will apply after a valid game location is set.'
+            : 'Game Client Patch removed.'
+        };
+      }
       const localDll = settings.developer.useLocalClientDll;
       this.patch({
         phase: 'checking',
         statusLine: enabled
           ? localDll
             ? 'Preparing local client DLL…'
-            : 'Checking experimental client patches…'
+            : 'Checking Game Client Patch…'
           : localDll
             ? 'Leaving local client DLL unchanged…'
-            : 'Removing experimental client patches…'
+            : 'Removing Game Client Patch…'
       });
       if (enabled) {
         if (localDll) {
@@ -853,8 +1009,8 @@ export class Orchestrator {
                 : -1;
               this.patch({
                 statusLine: percent >= 0
-                  ? `Downloading experimental client patches… ${percent}%`
-                  : 'Downloading experimental client patches…'
+                  ? `Downloading Game Client Patch… ${percent}%`
+                  : 'Downloading Game Client Patch…'
               });
             }
           );
@@ -863,11 +1019,14 @@ export class Orchestrator {
         await this.clientPatchManager.disable(install);
       }
       this.patch({ phase: 'ready', statusLine: 'Ready.' });
-      return { ok: true, message: enabled ? 'Client patches enabled.' : 'Client patches disabled.' };
+      return {
+        ok: true,
+        message: enabled ? 'Game Client Patch applied.' : 'Game Client Patch removed.'
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.log.warn(`experimental client patch change failed: ${message}`);
-      this.patch({ phase: 'ready', statusLine: `Client patch change failed: ${message}` });
+      this.log.warn(`client patch change failed: ${message}`);
+      this.patch({ phase: 'ready', statusLine: `Game Client Patch change failed: ${message}` });
       return { ok: false, message };
     } finally {
       this.busy = false;
@@ -917,7 +1076,7 @@ export class Orchestrator {
     await this.refresh();
   }
 
-  async clientPatchesChanged(enabled: boolean): Promise<void> {
+  async gameClientPatchChanged(enabled: boolean): Promise<void> {
     const result = await this.configureClientPatches(enabled);
     if (!result.ok) throw new Error(result.message);
     await this.refresh();
@@ -940,11 +1099,7 @@ export class Orchestrator {
       const gameExePath = typeof settings.gameExePath === 'string' ? settings.gameExePath : '';
       const install = await validateGameExe(gameExePath);
       if (install) {
-        if (settings.developer.useLocalClientDll) {
-          this.log.info('launcher reset: local client DLL left untouched');
-        } else {
-          await this.clientPatchManager.removeManaged(install);
-        }
+        await this.clientPatchManager.removeManaged(install);
         if (PLATFORM === 'win32') await this.dxvkManager.restore(install);
       } else if (gameExePath.trim()) {
         this.log.warn('launcher reset: configured game install is unavailable; game cleanup skipped');

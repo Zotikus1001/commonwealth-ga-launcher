@@ -33,7 +33,8 @@ The launcher updates itself automatically.
 - Automatic updates
 - Easy game setup and launching
 - Server status and server selection
-- Automatic game performance and stability patches
+- Game patches enabled by default, with one-click Apply and Remove controls
+- A Game Client Patch that fixes scope-transition stutters
 - Useful game options
 - Agenda Stats and Discord access
 - Diagnostics and a one-click recovery reset

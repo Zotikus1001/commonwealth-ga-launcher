@@ -38,9 +38,10 @@ export function registerIpc(
       Object.keys(patch).length === 1 &&
       'uiScale' in patch;
     if (!uiScaleOnly) {
+      const gamePathChanged = previous.gameExePath !== updated.gameExePath;
       const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
-      const clientPatchesChanged =
-        previous.developer.useClientPatches !== updated.developer.useClientPatches;
+      const gameClientPatchChanged =
+        previous.patches.gameClientPatch !== updated.patches.gameClientPatch;
       if (dxvkChanged) {
         try {
           await orchestrator.settingsChanged(updated.developer.useDxvk);
@@ -56,13 +57,13 @@ export function registerIpc(
           throw error;
         }
       }
-      if (clientPatchesChanged) {
+      if (gameClientPatchChanged) {
         try {
-          await orchestrator.clientPatchesChanged(updated.developer.useClientPatches);
+          await orchestrator.gameClientPatchChanged(updated.patches.gameClientPatch);
         } catch (error) {
           try {
             await config.update({
-              developer: { useClientPatches: previous.developer.useClientPatches }
+              patches: { gameClientPatch: previous.patches.gameClientPatch }
             });
           } catch (rollbackError) {
             throw new Error(
@@ -73,8 +74,9 @@ export function registerIpc(
           throw error;
         }
       }
-      if (!dxvkChanged && !clientPatchesChanged) {
-        void orchestrator.settingsChanged();
+      if (!dxvkChanged && !gameClientPatchChanged) {
+        if (gamePathChanged) await orchestrator.settingsChanged();
+        else void orchestrator.settingsChanged();
       }
     }
     return updated;
@@ -94,7 +96,7 @@ export function registerIpc(
     if (res.canceled || res.filePaths.length === 0) return null;
     const exePath = res.filePaths[0];
     await config.update({ gameExePath: exePath });
-    void orchestrator.settingsChanged();
+    await orchestrator.settingsChanged();
     return exePath;
   });
 
@@ -106,6 +108,13 @@ export function registerIpc(
       throw new Error('Unknown client patch.');
     }
     return orchestrator.applyClientPatch(id);
+  });
+
+  ipcMain.handle(IPC.removeClientPatch, (_event, id: unknown) => {
+    if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
+      throw new Error('Unknown client patch.');
+    }
+    return orchestrator.removeClientPatch(id);
   });
   ipcMain.handle(IPC.selectServer, (_event, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Server identifier must be a string.');

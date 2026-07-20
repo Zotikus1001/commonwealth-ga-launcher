@@ -33,6 +33,12 @@ export interface GameIniBaseline extends GameIniSettings {
   gameExePath: string;
 }
 
+export interface PatchSettings {
+  gameClientPatch: boolean;
+  highFpsMovementStability: boolean;
+  adaptiveClientPerformance: boolean;
+}
+
 export type LinuxRunnerType = 'wine' | 'proton';
 
 export type DxvkRendererSetting = 'directx-9' | 'directx-10' | 'unknown';
@@ -78,6 +84,8 @@ export interface Settings {
   };
   /** Last observed active INI values, used to preserve newer launcher choices. */
   gameIniBaseline: GameIniBaseline;
+  /** Optional game patches controlled independently from the Patches tab. */
+  patches: PatchSettings;
   servers: {
     builtInName: string;
     selectedServerId: string;
@@ -106,8 +114,6 @@ export interface Settings {
     resolutionHeight: number;
     /** Experimental Windows option configured in Dev but applied to every launch mode. */
     useDxvk: boolean;
-    /** Experimental launcher-managed client patches, applied to every launch mode when enabled. */
-    useClientPatches: boolean;
     /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
     useLocalClientDll: boolean;
   };
@@ -221,6 +227,7 @@ export interface LauncherApi {
   play(): Promise<void>;
   playDeveloper(): Promise<void>;
   applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
+  removeClientPatch(id: ClientPatchId): Promise<ActionResult>;
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;
   refresh(): Promise<void>;

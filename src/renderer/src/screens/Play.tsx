@@ -92,10 +92,12 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
 
 export default function Play({
   state,
-  onOpenGameSettings
+  onOpenGameSettings,
+  onOpenInfo
 }: {
   state: LauncherState;
   onOpenGameSettings: () => void;
+  onOpenInfo: () => void;
 }): JSX.Element {
   const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
@@ -170,23 +172,39 @@ export default function Play({
 
   return (
     <div className={styles.play}>
-      <div className={`rise ${styles.discordWrap}`} style={{ animationDelay: '40ms' }}>
+      <div className={`rise ${styles.utilityGrid}`} style={{ animationDelay: '40ms' }}>
+        <div className={styles.discordWrap}>
+          <button
+            className={styles.discordBanner}
+            disabled={discordOpening}
+            aria-label="Join the Commonwealth Discord server"
+            onClick={() => void openDiscord()}
+          >
+            <span className={styles.discordBadge}>DISCORD</span>
+            <span className={styles.discordCopy}>
+              <strong>Join the Commonwealth</strong>
+              <small>News, support, squads, and server announcements</small>
+            </span>
+            <span className={styles.discordJoin}>{discordOpening ? 'OPENING…' : 'JOIN ↗'}</span>
+          </button>
+          {discordResult && !discordResult.ok && (
+            <p className={styles.discordError}>{discordResult.message}</p>
+          )}
+        </div>
         <button
-          className={styles.discordBanner}
-          disabled={discordOpening}
-          aria-label="Join the Commonwealth Discord server"
-          onClick={() => void openDiscord()}
+          className={styles.infoBanner}
+          aria-label="Open player information and frequently asked questions"
+          onClick={onOpenInfo}
         >
-          <span className={styles.discordBadge}>DISCORD</span>
-          <span className={styles.discordCopy}>
-            <strong>Join the Commonwealth</strong>
-            <small>News, support, squads, and server announcements</small>
+          <span className={styles.infoBadge} aria-hidden="true">
+            i
           </span>
-          <span className={styles.discordJoin}>{discordOpening ? 'OPENING…' : 'JOIN ↗'}</span>
+          <span className={styles.infoBannerCopy}>
+            <strong>Player Info</strong>
+            <small>Stutter fixes · DX9 · account FAQ</small>
+          </span>
+          <span className={styles.infoOpen}>OPEN →</span>
         </button>
-        {discordResult && !discordResult.ok && (
-          <p className={styles.discordError}>{discordResult.message}</p>
-        )}
       </div>
 
       <div className={styles.grid}>

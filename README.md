@@ -36,6 +36,7 @@ The launcher updates itself automatically.
 - Game patches enabled by default, with one-click Apply and Remove controls
 - A Game Client Patch that fixes scope-transition stutters
 - Useful game options
+- A player Info and FAQ guide for performance, graphics stability, and account setup
 - Agenda Stats and Discord access
 - Diagnostics and a one-click recovery reset
 - Windows support and flexible Linux compatibility options

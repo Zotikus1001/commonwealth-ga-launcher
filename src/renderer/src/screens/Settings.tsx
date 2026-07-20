@@ -25,6 +25,7 @@ export type SettingsTab =
   | 'game'
   | 'servers'
   | 'patches'
+  | 'info'
   | 'account'
   | 'launcher'
   | 'dev'
@@ -119,7 +120,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },
       { id: 'servers', label: 'Servers' },
-      { id: 'patches', label: 'Patches' }
+      { id: 'patches', label: 'Patches' },
+      { id: 'info', label: 'Info' }
     ];
     // Account tab is built but gated off until Phase 4 auto-login works (plan §11b decision #4).
     if (state.accountTabEnabled) t.push({ id: 'account', label: 'Account' });
@@ -958,6 +960,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           />
         )}
 
+        {tab === 'info' && <InfoTab />}
+
         {tab === 'servers' && <ServersTab settings={draft} edit={edit} />}
 
         {tab === 'launcher' && (
@@ -1034,6 +1038,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab !== 'diagnostics' &&
           tab !== 'patches' &&
+          tab !== 'info' &&
           tab !== 'account' &&
           tab !== 'about' &&
           dirty && (
@@ -1675,6 +1680,104 @@ function PatchesTab({
             </article>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function InfoTab(): JSX.Element {
+  return (
+    <section
+      className={`${styles.section} ${styles.infoSection}`}
+      aria-labelledby="player-info-title"
+    >
+      <header className={styles.infoHero}>
+        <div className={styles.infoHeroCopy}>
+          <span className={styles.infoEyebrow}>Player field guide // quick reference</span>
+          <h1 id="player-info-title">Useful info before you play</h1>
+          <p>Fast answers for common performance, graphics, and first-login questions.</p>
+        </div>
+        <div className={styles.infoReadout} aria-label="Three guide entries">
+          <strong>03</strong>
+          <span>Guide entries</span>
+        </div>
+      </header>
+
+      <div className={styles.infoFaqGrid}>
+        <article className={`${styles.infoCard} ${styles.infoPerformance}`}>
+          <div className={styles.infoCardHead}>
+            <span className={styles.infoIndex}>Q01</span>
+            <span className={styles.infoTopic}>Performance</span>
+          </div>
+          <h2>Why does the game stutter on fast hardware?</h2>
+          <p>
+            Global Agenda&apos;s older engine can stutter even when your hardware has plenty of
+            headroom. The game itself can be the bottleneck, not your PC.
+          </p>
+          <div className={styles.infoRecommendation}>
+            <span>Try this first</span>
+            <strong>Disable “High Character Detail” in the in-game graphics settings.</strong>
+            <small>
+              If stuttering remains, lower the other graphics options until frame pacing improves.
+            </small>
+          </div>
+        </article>
+
+        <article className={`${styles.infoCard} ${styles.infoRenderer}`}>
+          <div className={styles.infoCardHead}>
+            <span className={styles.infoIndex}>Q02</span>
+            <span className={styles.infoTopic}>Graphics</span>
+          </div>
+          <h2>Should I use DirectX 9 or DirectX 10?</h2>
+          <p>
+            Select DirectX 9 instead of DirectX 10 in the in-game graphics settings. DX9 is the
+            more stable renderer for this game and should be your default choice.
+          </p>
+          <div className={styles.infoRendererReadout}>
+            <span>Recommended renderer</span>
+            <strong>DirectX 9</strong>
+            <small>Preferred for game stability</small>
+          </div>
+        </article>
+
+        <article className={`${styles.infoCard} ${styles.infoAccount}`}>
+          <div className={styles.infoCardHead}>
+            <span className={styles.infoIndex}>Q03</span>
+            <span className={styles.infoTopic}>Account</span>
+          </div>
+          <h2>How do I register an in-game account?</h2>
+          <p className={styles.infoAccountIntro}>
+            There is no separate registration form. Your account is created automatically the
+            first time you log in.
+          </p>
+          <ol className={styles.infoSteps}>
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Choose your account name</strong>
+                <p>
+                  It also becomes your visible display name. Special characters are not allowed.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Enter the password you want to keep</strong>
+                <p>Your first-login password becomes the password for future login attempts.</p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>Use the same details next time</strong>
+                <p>
+                  Return with that account name and the password you entered on your first login.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </article>
       </div>
     </section>
   );

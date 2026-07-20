@@ -126,7 +126,11 @@ export default function App(): JSX.Element {
 
       <main className={styles.body}>
         {view === 'play' ? (
-          <Play state={state} onOpenGameSettings={() => openSettings('game')} />
+          <Play
+            state={state}
+            onOpenGameSettings={() => openSettings('game')}
+            onOpenInfo={() => openSettings('info')}
+          />
         ) : (
           <fieldset className={styles.settingsGate} disabled={updateDownloading}>
             <Settings

@@ -729,7 +729,8 @@ export class Orchestrator {
         ) ?? selection.host;
 
       const activeProfile = this.gameProfileManager.getSelectedSummary();
-      if (activeProfile) {
+      const gameAlreadyRunning = this.state.activeGameInstances > 0;
+      if (activeProfile && !gameAlreadyRunning) {
         this.patch({
           phase: 'checking',
           statusLine: `Applying game profile ${activeProfile.name}…`,
@@ -753,6 +754,8 @@ export class Orchestrator {
             backupDirectory
           );
         }
+      } else if (activeProfile) {
+        this.log.info('game profile restore skipped because a launcher-started game is still running');
       }
 
       this.patch({ phase: 'checking', statusLine: 'Checking client configuration…', errorDetails: null });

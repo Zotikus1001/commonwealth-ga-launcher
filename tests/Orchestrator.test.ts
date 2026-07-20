@@ -319,8 +319,15 @@ describe('game setup patch preparation', () => {
       'Close every game instance'
     );
 
-    const child = serviceMocks.gameLaunch.mock.results[0].value as ChildProcess;
-    child.emit('exit', 0, null);
+    vi.runOnlyPendingTimers();
+    await orchestrator.play();
+    expect(serviceMocks.profileApply).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.gameLaunch).toHaveBeenCalledTimes(2);
+    expect(orchestrator.getState().activeGameInstances).toBe(2);
+
+    for (const result of serviceMocks.gameLaunch.mock.results) {
+      (result.value as ChildProcess).emit('exit', 0, null);
+    }
     await Promise.resolve();
     vi.runOnlyPendingTimers();
     expect(orchestrator.getState().activeGameInstances).toBe(0);

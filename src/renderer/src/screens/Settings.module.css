@@ -983,14 +983,9 @@
   text-transform: uppercase;
 }
 
-.patchResultOk,
 .patchResultError {
   margin: 7px 0 0;
   font-size: 11px;
-}
-
-.patchResultOk {
-  color: var(--green);
 }
 
 .patchResultError {

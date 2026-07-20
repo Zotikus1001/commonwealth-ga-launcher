@@ -1862,6 +1862,10 @@ function DeveloperTab({
   );
 }
 
+export function manualPatchErrorMessage(result: ActionResult): string | null {
+  return result.ok ? null : result.message;
+}
+
 function PatchesTab({
   state,
   settings,
@@ -1881,8 +1885,8 @@ function PatchesTab({
     id: ClientPatchStatus['id'];
     enabled: boolean;
   } | null>(null);
-  const [result, setResult] = useState<
-    { id: ClientPatchStatus['id']; value: ActionResult } | null
+  const [resultError, setResultError] = useState<
+    { id: ClientPatchStatus['id']; message: string } | null
   >(null);
 
   const changePatch = async (
@@ -1891,22 +1895,20 @@ function PatchesTab({
   ): Promise<void> => {
     if (changing || gameClientPatchSaving) return;
     setChanging({ id, enabled });
-    setResult(null);
+    setResultError(null);
     try {
       const value = enabled
         ? await window.api.applyClientPatch(id)
         : await window.api.removeClientPatch(id);
-      setResult({ id, value });
+      const message = manualPatchErrorMessage(value);
+      setResultError(message ? { id, message } : null);
       if (value.ok) onPatchPreferenceChange(id, enabled);
     } catch (error) {
-      setResult({
+      setResultError({
         id,
-        value: {
-          ok: false,
-          message:
-            `Could not ${enabled ? 'apply' : 'remove'} patch: ` +
-            (error instanceof Error ? error.message : String(error))
-        }
+        message:
+          `Could not ${enabled ? 'apply' : 'remove'} patch: ` +
+          (error instanceof Error ? error.message : String(error))
       });
     } finally {
       setChanging(null);
@@ -2032,10 +2034,8 @@ function PatchesTab({
                 <div className={styles.patchTitle}>{copy.title}</div>
                 <p className={styles.patchDescription}>{copy.description}</p>
                 <span className={styles.patchState}>{status}</span>
-                {result?.id === patch.id && (
-                  <p className={result.value.ok ? styles.patchResultOk : styles.patchResultError}>
-                    {result.value.message}
-                  </p>
+                {resultError?.id === patch.id && (
+                  <p className={styles.patchResultError}>{resultError.message}</p>
                 )}
               </div>
             </article>

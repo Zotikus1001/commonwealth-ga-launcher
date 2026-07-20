@@ -33,6 +33,8 @@ The launcher updates itself automatically.
 - Automatic updates
 - Easy game setup and launching
 - Server status and server selection
+- Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
+  UI preferences
 - Game patches enabled by default, with one-click Apply and Remove controls
 - A Game Client Patch that fixes scope-transition stutters
 - Useful game options

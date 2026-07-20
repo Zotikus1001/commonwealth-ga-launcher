@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import type {
   ActionResult,
   ClientPatchStatus,
+  GameProfileSummary,
   LauncherState,
   LinuxRuntimeOptions,
   Settings as SettingsModel,
@@ -9,6 +10,12 @@ import type {
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
+import {
+  MAX_GAME_PROFILES,
+  MAX_GAME_PROFILE_NAME_LENGTH,
+  normalizeGameProfileName,
+  validateGameProfileName
+} from '@shared/gameProfiles';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import {
   DEFAULT_SERVER_ID,
@@ -23,6 +30,7 @@ import styles from './Settings.module.css';
 
 export type SettingsTab =
   | 'game'
+  | 'profiles'
   | 'servers'
   | 'patches'
   | 'info'
@@ -119,6 +127,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },
+      { id: 'profiles', label: 'Profiles' },
       { id: 'servers', label: 'Servers' },
       { id: 'patches', label: 'Patches' },
       { id: 'info', label: 'Info' }
@@ -936,6 +945,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           </section>
         )}
 
+        {tab === 'profiles' && <ProfilesTab state={state} />}
+
         {tab === 'patches' && (
           <PatchesTab
             state={state}
@@ -1038,6 +1049,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab !== 'diagnostics' &&
           tab !== 'patches' &&
+          tab !== 'profiles' &&
           tab !== 'info' &&
           tab !== 'account' &&
           tab !== 'about' &&
@@ -1110,6 +1122,355 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 });
 
 export default Settings;
+
+type ProfileConfirmation = { kind: 'update' | 'delete'; id: string };
+
+function profileSavedLabel(profile: GameProfileSummary): string {
+  const saved = new Date(profile.updatedAt);
+  if (!Number.isFinite(saved.getTime())) return 'Saved configuration';
+  return `Saved ${saved.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })} at ${saved.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
+  const [newName, setNewName] = useState('');
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [action, setAction] = useState<string | null>(null);
+  const actionInFlight = useRef(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [confirmation, setConfirmation] = useState<ProfileConfirmation | null>(null);
+  const profilesLocked = state.activeGameInstances > 0;
+  const launcherBusy =
+    action !== null ||
+    state.phase === 'checking' ||
+    state.phase === 'launching' ||
+    state.launchCoolingDown ||
+    state.launcherUpdate === 'downloading' ||
+    state.launcherUpdate === 'installing';
+  const controlsDisabled = profilesLocked || launcherBusy;
+  const createNameError = newName ? validateGameProfileName(newName) : null;
+  const profileLimitReached = state.gameProfiles.length >= MAX_GAME_PROFILES;
+
+  useEffect(() => {
+    setNames((current) =>
+      Object.fromEntries(
+        state.gameProfiles.map((profile) => [profile.id, current[profile.id] ?? profile.name])
+      )
+    );
+  }, [state.gameProfiles]);
+
+  const runAction = async (
+    key: string,
+    operation: () => Promise<ActionResult>
+  ): Promise<ActionResult | null> => {
+    if (controlsDisabled || actionInFlight.current) return null;
+    actionInFlight.current = true;
+    setAction(key);
+    setResult(null);
+    try {
+      const next = await operation();
+      setResult(next);
+      return next;
+    } catch (error) {
+      const failure = {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error)
+      };
+      setResult(failure);
+      return failure;
+    } finally {
+      actionInFlight.current = false;
+      setAction(null);
+    }
+  };
+
+  const createProfile = async (): Promise<void> => {
+    const validationError = validateGameProfileName(newName);
+    if (validationError || profileLimitReached || !state.gamePathValid) {
+      setResult({
+        ok: false,
+        message:
+          validationError ??
+          (profileLimitReached
+            ? `You can save up to ${MAX_GAME_PROFILES} profiles.`
+            : 'Set a valid Global Agenda installation first.')
+      });
+      return;
+    }
+    const created = await runAction('create', () => window.api.createGameProfile(newName));
+    if (created?.ok) setNewName('');
+  };
+
+  const renameProfile = async (profile: GameProfileSummary): Promise<void> => {
+    const name = names[profile.id] ?? profile.name;
+    const validationError = validateGameProfileName(name);
+    if (validationError) {
+      setResult({ ok: false, message: validationError });
+      return;
+    }
+    const renamed = await runAction(`rename:${profile.id}`, () =>
+      window.api.renameGameProfile(profile.id, name)
+    );
+    if (renamed?.ok) {
+      setNames((current) => ({
+        ...current,
+        [profile.id]: normalizeGameProfileName(name)
+      }));
+    } else {
+      setNames((current) => ({ ...current, [profile.id]: profile.name }));
+    }
+  };
+
+  const selectProfile = async (profile: GameProfileSummary): Promise<void> => {
+    if (
+      profile.id === state.selectedGameProfileId ||
+      controlsDisabled ||
+      actionInFlight.current
+    ) {
+      return;
+    }
+    actionInFlight.current = true;
+    setAction(`select:${profile.id}`);
+    setResult(null);
+    try {
+      await window.api.selectGameProfile(profile.id);
+      setResult({ ok: true, message: `Profile ${profile.name} is now active.` });
+    } catch (error) {
+      setResult({
+        ok: false,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      actionInFlight.current = false;
+      setAction(null);
+    }
+  };
+
+  const confirmProfileAction = async (): Promise<void> => {
+    if (!confirmation) return;
+    const profile = state.gameProfiles.find((candidate) => candidate.id === confirmation.id);
+    if (!profile) {
+      setConfirmation(null);
+      return;
+    }
+    const key = `${confirmation.kind}:${profile.id}`;
+    const completed = await runAction(key, () =>
+      confirmation.kind === 'update'
+        ? window.api.updateGameProfile(profile.id)
+        : window.api.deleteGameProfile(profile.id)
+    );
+    if (completed?.ok) setConfirmation(null);
+  };
+
+  return (
+    <section className={`${styles.section} ${styles.profileSection}`}>
+      <div className={styles.profileHeading}>
+        <div>
+          <div className="panel-title">Game Settings Profiles</div>
+          <p className={styles.hint}>
+            Save the game&apos;s current graphics, audio, controls, interface, and gameplay
+            configuration. The active profile is restored when you press Play, before launcher
+            patches and compatibility settings are applied. In-game changes are not saved back
+            automatically; close the game and use Update Snapshot when you want to keep them.
+          </p>
+        </div>
+        <span className={styles.profileCapacity}>
+          {state.gameProfiles.length} / {MAX_GAME_PROFILES}
+        </span>
+      </div>
+
+      {profilesLocked && (
+        <div className={styles.profileLock} role="status">
+          <span className={styles.profileLockSignal} aria-hidden="true" />
+          <div>
+            <strong>Profiles locked while the game is running</strong>
+            <small>
+              Close {state.activeGameInstances === 1 ? 'the game instance' : 'all game instances'}
+              {' '}started by this launcher before changing saved configurations.
+            </small>
+          </div>
+        </div>
+      )}
+
+      <div className={styles.profileCapturePanel}>
+        <div className={styles.profileCaptureCopy}>
+          <span className={styles.profileEyebrow}>New snapshot</span>
+          <strong>Save the settings currently on disk</strong>
+          <small>Close the game first so every configuration file is fully written.</small>
+        </div>
+        <div className={styles.profileCaptureControls}>
+          <input
+            type="text"
+            maxLength={MAX_GAME_PROFILE_NAME_LENGTH}
+            value={newName}
+            placeholder="Profile name"
+            aria-label="New profile name"
+            disabled={controlsDisabled || profileLimitReached || !state.gamePathValid}
+            onChange={(event) => setNewName(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void createProfile();
+            }}
+          />
+          <button
+            className={styles.profileCreateButton}
+            disabled={
+              controlsDisabled ||
+              profileLimitReached ||
+              !state.gamePathValid ||
+              !normalizeGameProfileName(newName) ||
+              createNameError !== null
+            }
+            onClick={() => void createProfile()}
+          >
+            {action === 'create' ? 'Saving…' : 'Save Profile'}
+          </button>
+        </div>
+        {!state.gamePathValid && (
+          <span className={styles.profileCaptureNote}>A valid game location is required.</span>
+        )}
+        {profileLimitReached && (
+          <span className={styles.profileCaptureNote}>All five profile slots are in use.</span>
+        )}
+      </div>
+
+      <div className={styles.gameProfiles}>
+        {state.gameProfiles.map((profile, index) => {
+          const active = profile.id === state.selectedGameProfileId;
+          const name = names[profile.id] ?? profile.name;
+          const nameError = validateGameProfileName(name);
+          const confirming = confirmation?.id === profile.id ? confirmation.kind : null;
+          return (
+            <article
+              className={`${styles.gameProfile} ${active ? styles.gameProfileActive : ''}`}
+              key={profile.id}
+            >
+              <div className={styles.gameProfileIndex}>{String(index + 1).padStart(2, '0')}</div>
+              <div className={styles.gameProfileBody}>
+                <div className={styles.gameProfileTitleRow}>
+                  <span>{active ? 'Active profile' : `Profile ${index + 1}`}</span>
+                  {active && <span className={styles.gameProfileActiveBadge}>Selected</span>}
+                </div>
+                <div className={styles.gameProfileNameRow}>
+                  <input
+                    type="text"
+                    maxLength={MAX_GAME_PROFILE_NAME_LENGTH}
+                    value={name}
+                    aria-label={`Name for profile ${index + 1}`}
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      setNames((current) => ({
+                        ...current,
+                        [profile.id]: event.currentTarget.value
+                      }))
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void renameProfile(profile);
+                    }}
+                  />
+                  <button
+                    disabled={
+                      controlsDisabled ||
+                      nameError !== null ||
+                      normalizeGameProfileName(name) === profile.name
+                    }
+                    onClick={() => void renameProfile(profile)}
+                  >
+                    {action === `rename:${profile.id}` ? 'Saving…' : 'Save Name'}
+                  </button>
+                </div>
+                <div className={styles.gameProfileMeta}>
+                  <span>
+                    {profile.fileCount} configuration {profile.fileCount === 1 ? 'file' : 'files'}
+                  </span>
+                  <span aria-hidden="true">/</span>
+                  <span>{profileSavedLabel(profile)}</span>
+                </div>
+                {confirming && (
+                  <div
+                    className={styles.profileInlineConfirm}
+                    role="group"
+                    aria-label={
+                      confirming === 'update'
+                        ? `Update ${profile.name} snapshot`
+                        : `Remove ${profile.name}`
+                    }
+                  >
+                    <span>
+                      {confirming === 'update'
+                        ? 'Replace this snapshot with the current game settings?'
+                        : `Permanently remove ${profile.name}?`}
+                    </span>
+                    <div>
+                      <button disabled={action !== null} onClick={() => setConfirmation(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        className={
+                          confirming === 'delete'
+                            ? styles.profileDeleteConfirm
+                            : styles.profileUpdateConfirm
+                        }
+                        disabled={action !== null}
+                        onClick={() => void confirmProfileAction()}
+                      >
+                        {action === `${confirming}:${profile.id}`
+                          ? confirming === 'update'
+                            ? 'Updating…'
+                            : 'Removing…'
+                          : confirming === 'update'
+                            ? 'Replace Snapshot'
+                            : 'Remove Profile'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className={styles.gameProfileActions}>
+                <button
+                  className={styles.profileSelectButton}
+                  disabled={controlsDisabled || active}
+                  onClick={() => void selectProfile(profile)}
+                >
+                  {action === `select:${profile.id}` ? 'Selecting…' : active ? 'Active' : 'Make Active'}
+                </button>
+                <button
+                  disabled={controlsDisabled || confirmation !== null}
+                  onClick={() => setConfirmation({ kind: 'update', id: profile.id })}
+                >
+                  Update Snapshot
+                </button>
+                <button
+                  className={styles.profileRemoveButton}
+                  disabled={controlsDisabled || confirmation !== null}
+                  onClick={() => setConfirmation({ kind: 'delete', id: profile.id })}
+                >
+                  Remove
+                </button>
+              </div>
+            </article>
+          );
+        })}
+
+        {state.gameProfiles.length === 0 && (
+          <div className={styles.emptyProfiles}>
+            <span className={styles.emptyProfilesIndex}>01—05</span>
+            <strong>No saved profiles</strong>
+            <small>Close the game, choose a name above, and save your current settings.</small>
+          </div>
+        )}
+      </div>
+
+      {result && (
+        <p className={result.ok ? styles.valid : styles.invalid} role="status">
+          {result.message}
+        </p>
+      )}
+    </section>
+  );
+}
 
 function ServersTab({
   settings,
@@ -1909,6 +2270,7 @@ function DiagnosticsTab({
     state.launcherUpdate === 'checking' ||
     state.launcherUpdate === 'downloading' ||
     state.launcherUpdate === 'installing';
+  const gameRunning = state.activeGameInstances > 0;
   const updateStatus = localDevelopment
     ? 'local out/ · online checks off'
     : state.launcherUpdate === 'up-to-date'
@@ -2011,14 +2373,19 @@ function DiagnosticsTab({
         <div className={styles.resetCopy}>
           <div className={styles.resetTitle}>Reset launcher settings</div>
           <p>
-            Clear every saved option and restart from initial setup. The launcher-managed client
-            patch DLL and DXVK/Vulkan files are cleaned up; game INIs, logs, caches, backups, and
-            unmanaged or local DLLs stay intact.
+            Clear every saved option and game settings profile, then restart from initial setup.
+            The launcher-managed client patch DLL and DXVK/Vulkan files are cleaned up; game INIs,
+            logs, caches, backups, and unmanaged or local DLLs stay intact.
           </p>
         </div>
         <button
           className={styles.resetButton}
-          disabled={launcherBusy || resetting}
+          disabled={launcherBusy || resetting || gameRunning}
+          title={
+            gameRunning
+              ? 'Close every game instance before resetting the launcher.'
+              : undefined
+          }
           onClick={() => {
             setResetResult(null);
             setResetConfirming(true);
@@ -2042,8 +2409,9 @@ function DiagnosticsTab({
             <span className={styles.confirmEyebrow}>Recovery reset</span>
             <h2 id="reset-launcher-title">Start the launcher from scratch?</h2>
             <p>
-              This replaces the saved game path, servers, launcher options, game options, and
-              developer settings with defaults, then restarts the launcher.
+              This removes saved profiles and replaces the saved game path, servers, launcher
+              options, game options, and developer settings with defaults, then restarts the
+              launcher.
             </p>
             <p>
               The launcher removes only its managed client patch DLL and restores its managed

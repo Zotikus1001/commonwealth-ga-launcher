@@ -130,6 +130,7 @@ export default function App(): JSX.Element {
             state={state}
             onOpenGameSettings={() => openSettings('game')}
             onOpenInfo={() => openSettings('info')}
+            onOpenProfiles={() => openSettings('profiles')}
           />
         ) : (
           <fieldset className={styles.settingsGate} disabled={updateDownloading}>

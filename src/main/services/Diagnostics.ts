@@ -3,6 +3,9 @@ import type { LauncherState, Settings } from '@shared/types';
 
 /** Plain-text diagnostics report for the clipboard. Private connection values are always redacted. */
 export function buildDiagnosticsReport(state: LauncherState, settings: Settings, logTail: string[]): string {
+  const selectedProfile = state.gameProfiles.find(
+    (profile) => profile.id === state.selectedGameProfileId
+  );
   const safeSettings: Settings = {
     ...settings,
     servers: {
@@ -32,6 +35,7 @@ export function buildDiagnosticsReport(state: LauncherState, settings: Settings,
     `DXVK/Vulkan detail: ${state.dxvk.detail}`,
     `launch cooldown active: ${state.launchCoolingDown}`,
     `launcher-started game instances: ${state.activeGameInstances}`,
+    `game profiles: ${state.gameProfiles.length} (selected=${selectedProfile?.name ?? 'none'})`,
     `developer mode: ${state.developerMode}`,
     `launcher update: ${state.launcherUpdate}${state.launcherUpdateVersion ? ` (${state.launcherUpdateVersion})` : ''}`,
     `launcher update error: ${state.launcherUpdateError ?? '(none)'}`,

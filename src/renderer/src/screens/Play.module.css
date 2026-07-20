@@ -484,6 +484,166 @@
   padding-top: 0;
 }
 
+.profileDock {
+  width: min(560px, 100%);
+  border: 1px solid rgba(69, 200, 218, 0.3);
+  border-left: 2px solid var(--cyan);
+  background:
+    linear-gradient(100deg, rgba(69, 200, 218, 0.055), transparent 58%),
+    rgba(12, 17, 25, 0.76);
+}
+
+.profileDockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 25px;
+  padding: 3px 7px 3px 11px;
+  border-bottom: 1px solid rgba(69, 200, 218, 0.16);
+}
+
+.profileDockHeader > span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.profileDockHeader button {
+  min-height: 20px;
+  padding: 2px 6px;
+  border-color: transparent;
+  color: var(--cyan);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.profileDockHeader button:hover:not(:disabled) {
+  border-color: rgba(69, 200, 218, 0.42);
+  background: rgba(69, 200, 218, 0.06);
+}
+
+.profileDockBody {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+}
+
+.profileNumbers {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.profileNumber {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  min-height: 0;
+  padding: 0;
+  border-color: rgba(69, 200, 218, 0.38);
+  background: rgba(8, 13, 20, 0.76);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.profileNumber:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgba(69, 200, 218, 0.1);
+  color: var(--cyan);
+}
+
+.profileNumber:disabled {
+  opacity: 1;
+}
+
+.profileNumberActive,
+.profileNumberActive:hover:not(:disabled) {
+  border-color: var(--amber);
+  background:
+    linear-gradient(145deg, rgba(240, 166, 60, 0.2), rgba(240, 166, 60, 0.06)),
+    rgba(8, 13, 20, 0.82);
+  color: var(--amber-hi);
+  box-shadow: inset 0 -2px 0 rgba(240, 166, 60, 0.38);
+}
+
+.profileNumber::after {
+  content: attr(data-profile-name);
+  position: absolute;
+  z-index: 8;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-bright);
+  background: rgba(7, 10, 16, 0.97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 100ms ease, transform 100ms ease;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+
+.profileNumber:hover::after,
+.profileNumber:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.profileEmptyButton {
+  flex: none;
+  min-width: 132px;
+  height: 34px;
+  padding: 0 10px;
+  border-color: rgba(69, 200, 218, 0.46);
+  color: var(--cyan);
+  font-size: 9px;
+}
+
+.profileActiveCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profileActiveCopy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profileActiveCopy small {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .playControls {
   display: flex;
   align-items: flex-end;

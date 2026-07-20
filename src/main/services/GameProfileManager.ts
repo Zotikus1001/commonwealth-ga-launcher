@@ -338,8 +338,7 @@ export class GameProfileManager {
     const previous = await this.requireProfile(id);
     const profile: StoredGameProfile = {
       ...previous,
-      name: this.validatedName(name),
-      updatedAt: new Date().toISOString()
+      name: this.validatedName(name)
     };
     await writeJsonAtomic(this.profilePath(id), profile);
     const summary = profileSummary(profile);

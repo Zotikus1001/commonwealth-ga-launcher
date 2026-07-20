@@ -100,7 +100,8 @@ describe('game settings profiles', () => {
     const first = await manager.create('Low', install);
     await writeFile(join(install.configDir, 'TgEngine.ini'), 'quality=high', { encoding: 'utf-8' });
     const second = await manager.create('High', install);
-    await manager.renameProfile(first.id, 'Performance');
+    const renamed = await manager.renameProfile(first.id, 'Performance');
+    expect(renamed.updatedAt).toBe(first.updatedAt);
     await manager.select(first.id);
     await writeFile(join(install.configDir, 'TgEngine.ini'), 'quality=competitive', {
       encoding: 'utf-8'

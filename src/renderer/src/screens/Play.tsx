@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ActionResult, LauncherState } from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import styles from './Play.module.css';
@@ -93,11 +93,13 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
 export default function Play({
   state,
   onOpenGameSettings,
-  onOpenInfo
+  onOpenInfo,
+  onOpenProfiles
 }: {
   state: LauncherState;
   onOpenGameSettings: () => void;
   onOpenInfo: () => void;
+  onOpenProfiles: () => void;
 }): JSX.Element {
   const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
@@ -107,6 +109,9 @@ export default function Play({
   const [agendaStatsOpenError, setAgendaStatsOpenError] = useState<string | null>(null);
   const [selectingServer, setSelectingServer] = useState(false);
   const [serverSelectionError, setServerSelectionError] = useState<string | null>(null);
+  const [selectingProfile, setSelectingProfile] = useState(false);
+  const profileSelectionInFlight = useRef(false);
+  const [profileSelectionError, setProfileSelectionError] = useState<string | null>(null);
   const [, setClock] = useState(0);
   const canDevLaunch =
     state.developerMode &&
@@ -119,6 +124,17 @@ export default function Play({
     state.selectedServerId === DEFAULT_SERVER_ID &&
     state.agendaStatsStatus === 'ready' &&
     state.agendaStatsText !== null;
+  const activeProfile = state.gameProfiles.find(
+    (profile) => profile.id === state.selectedGameProfileId
+  );
+  const profileSelectionDisabled =
+    selectingProfile ||
+    state.activeGameInstances > 0 ||
+    state.launchCoolingDown ||
+    state.phase === 'checking' ||
+    state.phase === 'launching' ||
+    state.launcherUpdate === 'downloading' ||
+    state.launcherUpdate === 'installing';
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock((value) => value + 1), 60_000);
@@ -167,6 +183,27 @@ export default function Play({
       setServerSelectionError(error instanceof Error ? error.message : String(error));
     } finally {
       setSelectingServer(false);
+    }
+  };
+
+  const selectProfile = async (id: string): Promise<void> => {
+    if (
+      profileSelectionDisabled ||
+      profileSelectionInFlight.current ||
+      id === state.selectedGameProfileId
+    ) {
+      return;
+    }
+    profileSelectionInFlight.current = true;
+    setSelectingProfile(true);
+    setProfileSelectionError(null);
+    try {
+      await window.api.selectGameProfile(id);
+    } catch (error) {
+      setProfileSelectionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      profileSelectionInFlight.current = false;
+      setSelectingProfile(false);
     }
   };
 
@@ -308,6 +345,49 @@ export default function Play({
       </div>
 
       <div className={`rise ${styles.ctaBlock}`} style={{ animationDelay: '220ms' }}>
+        <div className={styles.profileDock}>
+          <div className={styles.profileDockHeader}>
+            <span>Game Settings Profile</span>
+            <button onClick={onOpenProfiles}>Manage</button>
+          </div>
+          <div className={styles.profileDockBody}>
+            {state.gameProfiles.length > 0 ? (
+              <div className={styles.profileNumbers} aria-label="Game settings profiles">
+                {state.gameProfiles.map((profile, index) => {
+                  const active = profile.id === state.selectedGameProfileId;
+                  return (
+                    <button
+                      key={profile.id}
+                      className={`${styles.profileNumber} ${active ? styles.profileNumberActive : ''}`}
+                      data-profile-name={profile.name}
+                      title={profile.name}
+                      aria-label={`Profile ${index + 1}: ${profile.name}${active ? ', active' : ''}`}
+                      aria-pressed={active}
+                      disabled={profileSelectionDisabled}
+                      onClick={() => void selectProfile(profile.id)}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <button className={styles.profileEmptyButton} onClick={onOpenProfiles}>
+                + Create Profile
+              </button>
+            )}
+            <div className={styles.profileActiveCopy}>
+              <strong>{activeProfile?.name ?? 'No profile selected'}</strong>
+              <small>
+                {state.activeGameInstances > 0
+                  ? 'Locked while game is running'
+                  : activeProfile
+                    ? 'Applied before patches when Play starts'
+                    : 'Play uses the current game settings'}
+              </small>
+            </div>
+          </div>
+        </div>
         <div className={styles.playControls}>
           {state.serverChoices.length > 1 && (
             <label className={styles.serverPicker}>
@@ -344,6 +424,7 @@ export default function Play({
             </button>
           )}
         </div>
+        {profileSelectionError && <p className={styles.errorDetails}>{profileSelectionError}</p>}
         {serverSelectionError && <p className={styles.errorDetails}>{serverSelectionError}</p>}
         {state.statusLine !== 'Ready.' && (
           <p className={styles.statusLine}>{state.statusLine}</p>

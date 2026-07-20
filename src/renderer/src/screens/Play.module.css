@@ -9,9 +9,9 @@
 
 .utilityGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   align-items: stretch;
-  gap: 12px;
+  gap: 18px;
   margin-bottom: 16px;
 }
 

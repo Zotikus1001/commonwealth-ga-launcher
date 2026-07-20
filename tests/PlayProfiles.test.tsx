@@ -73,7 +73,7 @@ function render(state: LauncherState): string {
   );
 }
 
-describe('Play game profile selector', () => {
+describe('Play page', () => {
   it('renders numbered profile buttons with full hover names and the active selection', () => {
     const markup = render(launcherState());
 
@@ -82,6 +82,14 @@ describe('Play game profile selector', () => {
     expect(markup).toContain('aria-label="Profile 1: Competitive, active"');
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain('Applied before patches when Play starts');
+  });
+
+  it('labels the information shortcut as FAQ', () => {
+    const markup = render(launcherState());
+
+    expect(markup).toContain('aria-label="Open frequently asked questions"');
+    expect(markup).toContain('<strong>FAQ</strong>');
+    expect(markup).not.toContain('Player Info');
   });
 
   it('locks every numbered selector while a launcher-started game remains open', () => {

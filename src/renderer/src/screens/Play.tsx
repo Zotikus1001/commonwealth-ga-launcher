@@ -230,14 +230,14 @@ export default function Play({
         </div>
         <button
           className={styles.infoBanner}
-          aria-label="Open player information and frequently asked questions"
+          aria-label="Open frequently asked questions"
           onClick={onOpenInfo}
         >
           <span className={styles.infoBadge} aria-hidden="true">
             i
           </span>
           <span className={styles.infoBannerCopy}>
-            <strong>Player Info</strong>
+            <strong>FAQ</strong>
             <small>Stutter fixes · DX9 · account FAQ</small>
           </span>
           <span className={styles.infoOpen}>OPEN →</span>

@@ -1876,6 +1876,15 @@ export function iniPatchCardTone(
   return applied === true ? 'applied' : 'pending';
 }
 
+export function PatchEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element | null {
+  if (!enabled) return null;
+  return (
+    <span className={styles.patchEnabledCheck} role="img" aria-label="Patch enabled">
+      ✓
+    </span>
+  );
+}
+
 function PatchesTab({
   state,
   settings,
@@ -1985,6 +1994,7 @@ function PatchesTab({
               </p>
             )}
           </div>
+          <PatchEnabledCheck enabled={gameClientPatchEnabled} />
         </article>
 
         {state.clientPatches.map((patch) => {
@@ -2026,6 +2036,7 @@ function PatchesTab({
                   <p className={styles.patchResultError}>{resultError.message}</p>
                 )}
               </div>
+              <PatchEnabledCheck enabled={preferred} />
             </article>
           );
         })}

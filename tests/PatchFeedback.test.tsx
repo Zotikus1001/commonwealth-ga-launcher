@@ -1,7 +1,10 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   iniPatchCardTone,
-  manualPatchErrorMessage
+  manualPatchErrorMessage,
+  PatchEnabledCheck
 } from '../src/renderer/src/screens/Settings';
 
 describe('manual patch feedback', () => {
@@ -29,5 +32,16 @@ describe('INI patch card tone', () => {
   it('uses amber while an enabled patch is not verified', () => {
     expect(iniPatchCardTone(true, false)).toBe('pending');
     expect(iniPatchCardTone(true, null)).toBe('pending');
+  });
+});
+
+describe('patch enabled check', () => {
+  it('renders a check marker only for enabled patches', () => {
+    const enabled = renderToStaticMarkup(<PatchEnabledCheck enabled />);
+    const disabled = renderToStaticMarkup(<PatchEnabledCheck enabled={false} />);
+
+    expect(enabled).toContain('aria-label="Patch enabled"');
+    expect(enabled).toContain('✓');
+    expect(disabled).toBe('');
   });
 });

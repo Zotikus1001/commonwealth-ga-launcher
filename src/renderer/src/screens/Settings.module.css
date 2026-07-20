@@ -880,7 +880,7 @@
 
 .patchCard {
   display: grid;
-  grid-template-columns: 54px 1fr;
+  grid-template-columns: 54px minmax(0, 1fr) 30px;
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -943,6 +943,23 @@
 
 .patchPending .patchIcon {
   color: var(--amber-hi);
+}
+
+.patchEnabledCheck {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  align-self: center;
+  justify-self: end;
+  place-items: center;
+  border: 1px solid rgba(70, 192, 109, 0.72);
+  background: rgba(70, 192, 109, 0.09);
+  box-shadow: inset 0 0 12px rgba(70, 192, 109, 0.07);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .patchApplied .patchRemoveButton,

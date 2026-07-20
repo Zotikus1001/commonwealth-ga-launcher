@@ -93,13 +93,11 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
 export default function Play({
   state,
   onOpenGameSettings,
-  onOpenInfo,
-  onOpenProfiles
+  onOpenInfo
 }: {
   state: LauncherState;
   onOpenGameSettings: () => void;
   onOpenInfo: () => void;
-  onOpenProfiles: () => void;
 }): JSX.Element {
   const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
@@ -124,9 +122,6 @@ export default function Play({
     state.selectedServerId === DEFAULT_SERVER_ID &&
     state.agendaStatsStatus === 'ready' &&
     state.agendaStatsText !== null;
-  const activeProfile = state.gameProfiles.find(
-    (profile) => profile.id === state.selectedGameProfileId
-  );
   const profileSelectionDisabled =
     selectingProfile ||
     state.activeGameInstances > 0 ||
@@ -286,6 +281,27 @@ export default function Play({
 
         <section className={`panel rise ${styles.server}`} style={{ animationDelay: '160ms' }}>
           <div className="panel-title">Server</div>
+          {state.gameProfiles.length > 0 && (
+            <div className={styles.profileNumbers} aria-label="Game settings profiles">
+              {state.gameProfiles.map((profile, index) => {
+                const active = profile.id === state.selectedGameProfileId;
+                return (
+                  <button
+                    key={profile.id}
+                    className={`${styles.profileNumber} ${active ? styles.profileNumberActive : ''}`}
+                    data-profile-name={profile.name}
+                    title={profile.name}
+                    aria-label={`Profile ${index + 1}: ${profile.name}${active ? ', active' : ''}`}
+                    aria-pressed={active}
+                    disabled={profileSelectionDisabled}
+                    onClick={() => void selectProfile(profile.id)}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className={styles.serverName}>{state.serverName || 'Unavailable'}</div>
           <div className={styles.serverRow}>
             <span
@@ -345,49 +361,6 @@ export default function Play({
       </div>
 
       <div className={`rise ${styles.ctaBlock}`} style={{ animationDelay: '220ms' }}>
-        <div className={styles.profileDock}>
-          <div className={styles.profileDockHeader}>
-            <span>Game Settings Profile</span>
-            <button onClick={onOpenProfiles}>Manage</button>
-          </div>
-          <div className={styles.profileDockBody}>
-            {state.gameProfiles.length > 0 ? (
-              <div className={styles.profileNumbers} aria-label="Game settings profiles">
-                {state.gameProfiles.map((profile, index) => {
-                  const active = profile.id === state.selectedGameProfileId;
-                  return (
-                    <button
-                      key={profile.id}
-                      className={`${styles.profileNumber} ${active ? styles.profileNumberActive : ''}`}
-                      data-profile-name={profile.name}
-                      title={profile.name}
-                      aria-label={`Profile ${index + 1}: ${profile.name}${active ? ', active' : ''}`}
-                      aria-pressed={active}
-                      disabled={profileSelectionDisabled}
-                      onClick={() => void selectProfile(profile.id)}
-                    >
-                      {index + 1}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <button className={styles.profileEmptyButton} onClick={onOpenProfiles}>
-                + Create Profile
-              </button>
-            )}
-            <div className={styles.profileActiveCopy}>
-              <strong>{activeProfile?.name ?? 'No profile selected'}</strong>
-              <small>
-                {state.activeGameInstances > 0
-                  ? 'Locked while game is running'
-                  : activeProfile
-                    ? 'Applied before patches when Play starts'
-                    : 'Play uses the current game settings'}
-              </small>
-            </div>
-          </div>
-        </div>
         <div className={styles.playControls}>
           {state.serverChoices.length > 1 && (
             <label className={styles.serverPicker}>

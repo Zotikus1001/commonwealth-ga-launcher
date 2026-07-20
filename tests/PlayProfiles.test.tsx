@@ -68,7 +68,6 @@ function render(state: LauncherState): string {
       state={state}
       onOpenGameSettings={vi.fn()}
       onOpenInfo={vi.fn()}
-      onOpenProfiles={vi.fn()}
     />
   );
 }
@@ -81,7 +80,15 @@ describe('Play page', () => {
     expect(markup).toContain('title="High Quality"');
     expect(markup).toContain('aria-label="Profile 1: Competitive, active"');
     expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain('Applied before patches when Play starts');
+    expect(markup).not.toContain('Game Settings Profile');
+    expect(markup).not.toContain('Applied before patches when Play starts');
+  });
+
+  it('hides the profile selector when no profiles exist', () => {
+    const markup = render(launcherState({ gameProfiles: [], selectedGameProfileId: null }));
+
+    expect(markup).not.toContain('aria-label="Game settings profiles"');
+    expect(markup).not.toContain('Create Profile');
   });
 
   it('labels the information shortcut as FAQ', () => {
@@ -97,6 +104,5 @@ describe('Play page', () => {
 
     expect(markup).toMatch(/title="Competitive"[^>]*disabled/);
     expect(markup).toMatch(/title="High Quality"[^>]*disabled/);
-    expect(markup).toContain('Locked while game is running');
   });
 });

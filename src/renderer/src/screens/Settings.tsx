@@ -2373,9 +2373,9 @@ function DiagnosticsTab({
         <div className={styles.resetCopy}>
           <div className={styles.resetTitle}>Reset launcher settings</div>
           <p>
-            Clear every saved option and game settings profile, then restart from initial setup.
-            The launcher-managed client patch DLL and DXVK/Vulkan files are cleaned up; game INIs,
-            logs, caches, backups, and unmanaged or local DLLs stay intact.
+            Clear every saved option and game settings profile, remove the launcher-managed Game
+            Client Patch, and restart from initial setup. Game INIs, logs, caches, and backups stay
+            intact.
           </p>
         </div>
         <button
@@ -2410,13 +2410,12 @@ function DiagnosticsTab({
             <h2 id="reset-launcher-title">Start the launcher from scratch?</h2>
             <p>
               This removes saved profiles and replaces the saved game path, servers, launcher
-              options, game options, and developer settings with defaults, then restarts the
-              launcher.
+              options, and game options with defaults, then restarts the launcher.
             </p>
             <p>
-              The launcher removes only its managed client patch DLL and restores its managed
-              DXVK/Vulkan files. If the configured game install is unavailable, game cleanup is
-              skipped. Game INIs and unmanaged or local DLLs are never removed.
+              The launcher also removes its managed Game Client Patch from the configured game
+              install. If that install is unavailable, game cleanup is skipped. Game INIs, logs,
+              caches, and backups stay intact.
             </p>
             {resetResult && (
               <p className={resetResult.ok ? styles.valid : styles.confirmError}>

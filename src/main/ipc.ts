@@ -28,6 +28,27 @@ export function registerIpc(
   ipcMain.handle(IPC.getState, () => orchestrator.getState());
   ipcMain.handle(IPC.getSettings, () => config.get());
 
+  const commitGameClientPatchChange = async (
+    previousEnabled: boolean,
+    updated: Settings
+  ): Promise<void> => {
+    try {
+      await orchestrator.gameClientPatchChanged(updated.patches.gameClientPatch);
+    } catch (error) {
+      try {
+        await config.update({
+          patches: { gameClientPatch: previousEnabled }
+        });
+      } catch (rollbackError) {
+        throw new Error(
+          `${(error as Error).message}; could not restore the previous client-patch setting: ` +
+            (rollbackError as Error).message
+        );
+      }
+      throw error;
+    }
+  };
+
   ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
     const previous = config.get();
     const updated = await config.update(patch);
@@ -77,27 +98,21 @@ export function registerIpc(
         }
       }
       if (gameClientPatchChanged) {
-        try {
-          await orchestrator.gameClientPatchChanged(updated.patches.gameClientPatch);
-        } catch (error) {
-          try {
-            await config.update({
-              patches: { gameClientPatch: previous.patches.gameClientPatch }
-            });
-          } catch (rollbackError) {
-            throw new Error(
-              `${(error as Error).message}; could not restore the previous client-patch setting: ` +
-                (rollbackError as Error).message
-            );
-          }
-          throw error;
-        }
+        await commitGameClientPatchChange(previous.patches.gameClientPatch, updated);
       }
       if (!localClientDllChanged && !dxvkChanged && !gameClientPatchChanged) {
         if (gamePathChanged) await orchestrator.settingsChanged();
         else void orchestrator.settingsChanged();
       }
     }
+    return updated;
+  });
+
+  ipcMain.handle(IPC.setGameClientPatch, async (_e, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('Game Client Patch state is invalid.');
+    const previousEnabled = config.get().patches.gameClientPatch;
+    const updated = await config.update({ patches: { gameClientPatch: enabled } });
+    await commitGameClientPatchChange(previousEnabled, updated);
     return updated;
   });
 

@@ -15,6 +15,8 @@ const api: LauncherApi = {
   getState: () => ipcRenderer.invoke(IPC.getState),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   updateSettings: (patch: DeepPartial<Settings>) => ipcRenderer.invoke(IPC.updateSettings, patch),
+  setGameClientPatch: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC.setGameClientPatch, enabled),
   browseForGame: () => ipcRenderer.invoke(IPC.browseForGame),
   autoDetectGame: () => ipcRenderer.invoke(IPC.autoDetectGame),
   play: () => ipcRenderer.invoke(IPC.play),

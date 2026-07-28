@@ -65,6 +65,9 @@ Create local packages with `npm run dist:win` or `npm run dist:linux`. Build out
 `out/` files, keeps its settings separate from installed builds, and does not check online release
 channels.
 
+Developer Mode can validate and use a local 32-bit x86 client patch DLL. Local DLLs remain
+developer-owned, and the launcher reports them separately from its managed release patch.
+
 Public launcher settings are stored in `launcher.config.yml`.
 
 Run the **Release launcher** workflow from the stable branch to publish both platforms. The

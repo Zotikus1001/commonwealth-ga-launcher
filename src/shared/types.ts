@@ -248,6 +248,7 @@ export interface LauncherApi {
   getState(): Promise<LauncherState>;
   getSettings(): Promise<Settings>;
   updateSettings(patch: DeepPartial<Settings>): Promise<Settings>;
+  setGameClientPatch(enabled: boolean): Promise<Settings>;
   browseForGame(): Promise<string | null>;
   autoDetectGame(): Promise<string | null>;
   play(): Promise<void>;

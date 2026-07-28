@@ -1360,7 +1360,10 @@ export class Orchestrator {
   }
 
   async localClientDllChanged(enabled: boolean): Promise<void> {
-    if (this.busy || this.state.launchCoolingDown || this.state.phase === 'launching') {
+    if (
+      enabled &&
+      (this.busy || this.state.launchCoolingDown || this.state.phase === 'launching')
+    ) {
       throw new Error('The launcher is busy. Try again shortly.');
     }
     const settings = this.config.get();

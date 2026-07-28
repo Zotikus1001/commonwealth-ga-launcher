@@ -937,6 +937,13 @@
   color: #f0aaaa;
 }
 
+.patchBlockedButton:disabled {
+  border-color: rgba(240, 166, 60, 0.4);
+  background: rgba(240, 166, 60, 0.07);
+  color: var(--amber-hi);
+  opacity: 0.82;
+}
+
 .patchApplied .patchIcon {
   color: var(--green);
 }
@@ -988,6 +995,86 @@
   color: var(--text-dim);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.clientDllState {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: rgba(7, 10, 16, 0.48);
+}
+
+.clientDllStateLabel {
+  align-self: start;
+  padding-top: 2px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
+}
+
+.clientDllStateBody {
+  min-width: 0;
+}
+
+.clientDllStateBody strong {
+  display: block;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clientDllStateBody p {
+  margin: 3px 0 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.clientDllActive {
+  border-left-color: var(--green);
+  background: linear-gradient(90deg, rgba(76, 201, 143, 0.09), rgba(7, 10, 16, 0.48) 54%);
+}
+
+.clientDllActive .clientDllStateLabel {
+  color: var(--green);
+}
+
+.clientDllManaged {
+  border-left-color: var(--cyan);
+  background: linear-gradient(90deg, rgba(64, 191, 191, 0.08), rgba(7, 10, 16, 0.48) 54%);
+}
+
+.clientDllManaged .clientDllStateLabel {
+  color: var(--cyan);
+}
+
+.clientDllWarning {
+  border-left-color: var(--amber);
+  background: linear-gradient(90deg, rgba(240, 166, 60, 0.09), rgba(7, 10, 16, 0.48) 54%);
+}
+
+.clientDllWarning .clientDllStateLabel {
+  color: var(--amber-hi);
+}
+
+.clientDllError {
+  border-left-color: var(--red);
+  background: linear-gradient(90deg, rgba(219, 101, 101, 0.09), rgba(7, 10, 16, 0.48) 54%);
+}
+
+.clientDllError .clientDllStateLabel {
+  color: #e69999;
+}
+
+.clientDllIdle {
+  border-left-color: var(--line-bright);
 }
 
 .patchResultError {
@@ -1551,6 +1638,11 @@
 }
 
 @media (max-width: 760px) {
+  .clientDllState {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+
   .profileCapturePanel {
     grid-template-columns: minmax(0, 1fr);
   }

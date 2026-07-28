@@ -296,10 +296,17 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
   const saveDeveloperMode = async (enabled: boolean): Promise<void> => {
     if (!draft || developerModeSaving) return;
-    const previous = draft.developer.enabled;
+    const previous = draft.developer;
     setDraft((current) =>
       current
-        ? { ...current, developer: { ...current.developer, enabled } }
+        ? {
+            ...current,
+            developer: {
+              ...current.developer,
+              enabled,
+              useLocalClientDll: enabled ? current.developer.useLocalClientDll : false
+            }
+          }
         : current
     );
     setDeveloperModeSaving(true);
@@ -310,7 +317,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
         current
           ? {
               ...current,
-              developer: { ...current.developer, enabled: updated.developer.enabled }
+              developer: {
+                ...current.developer,
+                enabled: updated.developer.enabled,
+                useLocalClientDll: updated.developer.useLocalClientDll
+              }
             }
           : current
       );
@@ -321,7 +332,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     } catch (error) {
       setDraft((current) =>
         current
-          ? { ...current, developer: { ...current.developer, enabled: previous } }
+          ? { ...current, developer: { ...current.developer, ...previous } }
           : current
       );
       setDeveloperModeError(error instanceof Error ? error.message : String(error));
@@ -341,7 +352,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     setGameClientPatchSaving(true);
     setGameClientPatchError(null);
     try {
-      const updated = await window.api.updateSettings({ patches: { gameClientPatch: enabled } });
+      const updated = await window.api.setGameClientPatch(enabled);
       setDraft((current) =>
         current
           ? {
@@ -1723,6 +1734,154 @@ function DxvkVulkanPanel({
   );
 }
 
+type GameClientDllNoticeTone = 'active' | 'managed' | 'warning' | 'error' | 'idle';
+
+export function gameClientDllNoticeCopy(
+  dll: LauncherState['gameClientDll'],
+  localMode: boolean,
+  platform: LauncherState['platform']
+): {
+  tone: GameClientDllNoticeTone;
+  label: string;
+  title: string;
+  detail: string;
+} {
+  if (dll.status === 'local' && localMode) {
+    return {
+      tone: 'active',
+      label: 'LOCAL OVERRIDE ACTIVE',
+      title: 'Developer DLL validated',
+      detail:
+        `${dll.detail} It applies to Play and Dev Launch. ` +
+        'The launcher will never update, replace, rename, or remove this file.'
+    };
+  }
+  if (dll.status === 'local') {
+    return {
+      tone: 'warning',
+      label: platform === 'win32' ? 'UNMANAGED DLL CAN LOAD' : 'UNMANAGED DLL DETECTED',
+      title: 'Managed patch controls are blocked',
+      detail:
+        platform === 'win32'
+          ? `${dll.detail} Windows can still load it while Local DLL Mode is off. ` +
+            'Move or rename it manually to test without the patch.'
+          : `${dll.detail} It is not injected by the launcher while Local DLL Mode is off. ` +
+            'Move or rename it before using the managed patch controls.'
+    };
+  }
+  if (dll.status === 'managed') {
+    return {
+      tone: 'managed',
+      label: 'MANAGED RELEASE VERIFIED',
+      title: 'Launcher-owned DLL detected',
+      detail: dll.detail
+    };
+  }
+  if (dll.status === 'invalid') {
+    return {
+      tone: 'error',
+      label: 'DLL REJECTED',
+      title: 'Client DLL needs attention',
+      detail: `${dll.detail} Move or replace it before using managed or local patch mode.`
+    };
+  }
+  if (dll.status === 'missing') {
+    return {
+      tone: localMode ? 'error' : 'idle',
+      label: localMode ? 'LOCAL OVERRIDE BROKEN' : 'NO CLIENT DLL',
+      title: localMode ? 'The validated local file is no longer available' : 'No DLL detected',
+      detail: localMode
+        ? `${dll.detail} Copy a valid 32-bit x86 local build back before launching.`
+        : dll.detail
+    };
+  }
+  return {
+    tone: 'idle',
+    label: 'INSTALL NOT READY',
+    title: 'Client DLL cannot be inspected yet',
+    detail: dll.detail
+  };
+}
+
+export function GameClientDllStatusPanel({
+  dll,
+  localMode,
+  platform
+}: {
+  dll: LauncherState['gameClientDll'];
+  localMode: boolean;
+  platform: LauncherState['platform'];
+}): JSX.Element {
+  const copy = gameClientDllNoticeCopy(dll, localMode, platform);
+  const toneClass: Record<GameClientDllNoticeTone, string> = {
+    active: styles.clientDllActive,
+    managed: styles.clientDllManaged,
+    warning: styles.clientDllWarning,
+    error: styles.clientDllError,
+    idle: styles.clientDllIdle
+  };
+  return (
+    <div
+      className={`${styles.clientDllState} ${toneClass[copy.tone]}`}
+      data-tone={copy.tone}
+      aria-live="polite"
+    >
+      <span className={styles.clientDllStateLabel}>{copy.label}</span>
+      <div className={styles.clientDllStateBody}>
+        <strong>{copy.title}</strong>
+        <p>{copy.detail}</p>
+      </div>
+    </div>
+  );
+}
+
+export function gameClientPatchPresentation(
+  preferred: boolean,
+  localMode: boolean,
+  dll: LauncherState['gameClientDll']
+): {
+  tone: 'applied' | 'pending' | 'removed';
+  enabled: boolean;
+  actionLabel: 'APPLY' | 'REMOVE' | 'LOCAL' | 'BLOCKED';
+  actionDisabled: boolean;
+  actionTitle: string;
+  nextPreference: boolean;
+} {
+  const enabled =
+    (localMode && dll.status === 'local') ||
+    (!localMode && preferred && dll.status === 'managed');
+  const unmanagedBlock = dll.status === 'local' || dll.status === 'invalid';
+  if (localMode) {
+    return {
+      tone: enabled ? 'applied' : 'pending',
+      enabled,
+      actionLabel: 'LOCAL',
+      actionDisabled: true,
+      actionTitle: 'Managed patch controls are paused while Local DLL Mode is enabled.',
+      nextPreference: preferred
+    };
+  }
+  if (unmanagedBlock) {
+    return {
+      tone: 'pending',
+      enabled: false,
+      actionLabel: 'BLOCKED',
+      actionDisabled: true,
+      actionTitle: 'Move or rename the unmanaged dinput8.dll before using managed patch controls.',
+      nextPreference: preferred
+    };
+  }
+  const removeInstalled = dll.status === 'managed';
+  return {
+    tone: enabled ? 'applied' : preferred || removeInstalled ? 'pending' : 'removed',
+    enabled,
+    actionLabel: removeInstalled ? 'REMOVE' : 'APPLY',
+    actionDisabled: false,
+    actionTitle: `${removeInstalled ? 'Remove' : 'Apply'} Game Client Patch`,
+    nextPreference: !removeInstalled
+  };
+}
+
 function DeveloperTab({
   state,
   settings,
@@ -1840,18 +1999,27 @@ function DeveloperTab({
               id="developer-local-client-dll"
               type="checkbox"
               checked={settings.developer.useLocalClientDll}
-              disabled={localClientDllSaving}
+              disabled={
+                localClientDllSaving ||
+                state.phase === 'launching' ||
+                state.launchCoolingDown
+              }
               onChange={(event) => onLocalClientDllChange(event.target.checked)}
             />
             <label htmlFor="developer-local-client-dll">
-              <span className={styles.featureName}>Use Local Client DLL</span>
+              <span className={styles.featureName}>Use Local Client DLL Override</span>
               <span className={styles.featureDetail}>
-                Uses the existing dinput8.dll in the game folder without checking, downloading,
-                replacing, or removing it. Apply Game Client Patch in the Patches tab to load it
-                with the game.
+                Validates and uses a developer-supplied 32-bit x86 dinput8.dll for every launch.
+                This is separate from the managed Game Client Patch, and the launcher never changes
+                or removes the local file.
               </span>
             </label>
           </div>
+          <GameClientDllStatusPanel
+            dll={state.gameClientDll}
+            localMode={settings.developer.useLocalClientDll}
+            platform={state.platform}
+          />
           {localClientDllError && (
             <p className={styles.invalid}>{`Could not change the local client DLL: ${localClientDllError}`}</p>
           )}
@@ -1935,6 +2103,22 @@ function PatchesTab({
   };
 
   const gameClientPatchEnabled = settings.patches.gameClientPatch;
+  const gameClientPatch = gameClientPatchPresentation(
+    gameClientPatchEnabled,
+    settings.developer.useLocalClientDll,
+    state.gameClientDll
+  );
+  const gameClientPatchTone =
+    gameClientPatch.tone === 'applied'
+      ? styles.patchApplied
+      : gameClientPatch.tone === 'pending'
+        ? styles.patchPending
+        : styles.patchUnknown;
+  const gameClientPatchBusy =
+    gameClientPatchSaving ||
+    changing !== null ||
+    state.phase === 'launching' ||
+    state.launchCoolingDown;
   return (
     <section className={styles.section}>
       <div className="panel-title">Game Patches</div>
@@ -1943,34 +2127,35 @@ function PatchesTab({
         game with and without it; your choice is kept for future launches.
       </p>
       <div className={styles.patchList}>
-        <article
-          className={`${styles.patchCard} ${
-            gameClientPatchEnabled ? styles.patchApplied : styles.patchUnknown
-          }`}
-        >
+        <article className={`${styles.patchCard} ${gameClientPatchTone}`}>
           <button
             className={`${styles.patchIcon} ${styles.patchApplyButton} ${
-              gameClientPatchEnabled ? styles.patchRemoveButton : ''
+              gameClientPatch.actionLabel === 'REMOVE' ? styles.patchRemoveButton : ''
+            } ${
+              gameClientPatch.actionDisabled ? styles.patchBlockedButton : ''
             }`}
-            disabled={
-              gameClientPatchSaving || changing !== null || state.launchCoolingDown
-            }
-            aria-label={`${gameClientPatchEnabled ? 'Remove' : 'Apply'} Game Client Patch`}
+            disabled={gameClientPatchBusy || gameClientPatch.actionDisabled}
+            aria-label={gameClientPatch.actionTitle}
             title={
-              state.launchCoolingDown
+              state.phase === 'launching' || state.launchCoolingDown
                 ? 'Wait for launch to finish.'
-                : `${gameClientPatchEnabled ? 'Remove' : 'Apply'} Game Client Patch`
+                : gameClientPatch.actionTitle
             }
-            onClick={() => onGameClientPatchChange(!gameClientPatchEnabled)}
+            onClick={() => onGameClientPatchChange(gameClientPatch.nextPreference)}
           >
-            {gameClientPatchSaving ? '…' : gameClientPatchEnabled ? 'REMOVE' : 'APPLY'}
+            {gameClientPatchSaving ? '…' : gameClientPatch.actionLabel}
           </button>
           <div className={styles.patchBody}>
             <div className={styles.patchTitle}>Game Client Patch</div>
             <p className={styles.patchDescription}>
-              Installs the managed client DLL and checks for updated releases before Play. Restart
-              the game after applying or removing it.
+              Installs and owns the verified release DLL, then checks for updates before Play.
+              Developer-supplied DLLs are detected separately and never changed by this control.
             </p>
+            <GameClientDllStatusPanel
+              dll={state.gameClientDll}
+              localMode={settings.developer.useLocalClientDll}
+              platform={state.platform}
+            />
             <div className={styles.patchFixDetails}>
               <div className={styles.patchFixHeader}>
                 <span>Current fixes</span>
@@ -1994,7 +2179,7 @@ function PatchesTab({
               </p>
             )}
           </div>
-          <PatchEnabledCheck enabled={gameClientPatchEnabled} />
+          <PatchEnabledCheck enabled={gameClientPatch.enabled} />
         </article>
 
         {state.clientPatches.map((patch) => {

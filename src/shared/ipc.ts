@@ -3,6 +3,7 @@ export const IPC = {
   getState: 'launcher:get-state',
   getSettings: 'launcher:get-settings',
   updateSettings: 'launcher:update-settings',
+  setGameClientPatch: 'launcher:set-game-client-patch',
   browseForGame: 'launcher:browse-for-game',
   autoDetectGame: 'launcher:auto-detect-game',
   play: 'launcher:play',

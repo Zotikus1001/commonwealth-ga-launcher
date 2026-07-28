@@ -75,7 +75,7 @@ export class GameLauncher {
    *  - Linux/Wine: spawn <wine> <exePath> with the resolved prefix.
    *  - Linux/Proton: spawn <umu-run> <exePath> with WINEPREFIX and PROTONPATH.
    *    Optional GameMode wraps either runner without changing its arguments.
-   *    Wine receives the launcher-managed dinput8 override only for a successfully prepared Commonwealth launch,
+   *    Wine receives the dinput8 override only after a managed or local DLL passes preparation,
    *    without changing the user's prefix configuration globally.
    *    The exe path stays NATIVE — Wine maps it via the Z: drive; no winepath translation.
    *    With wineDebug on, Wine keeps default logging and stderr is piped into the launcher log

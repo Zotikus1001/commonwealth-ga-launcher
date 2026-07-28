@@ -11,6 +11,10 @@ const serviceMocks = vi.hoisted(() => ({
   ensureClientConfiguration: vi.fn(),
   gpuSelect: vi.fn(),
   clientPrepare: vi.fn(),
+  clientPrepareLocal: vi.fn(),
+  clientInspect: vi.fn(),
+  clientDisable: vi.fn(),
+  clientRemoveManaged: vi.fn(),
   probeServer: vi.fn(),
   profileLoad: vi.fn(),
   profileSnapshot: vi.fn(),
@@ -111,7 +115,16 @@ vi.mock('../src/main/services/GpuMemory', () => ({
 vi.mock('../src/main/services/ClientPatchManager', () => ({
   ClientPatchManager: class {
     prepareForLaunch = serviceMocks.clientPrepare;
-  }
+    prepareLocalForLaunch = serviceMocks.clientPrepareLocal;
+    inspect = serviceMocks.clientInspect;
+    disable = serviceMocks.clientDisable;
+    removeManaged = serviceMocks.clientRemoveManaged;
+  },
+  unavailableGameClientDllState: () => ({
+    status: 'unavailable',
+    detail: 'Set a valid game installation to inspect dinput8.dll.',
+    hasManagedMarker: false
+  })
 }));
 
 import { Orchestrator } from '../src/main/Orchestrator';
@@ -137,6 +150,14 @@ beforeEach(() => {
   });
   serviceMocks.gpuSelect.mockResolvedValue({ texturePoolMb: 1_024 });
   serviceMocks.clientPrepare.mockResolvedValue({});
+  serviceMocks.clientPrepareLocal.mockResolvedValue({});
+  serviceMocks.clientInspect.mockResolvedValue({
+    status: 'managed',
+    detail: 'Launcher-managed Game Client Patch release detected.',
+    hasManagedMarker: true
+  });
+  serviceMocks.clientDisable.mockResolvedValue(undefined);
+  serviceMocks.clientRemoveManaged.mockResolvedValue(true);
   serviceMocks.probeServer.mockResolvedValue('online');
   serviceMocks.profileLoad.mockResolvedValue(undefined);
   serviceMocks.profileSnapshot.mockReturnValue({ profiles: [], selectedProfileId: null });
@@ -334,5 +355,116 @@ describe('game setup patch preparation', () => {
     await expect(orchestrator.selectGameProfile(profile.id)).resolves.toBeUndefined();
     expect(serviceMocks.profileSelect).toHaveBeenCalledWith(profile.id);
     vi.useRealTimers();
+  });
+
+  it('uses a validated local DLL independently of the managed patch preference', async () => {
+    vi.useFakeTimers();
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    serviceMocks.clientInspect.mockResolvedValue({
+      status: 'local',
+      detail: 'Valid local x86 client patch DLL detected.',
+      hasManagedMarker: false
+    });
+    serviceMocks.clientPrepareLocal.mockResolvedValue({
+      WINEDLLOVERRIDES: 'dinput8=n,b'
+    });
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.developer.enabled = true;
+    settings.developer.useLocalClientDll = true;
+    settings.patches.gameClientPatch = false;
+    settings.launch.closeAfterLaunch = false;
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings: vi.fn(async () => settings)
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn(),
+      ensureCurrent: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    await orchestrator.refresh();
+
+    expect(serviceMocks.clientPrepareLocal).toHaveBeenCalledWith(install, process.platform);
+    expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+
+    await orchestrator.play();
+
+    expect(serviceMocks.clientPrepareLocal).toHaveBeenCalledWith(install, process.platform);
+    expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.gameLaunch).toHaveBeenCalledWith(
+      settings,
+      '127.0.0.1',
+      install.binariesDir,
+      process.platform,
+      false,
+      null,
+      { WINEDLLOVERRIDES: 'dinput8=n,b' }
+    );
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('rejects local mode immediately when the installed DLL is the managed release', async () => {
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    serviceMocks.clientInspect.mockResolvedValue({
+      status: 'managed',
+      detail: 'Launcher-managed Game Client Patch release detected.',
+      hasManagedMarker: true
+    });
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.developer.enabled = true;
+    settings.developer.useLocalClientDll = true;
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings: vi.fn(async () => settings)
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    await expect(orchestrator.localClientDllChanged(true)).rejects.toThrow('managed release');
+    expect(orchestrator.getState().gameClientDll.status).toBe('managed');
+    expect(serviceMocks.clientPrepareLocal).not.toHaveBeenCalled();
   });
 });

@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 13;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 14;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -224,6 +224,20 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 13: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 14,
+          developer: {
+            ...developer,
+            useLocalClientDll: false
+          }
+        };
+        version = 14;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -379,8 +393,9 @@ function validateUpdatedServers(value: unknown): Settings['servers'] {
 
 function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']): Settings['developer'] {
   if (!isPlainObject(value)) return structuredClone(fallback);
+  const enabled = typeof value.enabled === 'boolean' ? value.enabled : false;
   return {
-    enabled: typeof value.enabled === 'boolean' ? value.enabled : false,
+    enabled,
     windowed: typeof value.windowed === 'boolean' ? value.windowed : fallback.windowed,
     resolutionWidth: isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)
       ? (value.resolutionWidth as number)
@@ -390,9 +405,9 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       : fallback.resolutionHeight,
     useDxvk: typeof value.useDxvk === 'boolean' ? value.useDxvk : fallback.useDxvk,
     useLocalClientDll:
-      typeof value.useLocalClientDll === 'boolean'
+      enabled && typeof value.useLocalClientDll === 'boolean'
         ? value.useLocalClientDll
-        : fallback.useLocalClientDll
+        : false
   };
 }
 
@@ -415,7 +430,7 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
     useDxvk: value.useDxvk,
-    useLocalClientDll: value.useLocalClientDll
+    useLocalClientDll: value.enabled && value.useLocalClientDll
   };
 }
 

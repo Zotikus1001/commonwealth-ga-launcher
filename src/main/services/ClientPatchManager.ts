@@ -4,6 +4,7 @@ import {
   copyFile,
   lstat,
   mkdir,
+  open,
   readdir,
   rename,
   rm,
@@ -11,6 +12,7 @@ import {
 } from 'fs/promises';
 import { join } from 'path';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
+import type { GameClientDllState } from '@shared/types';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 import { downloadToFile, fetchJson, type DownloadProgress } from './Download';
@@ -26,6 +28,9 @@ const STATE_FILE_NAME = 'client-patches.json';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const ASSET_NAME = 'Commonwealth-GA-Client-Patches-x86.dll';
 const MAX_PAYLOAD_BYTES = 50 * 1024 * 1024;
+const IMAGE_FILE_MACHINE_I386 = 0x014c;
+const IMAGE_FILE_DLL = 0x2000;
+const PE32_MAGIC = 0x010b;
 
 export interface ClientPatchDefinition {
   enabled: boolean;
@@ -168,9 +173,92 @@ function parseReleaseDefinition(
 }
 
 function mergeWineOverride(existing: string | undefined): string {
-  if (!existing?.trim()) return 'dinput8=n,b';
-  if (/(^|;)\s*dinput8\s*=/.test(existing.toLowerCase())) return existing;
-  return `${existing};dinput8=n,b`;
+  const retained: string[] = [];
+  for (const rawEntry of existing?.split(';') ?? []) {
+    const entry = rawEntry.trim();
+    if (!entry) continue;
+    const separator = entry.indexOf('=');
+    if (separator < 0) {
+      retained.push(entry);
+      continue;
+    }
+    const libraries = entry
+      .slice(0, separator)
+      .split(',')
+      .map((library) => library.trim())
+      .filter(Boolean);
+    const remaining = libraries.filter(
+      (library) => !/^dinput8(?:\.dll)?$/i.test(library)
+    );
+    if (remaining.length > 0) {
+      retained.push(`${remaining.join(',')}=${entry.slice(separator + 1).trim()}`);
+    }
+  }
+  retained.push('dinput8=n,b');
+  return retained.join(';');
+}
+
+async function inspectX86PeDll(path: string): Promise<string | null> {
+  const handle = await open(path, 'r');
+  try {
+    const file = await handle.stat();
+    if (file.size < 90) return 'Local dinput8.dll is too small to be a valid Windows DLL.';
+
+    const dosHeader = Buffer.alloc(64);
+    if ((await handle.read(dosHeader, 0, dosHeader.length, 0)).bytesRead !== dosHeader.length) {
+      return 'Local dinput8.dll has a truncated DOS header.';
+    }
+    if (dosHeader[0] !== 0x4d || dosHeader[1] !== 0x5a) {
+      return 'Local dinput8.dll is not a Windows PE file.';
+    }
+
+    const peOffset = dosHeader.readUInt32LE(0x3c);
+    const peHeaderSize = 26;
+    if (peOffset < dosHeader.length || peOffset + peHeaderSize > file.size) {
+      return 'Local dinput8.dll has an invalid PE header offset.';
+    }
+
+    const peHeader = Buffer.alloc(peHeaderSize);
+    if ((await handle.read(peHeader, 0, peHeader.length, peOffset)).bytesRead !== peHeader.length) {
+      return 'Local dinput8.dll has a truncated PE header.';
+    }
+    if (
+      peHeader[0] !== 0x50 ||
+      peHeader[1] !== 0x45 ||
+      peHeader[2] !== 0 ||
+      peHeader[3] !== 0
+    ) {
+      return 'Local dinput8.dll has an invalid PE signature.';
+    }
+    if (peHeader.readUInt16LE(4) !== IMAGE_FILE_MACHINE_I386) {
+      return 'Local dinput8.dll must be a 32-bit x86 build for Global Agenda.';
+    }
+    const optionalHeaderSize = peHeader.readUInt16LE(20);
+    if (
+      peHeader.readUInt16LE(6) === 0 ||
+      optionalHeaderSize < 2 ||
+      peOffset + 24 + optionalHeaderSize > file.size
+    ) {
+      return 'Local dinput8.dll has an incomplete PE image header.';
+    }
+    if ((peHeader.readUInt16LE(22) & IMAGE_FILE_DLL) === 0) {
+      return 'Local dinput8.dll is a Windows executable, not a DLL.';
+    }
+    if (peHeader.readUInt16LE(24) !== PE32_MAGIC) {
+      return 'Local dinput8.dll must use the 32-bit PE32 format.';
+    }
+    return null;
+  } finally {
+    await handle.close();
+  }
+}
+
+export function unavailableGameClientDllState(): GameClientDllState {
+  return {
+    status: 'unavailable',
+    detail: 'Set a valid game installation to inspect dinput8.dll.',
+    hasManagedMarker: false
+  };
 }
 
 export class ClientPatchManager {
@@ -439,13 +527,100 @@ export class ClientPatchManager {
     return environment;
   }
 
+  async inspect(install: GameInstall): Promise<GameClientDllState> {
+    let marker: ClientPatchMarker | null;
+    try {
+      marker = await this.readMarker(install);
+    } catch (error) {
+      return {
+        status: 'invalid',
+        detail: `Client DLL ownership metadata is invalid: ${(error as Error).message}`,
+        hasManagedMarker: true
+      };
+    }
+
+    let target: string;
+    try {
+      target = await this.resolveTarget(install);
+    } catch (error) {
+      return {
+        status: 'invalid',
+        detail: (error as Error).message,
+        hasManagedMarker: marker !== null
+      };
+    }
+
+    try {
+      const targetInfo = await lstat(target);
+      if (!targetInfo.isFile()) {
+        return {
+          status: 'invalid',
+          detail: 'dinput8.dll is not a regular file and cannot be used.',
+          hasManagedMarker: marker !== null
+        };
+      }
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+      return {
+        status: 'missing',
+        detail: marker
+          ? 'The launcher-managed Game Client Patch file is missing.'
+          : 'No dinput8.dll is present in the game Binaries folder.',
+        hasManagedMarker: marker !== null
+      };
+    }
+
+    const validationError = await inspectX86PeDll(target);
+    if (validationError) {
+      return {
+        status: 'invalid',
+        detail: validationError,
+        hasManagedMarker: marker !== null
+      };
+    }
+
+    const targetHash = await sha256File(target);
+    const markerHashes = new Set(
+      [marker?.installedSha256, marker?.pendingSha256].filter(
+        (hash): hash is string => typeof hash === 'string'
+      )
+    );
+    const knownPinnedRelease =
+      this.definition.enabled &&
+      SHA256_PATTERN.test(this.definition.sha256) &&
+      targetHash === this.definition.sha256;
+    if (markerHashes.has(targetHash) || knownPinnedRelease) {
+      return {
+        status: 'managed',
+        detail: marker
+          ? 'Launcher-managed Game Client Patch release detected.'
+          : 'Known Game Client Patch release detected; ownership will be restored on Apply or Play.',
+        hasManagedMarker: marker !== null
+      };
+    }
+
+    return {
+      status: 'local',
+      detail: marker
+        ? 'Valid local x86 DLL detected. Move it out before Reset so stale managed ownership can be recovered safely.'
+        : 'Valid local x86 client patch DLL detected.',
+      hasManagedMarker: marker !== null
+    };
+  }
+
   async prepareLocalForLaunch(
     install: GameInstall,
     platform: NodeJS.Platform
   ): Promise<NodeJS.ProcessEnv> {
-    const target = await this.resolveTarget(install);
-    if (!(await isFile(target))) {
-      throw new Error('Local client DLL not found in the game Binaries folder.');
+    const inspection = await this.inspect(install);
+    if (inspection.status !== 'local') {
+      if (inspection.status === 'managed') {
+        throw new Error(
+          'The existing dinput8.dll is the launcher-managed release, not a local build. ' +
+            'Copy your local x86 DLL into the game Binaries folder first.'
+        );
+      }
+      throw new Error(inspection.detail);
     }
     this.log.info('local client DLL mode: using the existing dinput8.dll without update checks');
     return this.launchEnvironment(platform);

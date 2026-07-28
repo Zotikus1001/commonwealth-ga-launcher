@@ -161,6 +161,19 @@ export interface ClientPatchStatus {
   applied: boolean | null;
 }
 
+export type GameClientDllStatus =
+  | 'unavailable'
+  | 'missing'
+  | 'managed'
+  | 'local'
+  | 'invalid';
+
+export interface GameClientDllState {
+  status: GameClientDllStatus;
+  detail: string;
+  hasManagedMarker: boolean;
+}
+
 export type ServerStatus = 'checking' | 'online' | 'offline' | 'invalid';
 
 export interface LauncherState {
@@ -190,6 +203,7 @@ export interface LauncherState {
   launcherUpdate: LauncherUpdateStatus;
   launcherUpdateVersion: string | null;
   launcherUpdateError: string | null;
+  gameClientDll: GameClientDllState;
   clientPatches: ClientPatchStatus[];
   gameProfiles: GameProfileSummary[];
   selectedGameProfileId: string | null;

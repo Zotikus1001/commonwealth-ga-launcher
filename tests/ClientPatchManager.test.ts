@@ -32,6 +32,20 @@ function definition(revision: string, contents: Buffer): ClientPatchDefinition {
   };
 }
 
+function peDll(label: string, machine = 0x014c): Buffer {
+  const image = Buffer.alloc(512);
+  image.write('MZ', 0, 'ascii');
+  image.writeUInt32LE(0x80, 0x3c);
+  image.write('PE\0\0', 0x80, 'binary');
+  image.writeUInt16LE(machine, 0x84);
+  image.writeUInt16LE(1, 0x86);
+  image.writeUInt16LE(0xe0, 0x94);
+  image.writeUInt16LE(0x2102, 0x96);
+  image.writeUInt16LE(machine === 0x014c ? 0x010b : 0x020b, 0x98);
+  image.write(label, 0xc0, 'utf-8');
+  return image;
+}
+
 async function fixture(): Promise<{
   root: string;
   userData: string;
@@ -292,7 +306,7 @@ describe('ClientPatchManager', () => {
 
   it('uses a local DLL without checking, downloading, or replacing it', async () => {
     const { userData, install } = await fixture();
-    const local = Buffer.from('local development payload');
+    const local = peDll('local development payload');
     let releaseChecks = 0;
     let downloads = 0;
     await writeFile(join(install.binariesDir, 'dinput8.dll'), local);
@@ -317,7 +331,7 @@ describe('ClientPatchManager', () => {
 
   it('enables the Wine override for an existing local DLL', async () => {
     const { userData, install } = await fixture();
-    await writeFile(join(install.binariesDir, 'dinput8.dll'), 'local development payload');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), peDll('local development payload'));
     const manager = new ClientPatchManager(
       userData,
       logger(),
@@ -338,8 +352,83 @@ describe('ClientPatchManager', () => {
     );
 
     await expect(manager.prepareLocalForLaunch(install, 'linux')).rejects.toThrow(
-      'Local client DLL not found'
+      'No dinput8.dll is present'
     );
+  });
+
+  it('distinguishes a valid local x86 DLL from the managed release', async () => {
+    const { userData, install } = await fixture();
+    const managed = peDll('managed release');
+    const local = peDll('local development payload');
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+    await manager.prepareForLaunch(install, 'win32');
+
+    await expect(manager.inspect(install)).resolves.toMatchObject({
+      status: 'managed',
+      hasManagedMarker: true
+    });
+    await expect(manager.prepareLocalForLaunch(install, 'win32')).rejects.toThrow(
+      'launcher-managed release'
+    );
+
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), local);
+    await expect(manager.inspect(install)).resolves.toMatchObject({
+      status: 'local',
+      hasManagedMarker: true
+    });
+    await expect(manager.prepareLocalForLaunch(install, 'win32')).resolves.toEqual({});
+  });
+
+  it('rejects a local DLL that is not a 32-bit x86 PE DLL', async () => {
+    const { userData, install } = await fixture();
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), peDll('x64 payload', 0x8664));
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', peDll('managed release'))
+    );
+
+    await expect(manager.inspect(install)).resolves.toMatchObject({
+      status: 'invalid',
+      detail: expect.stringContaining('32-bit x86')
+    });
+    await expect(manager.prepareLocalForLaunch(install, 'win32')).rejects.toThrow('32-bit x86');
+  });
+
+  it('replaces conflicting Wine dinput8 overrides while retaining unrelated entries', async () => {
+    const { userData, install } = await fixture();
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), peDll('local development payload'));
+    process.env.WINEDLLOVERRIDES = 'xaudio2_7=n,b;dinput8=b;d3d9.dll=n';
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', peDll('managed release'))
+    );
+
+    const environment = await manager.prepareLocalForLaunch(install, 'linux');
+
+    expect(environment.WINEDLLOVERRIDES).toBe('xaudio2_7=n,b;d3d9.dll=n;dinput8=n,b');
+  });
+
+  it('removes dinput8 from grouped Wine overrides without dropping the other DLLs', async () => {
+    const { userData, install } = await fixture();
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), peDll('local development payload'));
+    process.env.WINEDLLOVERRIDES = 'dinput8,xaudio2_7=b;foo=n';
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', peDll('managed release'))
+    );
+
+    const environment = await manager.prepareLocalForLaunch(install, 'linux');
+
+    expect(environment.WINEDLLOVERRIDES).toBe('xaudio2_7=b;foo=n;dinput8=n,b');
   });
 
   it('checks every enabled launch and installs the newest release by publication time', async () => {

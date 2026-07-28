@@ -3,6 +3,7 @@ import type { ChildProcess } from 'child_process';
 import type {
   ActionResult,
   ClientPatchId,
+  GameClientDllState,
   LauncherState,
   LauncherUpdateStatus,
   ServerChoice,
@@ -33,7 +34,10 @@ import {
 } from './services/IniFixes';
 import { DxvkManager, unavailableDxvkState } from './services/DxvkManager';
 import { GpuMemoryDetector } from './services/GpuMemory';
-import { ClientPatchManager } from './services/ClientPatchManager';
+import {
+  ClientPatchManager,
+  unavailableGameClientDllState
+} from './services/ClientPatchManager';
 import { managedIniBackupDirectory } from './services/ManagedInstallState';
 import { GameProfileManager } from './services/GameProfileManager';
 import { GameProcessTracker } from './services/GameProcessTracker';
@@ -130,6 +134,7 @@ export class Orchestrator {
       launcherUpdate: launcherUpdate.status,
       launcherUpdateVersion: launcherUpdate.version,
       launcherUpdateError: launcherUpdate.error,
+      gameClientDll: unavailableGameClientDllState(),
       clientPatches: unavailableClientPatches(),
       gameProfiles: [],
       selectedGameProfileId: null,
@@ -164,6 +169,20 @@ export class Orchestrator {
   private patch(patch: Partial<LauncherState>): void {
     this.state = { ...this.state, ...patch };
     this.broadcast(this.state);
+  }
+
+  private async inspectGameClientDll(install: GameInstall): Promise<GameClientDllState> {
+    try {
+      return await this.clientPatchManager.inspect(install);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`client DLL inspection failed: ${message}`);
+      return {
+        status: 'invalid',
+        detail: `Could not inspect dinput8.dll: ${message}`,
+        hasManagedMarker: false
+      };
+    }
   }
 
   private resolveServer(settings: Settings): ServerSelection {
@@ -446,16 +465,19 @@ export class Orchestrator {
       this.patchesPreparedGameExePath = install.exePath;
     }
     let clientPatches = unavailableClientPatches();
+    let gameClientDll = unavailableGameClientDllState();
     let dxvk = unavailableDxvkState(PLATFORM);
     if (install) {
-      const [patches, gameIniSettings, inspectedDxvk] = await Promise.all([
+      const [patches, gameIniSettings, inspectedGameClientDll, inspectedDxvk] = await Promise.all([
         inspectClientPatches(install),
         inspectGameIniSettings(install),
+        this.inspectGameClientDll(install),
         PLATFORM === 'win32'
           ? this.dxvkManager.inspect(install)
           : Promise.resolve(unavailableDxvkState(PLATFORM))
       ]);
       clientPatches = patches;
+      gameClientDll = inspectedGameClientDll;
       dxvk = inspectedDxvk;
       settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
     }
@@ -468,6 +490,7 @@ export class Orchestrator {
       linuxRuntimeStatus: linuxRuntime?.status ?? null,
       resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
+      gameClientDll,
       clientPatches,
       dxvk,
       gameProfiles: profileSnapshot.profiles,
@@ -533,15 +556,16 @@ export class Orchestrator {
         this.log.warn(`automatic client performance patch failed: ${(error as Error).message}`);
       }
     }
-    if (!settings.patches.gameClientPatch) return;
+    const localDll = settings.developer.useLocalClientDll;
+    if (!localDll && !settings.patches.gameClientPatch) return;
 
     this.patch({
-      statusLine: settings.developer.useLocalClientDll
+      statusLine: localDll
         ? 'Preparing local client DLL…'
         : 'Applying Game Client Patch…'
     });
     try {
-      if (settings.developer.useLocalClientDll) {
+      if (localDll) {
         await this.clientPatchManager.prepareLocalForLaunch(install, PLATFORM);
       } else {
         await this.clientPatchManager.prepareForLaunch(
@@ -774,14 +798,15 @@ export class Orchestrator {
       this.patch({ clientPatches: await inspectClientPatches(this.install) });
 
       let clientPatchEnvironment: NodeJS.ProcessEnv = {};
-      if (settings.patches.gameClientPatch) {
+      const localClientDll = settings.developer.useLocalClientDll;
+      if (localClientDll || settings.patches.gameClientPatch) {
         this.patch({
-          statusLine: settings.developer.useLocalClientDll
+          statusLine: localClientDll
             ? 'Preparing local client DLL…'
             : 'Checking Game Client Patch…'
         });
         try {
-          clientPatchEnvironment = settings.developer.useLocalClientDll
+          clientPatchEnvironment = localClientDll
             ? await this.clientPatchManager.prepareLocalForLaunch(this.install, PLATFORM)
             : await this.clientPatchManager.prepareForLaunch(
                 this.install,
@@ -802,6 +827,7 @@ export class Orchestrator {
             `client patches unavailable; continuing without them: ${(error as Error).message}`
           );
         }
+        this.patch({ gameClientDll: await this.inspectGameClientDll(this.install) });
       }
 
       let useDxvk = false;
@@ -1104,39 +1130,44 @@ export class Orchestrator {
         };
       }
       const localDll = settings.developer.useLocalClientDll;
+      if (localDll) {
+        this.patch({
+          gameClientDll: await this.inspectGameClientDll(install),
+          phase: 'ready',
+          statusLine: 'Ready.'
+        });
+        return {
+          ok: true,
+          message: 'Managed Game Client Patch preference saved; local DLL override unchanged.'
+        };
+      }
       this.patch({
         phase: 'checking',
-        statusLine: enabled
-          ? localDll
-            ? 'Preparing local client DLL…'
-            : 'Checking Game Client Patch…'
-          : localDll
-            ? 'Leaving local client DLL unchanged…'
-            : 'Removing Game Client Patch…'
+        statusLine: enabled ? 'Checking Game Client Patch…' : 'Removing Game Client Patch…'
       });
       if (enabled) {
-        if (localDll) {
-          await this.clientPatchManager.prepareLocalForLaunch(install, PLATFORM);
-        } else {
-          await this.clientPatchManager.prepareForLaunch(
-            install,
-            PLATFORM,
-            ({ transferred, total }) => {
-              const percent = total > 0
-                ? Math.min(100, Math.round((transferred / total) * 100))
-                : -1;
-              this.patch({
-                statusLine: percent >= 0
-                  ? `Downloading Game Client Patch… ${percent}%`
-                  : 'Downloading Game Client Patch…'
-              });
-            }
-          );
-        }
-      } else if (!localDll) {
+        await this.clientPatchManager.prepareForLaunch(
+          install,
+          PLATFORM,
+          ({ transferred, total }) => {
+            const percent = total > 0
+              ? Math.min(100, Math.round((transferred / total) * 100))
+              : -1;
+            this.patch({
+              statusLine: percent >= 0
+                ? `Downloading Game Client Patch… ${percent}%`
+                : 'Downloading Game Client Patch…'
+            });
+          }
+        );
+      } else {
         await this.clientPatchManager.disable(install);
       }
-      this.patch({ phase: 'ready', statusLine: 'Ready.' });
+      this.patch({
+        gameClientDll: await this.inspectGameClientDll(install),
+        phase: 'ready',
+        statusLine: 'Ready.'
+      });
       return {
         ok: true,
         message: enabled ? 'Game Client Patch applied.' : 'Game Client Patch removed.'
@@ -1144,7 +1175,13 @@ export class Orchestrator {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.log.warn(`client patch change failed: ${message}`);
-      this.patch({ phase: 'ready', statusLine: `Game Client Patch change failed: ${message}` });
+      this.patch({
+        ...(this.install
+          ? { gameClientDll: await this.inspectGameClientDll(this.install) }
+          : {}),
+        phase: 'ready',
+        statusLine: `Game Client Patch change failed: ${message}`
+      });
       return { ok: false, message };
     } finally {
       this.busy = false;
@@ -1318,6 +1355,37 @@ export class Orchestrator {
     if (dxvkEnabled !== null) {
       const result = await this.configureDxvkVulkan(dxvkEnabled);
       if (!result.ok) throw new Error(result.message);
+    }
+    await this.refresh();
+  }
+
+  async localClientDllChanged(enabled: boolean): Promise<void> {
+    if (this.busy || this.state.launchCoolingDown || this.state.phase === 'launching') {
+      throw new Error('The launcher is busy. Try again shortly.');
+    }
+    const settings = this.config.get();
+    if (enabled && !settings.developer.enabled) {
+      throw new Error('Enable Developer Mode before using a local client DLL.');
+    }
+    const install = await validateGameExe(settings.gameExePath);
+    this.install = install;
+    if (!install) {
+      this.patch({ gameClientDll: unavailableGameClientDllState() });
+      if (enabled) {
+        throw new Error('Set a valid Global Agenda installation before enabling local DLL mode.');
+      }
+      await this.refresh();
+      return;
+    }
+
+    const inspection = await this.inspectGameClientDll(install);
+    this.patch({ gameClientDll: inspection });
+    if (enabled && inspection.status !== 'local') {
+      throw new Error(
+        inspection.status === 'managed'
+          ? 'The installed dinput8.dll is the managed release. Replace it with your local 32-bit x86 build first.'
+          : inspection.detail
+      );
     }
     await this.refresh();
   }

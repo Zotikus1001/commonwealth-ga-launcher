@@ -106,6 +106,27 @@ describe('DXVK/Vulkan settings migration', () => {
     });
   });
 
+  it('clears legacy local DLL mode once so it must pass current validation', () => {
+    const previous = defaultSettings();
+    const schema13 = {
+      ...previous,
+      schemaVersion: 13,
+      developer: {
+        ...previous.developer,
+        enabled: true,
+        useLocalClientDll: true
+      }
+    };
+
+    const migrated = migrateStoredSettings(schema13).settings;
+
+    expect(migrated.schemaVersion).toBe(CURRENT_SETTINGS_SCHEMA_VERSION);
+    expect(migrated.developer).toMatchObject({
+      enabled: true,
+      useLocalClientDll: false
+    });
+  });
+
   it('defaults every optional game patch on', () => {
     expect(defaultSettings().patches).toEqual({
       gameClientPatch: true,
@@ -173,6 +194,32 @@ describe('game patch settings', () => {
         gameClientPatch: false,
         highFpsMovementStability: true,
         adaptiveClientPerformance: false
+      }
+    });
+  });
+
+  it('cannot leave local DLL mode enabled after Developer Mode is disabled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'commonwealth-config-local-dll-'));
+    roots.push(root);
+    const defaults = defaultSettings();
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as never;
+    const store = new ConfigStore(root, defaults, log);
+
+    await store.load();
+    await store.update({
+      developer: {
+        enabled: true,
+        useLocalClientDll: true
+      }
+    });
+    await expect(store.update({ developer: { enabled: false } })).resolves.toMatchObject({
+      developer: {
+        enabled: false,
+        useLocalClientDll: false
       }
     });
   });

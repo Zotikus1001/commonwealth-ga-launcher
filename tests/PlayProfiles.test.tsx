@@ -34,6 +34,11 @@ function launcherState(patch: Partial<LauncherState> = {}): LauncherState {
     launcherUpdate: 'up-to-date',
     launcherUpdateVersion: null,
     launcherUpdateError: null,
+    gameClientDll: {
+      status: 'missing',
+      detail: 'No dinput8.dll is present in the game Binaries folder.',
+      hasManagedMarker: false
+    },
     clientPatches: [],
     gameProfiles: [
       {

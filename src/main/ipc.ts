@@ -40,8 +40,27 @@ export function registerIpc(
     if (!uiScaleOnly) {
       const gamePathChanged = previous.gameExePath !== updated.gameExePath;
       const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
+      const localClientDllChanged =
+        previous.developer.useLocalClientDll !== updated.developer.useLocalClientDll;
       const gameClientPatchChanged =
         previous.patches.gameClientPatch !== updated.patches.gameClientPatch;
+      if (localClientDllChanged) {
+        try {
+          await orchestrator.localClientDllChanged(updated.developer.useLocalClientDll);
+        } catch (error) {
+          try {
+            await config.update({
+              developer: { useLocalClientDll: previous.developer.useLocalClientDll }
+            });
+          } catch (rollbackError) {
+            throw new Error(
+              `${(error as Error).message}; could not restore the previous local DLL setting: ` +
+                (rollbackError as Error).message
+            );
+          }
+          throw error;
+        }
+      }
       if (dxvkChanged) {
         try {
           await orchestrator.settingsChanged(updated.developer.useDxvk);
@@ -74,7 +93,7 @@ export function registerIpc(
           throw error;
         }
       }
-      if (!dxvkChanged && !gameClientPatchChanged) {
+      if (!localClientDllChanged && !dxvkChanged && !gameClientPatchChanged) {
         if (gamePathChanged) await orchestrator.settingsChanged();
         else void orchestrator.settingsChanged();
       }

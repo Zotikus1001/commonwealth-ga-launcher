@@ -1503,12 +1503,14 @@ export class Orchestrator {
     }
 
     this.busy = true;
+    let activeInstall: GameInstall | null = null;
     try {
       if ((await this.refreshTrackedGameProcesses()) > 0) {
         throw new Error('Close every game instance launched by this launcher before changing DLCs.');
       }
       const settings = this.config.get();
       const install = await validateGameExe(settings.gameExePath);
+      activeInstall = install;
       this.install = install;
       if (!install) {
         this.patch({
@@ -1537,7 +1539,12 @@ export class Orchestrator {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.log.warn(`DLC ${enabled ? 'install' : 'removal'} failed: ${message}`);
-      this.patchDlcStatus(failedDlcStatus(id, message));
+      let status = failedDlcStatus(id, message);
+      if (activeInstall) {
+        const inspected = await this.dlcManager.inspectAll(activeInstall);
+        status = inspected.find((candidate) => candidate.id === id) ?? status;
+      }
+      this.patchDlcStatus(status);
       this.patch({ phase: 'ready', statusLine: 'Ready.' });
       throw error;
     } finally {

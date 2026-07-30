@@ -2,6 +2,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import type {
   ActionResult,
   ClientPatchStatus,
+  DlcId,
+  DlcStatus,
   GameProfileSummary,
   LauncherState,
   LinuxRuntimeOptions,
@@ -33,6 +35,7 @@ export type SettingsTab =
   | 'profiles'
   | 'servers'
   | 'patches'
+  | 'dlcs'
   | 'info'
   | 'account'
   | 'launcher'
@@ -106,6 +109,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [developerModeError, setDeveloperModeError] = useState<string | null>(null);
   const [gameClientPatchSaving, setGameClientPatchSaving] = useState(false);
   const [gameClientPatchError, setGameClientPatchError] = useState<string | null>(null);
+  const [dlcSaving, setDlcSaving] = useState<DlcId | null>(null);
+  const [dlcError, setDlcError] = useState<{ id: DlcId; message: string } | null>(null);
   const [localClientDllSaving, setLocalClientDllSaving] = useState(false);
   const [localClientDllError, setLocalClientDllError] = useState<string | null>(null);
   const aboutClicks = useRef<number[]>([]);
@@ -130,6 +135,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       { id: 'profiles', label: 'Profiles' },
       { id: 'servers', label: 'Servers' },
       { id: 'patches', label: 'Patches' },
+      { id: 'dlcs', label: "DLC's" },
       { id: 'info', label: 'Info' }
     ];
     // Account tab is built but gated off until Phase 4 auto-login works (plan §11b decision #4).
@@ -405,6 +411,44 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       setLocalClientDllError(error instanceof Error ? error.message : String(error));
     } finally {
       setLocalClientDllSaving(false);
+    }
+  };
+
+  const saveDlc = async (id: DlcId, enabled: boolean): Promise<void> => {
+    if (!draft || dlcSaving) return;
+    const previous = draft.dlcs.surfsideAtollPvpMaps;
+    setDraft((current) =>
+      current
+        ? { ...current, dlcs: { ...current.dlcs, surfsideAtollPvpMaps: enabled } }
+        : current
+    );
+    setDlcSaving(id);
+    setDlcError(null);
+    try {
+      const updated = await window.api.setDlcEnabled(id, enabled);
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              dlcs: {
+                ...current.dlcs,
+                surfsideAtollPvpMaps: updated.dlcs.surfsideAtollPvpMaps
+              }
+            }
+          : current
+      );
+    } catch (error) {
+      setDraft((current) =>
+        current
+          ? { ...current, dlcs: { ...current.dlcs, surfsideAtollPvpMaps: previous } }
+          : current
+      );
+      setDlcError({
+        id,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setDlcSaving(null);
     }
   };
 
@@ -982,6 +1026,16 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
           />
         )}
 
+        {tab === 'dlcs' && (
+          <DlcsTab
+            state={state}
+            settings={draft}
+            saving={dlcSaving}
+            error={dlcError}
+            onChange={(id, enabled) => void saveDlc(id, enabled)}
+          />
+        )}
+
         {tab === 'info' && <InfoTab />}
 
         {tab === 'servers' && <ServersTab settings={draft} edit={edit} />}
@@ -1060,6 +1114,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab !== 'diagnostics' &&
           tab !== 'patches' &&
+          tab !== 'dlcs' &&
           tab !== 'profiles' &&
           tab !== 'info' &&
           tab !== 'account' &&
@@ -1077,6 +1132,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 uiScaleSaving ||
                 developerModeSaving ||
                 gameClientPatchSaving ||
+                dlcSaving !== null ||
                 localClientDllSaving
               }
               onClick={() => void save()}
@@ -2232,6 +2288,183 @@ function PatchesTab({
                 )}
               </div>
               <PatchEnabledCheck enabled={presentation.enabled} />
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+type DlcCardTone = 'installed' | 'pending' | 'idle' | 'problem';
+
+export function dlcCardPresentation(
+  preferred: boolean,
+  status: DlcStatus['status']
+): {
+  tone: DlcCardTone;
+  enabled: boolean;
+  actionLabel: 'APPLY' | 'REMOVE';
+  nextPreference: boolean;
+  actionDisabled: boolean;
+  statusLabel: string;
+} {
+  const enabled = status === 'installed';
+  const statusLabel: Record<DlcStatus['status'], string> = {
+    unavailable: 'GAME LOCATION REQUIRED',
+    missing: 'NOT INSTALLED',
+    partial: 'REPAIR REQUIRED',
+    installed: 'INSTALLED // VERIFIED',
+    modified: 'FILE CONFLICT',
+    installing: 'INSTALLING',
+    error: 'DLC ERROR'
+  };
+  return {
+    tone:
+      status === 'installed'
+        ? 'installed'
+        : status === 'modified' || status === 'error'
+          ? 'problem'
+          : preferred && status !== 'unavailable'
+            ? 'pending'
+            : 'idle',
+    enabled,
+    actionLabel: enabled ? 'REMOVE' : 'APPLY',
+    nextPreference: !enabled,
+    actionDisabled:
+      status === 'unavailable' || status === 'installing' || status === 'modified',
+    statusLabel: statusLabel[status]
+  };
+}
+
+export function DlcEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element | null {
+  if (!enabled) return null;
+  return (
+    <span className={styles.patchEnabledCheck} role="img" aria-label="DLC installed">
+      ✓
+    </span>
+  );
+}
+
+function DlcsTab({
+  state,
+  settings,
+  saving,
+  error,
+  onChange
+}: {
+  state: LauncherState;
+  settings: SettingsModel;
+  saving: DlcId | null;
+  error: { id: DlcId; message: string } | null;
+  onChange: (id: DlcId, enabled: boolean) => void;
+}): JSX.Element {
+  const activeGame = state.activeGameInstances > 0;
+  return (
+    <section className={`${styles.section} ${styles.dlcSection}`}>
+      <div className="panel-title">Optional Game Content</div>
+      <p className={styles.hint}>
+        DLCs are enabled by default and kept separate under the game&apos;s DLC folder. The
+        launcher verifies their exact files at startup and before every Play, while your Remove
+        choice prevents automatic reinstallation.
+      </p>
+
+      <div className={styles.patchList}>
+        {state.dlcs.map((dlc) => {
+          const definition = LAUNCHER_CONFIG.dlcs.find((candidate) => candidate.id === dlc.id);
+          const preferred = settings.dlcs.surfsideAtollPvpMaps;
+          const presentation = dlcCardPresentation(preferred, dlc.status);
+          const tone =
+            presentation.tone === 'installed'
+              ? styles.patchApplied
+              : presentation.tone === 'pending'
+                ? styles.patchPending
+                : presentation.tone === 'problem'
+                  ? styles.dlcProblem
+                  : styles.patchUnknown;
+          const busy =
+            saving !== null ||
+            state.phase === 'launching' ||
+            state.launchCoolingDown ||
+            activeGame;
+          const actionDisabled = busy || presentation.actionDisabled;
+          const actionTitle =
+            activeGame
+              ? 'Close the game before changing installed DLCs.'
+              : dlc.status === 'modified'
+                ? 'A target file differs from this DLC and was left untouched.'
+                : dlc.status === 'unavailable'
+                  ? 'Set a valid game location first.'
+                  : `${presentation.actionLabel === 'REMOVE' ? 'Remove' : 'Install'} ${dlc.name}`;
+          const downloadSize = definition
+            ? `${(definition.archiveSize / (1024 * 1024)).toFixed(1)} MiB download`
+            : 'Verified download';
+
+          return (
+            <article
+              key={dlc.id}
+              className={`${styles.patchCard} ${styles.dlcCard} ${tone}`}
+              aria-busy={saving === dlc.id || dlc.status === 'installing'}
+            >
+              <button
+                className={`${styles.patchIcon} ${styles.patchApplyButton} ${
+                  presentation.actionLabel === 'REMOVE' ? styles.patchRemoveButton : ''
+                }`}
+                disabled={actionDisabled}
+                aria-label={actionTitle}
+                title={actionTitle}
+                onClick={() => onChange(dlc.id, presentation.nextPreference)}
+              >
+                {saving === dlc.id || dlc.status === 'installing'
+                  ? '…'
+                  : presentation.actionLabel}
+              </button>
+
+              <div className={styles.patchBody}>
+                <div className={styles.dlcHeading}>
+                  <div>
+                    <span className={styles.dlcEyebrow}>PvP map pack // optional</span>
+                    <div className={styles.patchTitle}>{dlc.name}</div>
+                  </div>
+                  <span className={styles.dlcFileCount}>
+                    02 maps · {dlc.totalFiles.toString().padStart(2, '0')} files
+                  </span>
+                </div>
+                <p className={styles.patchDescription}>
+                  Adds Surfside and Atoll as two additional PvP maps. Install or remove the pack
+                  independently without changing the base game files around it.
+                </p>
+
+                <div
+                  className={`${styles.dlcStatusPanel} ${
+                    presentation.enabled
+                      ? styles.dlcStatusInstalled
+                      : presentation.tone === 'problem'
+                        ? styles.dlcStatusProblem
+                        : presentation.tone === 'pending'
+                          ? styles.dlcStatusPending
+                          : ''
+                  }`}
+                >
+                  <div className={styles.dlcStatusReadout}>
+                    <span>{presentation.statusLabel}</span>
+                    <strong>
+                      {dlc.installedFiles}/{dlc.totalFiles}
+                    </strong>
+                  </div>
+                  <p>{dlc.detail}</p>
+                </div>
+
+                <div className={styles.dlcMetaStrip}>
+                  <span>{downloadSize}</span>
+                  <code>TgGame / CookedPC / DLC / Maps</code>
+                </div>
+
+                {error?.id === dlc.id && (
+                  <p className={styles.patchResultError}>{error.message}</p>
+                )}
+              </div>
+              <DlcEnabledCheck enabled={presentation.enabled} />
             </article>
           );
         })}

@@ -134,6 +134,27 @@ describe('DXVK/Vulkan settings migration', () => {
       adaptiveClientPerformance: true
     });
   });
+
+  it('adds the default-enabled maps DLC when schema 14 settings are upgraded', () => {
+    const current = defaultSettings();
+    const { dlcs: _removedDlcs, ...schema14 } = {
+      ...current,
+      schemaVersion: 14
+    };
+
+    expect(migrateStoredSettings(schema14).settings).toMatchObject({
+      schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+      dlcs: {
+        surfsideAtollPvpMaps: true
+      }
+    });
+  });
+
+  it('defaults the maps DLC on', () => {
+    expect(defaultSettings().dlcs).toEqual({
+      surfsideAtollPvpMaps: true
+    });
+  });
 });
 
 describe('launcher settings reset', () => {
@@ -185,6 +206,9 @@ describe('game patch settings', () => {
       patches: {
         gameClientPatch: false,
         adaptiveClientPerformance: false
+      },
+      dlcs: {
+        surfsideAtollPvpMaps: false
       }
     });
 
@@ -194,6 +218,9 @@ describe('game patch settings', () => {
         gameClientPatch: false,
         highFpsMovementStability: true,
         adaptiveClientPerformance: false
+      },
+      dlcs: {
+        surfsideAtollPvpMaps: false
       }
     });
   });

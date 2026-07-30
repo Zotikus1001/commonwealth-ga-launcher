@@ -4,6 +4,7 @@ export const IPC = {
   getSettings: 'launcher:get-settings',
   updateSettings: 'launcher:update-settings',
   setGameClientPatch: 'launcher:set-game-client-patch',
+  setDlcEnabled: 'launcher:set-dlc-enabled',
   browseForGame: 'launcher:browse-for-game',
   autoDetectGame: 'launcher:auto-detect-game',
   play: 'launcher:play',

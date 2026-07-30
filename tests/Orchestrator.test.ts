@@ -15,6 +15,9 @@ const serviceMocks = vi.hoisted(() => ({
   clientInspect: vi.fn(),
   clientDisable: vi.fn(),
   clientRemoveManaged: vi.fn(),
+  dlcEnsure: vi.fn(),
+  dlcInspectAll: vi.fn(),
+  dlcRemove: vi.fn(),
   probeServer: vi.fn(),
   profileLoad: vi.fn(),
   profileSnapshot: vi.fn(),
@@ -127,6 +130,32 @@ vi.mock('../src/main/services/ClientPatchManager', () => ({
   })
 }));
 
+vi.mock('../src/main/services/DlcManager', () => ({
+  DlcManager: class {
+    ensureInstalled = serviceMocks.dlcEnsure;
+    inspectAll = serviceMocks.dlcInspectAll;
+    remove = serviceMocks.dlcRemove;
+  },
+  unavailableDlcStatuses: () => [
+    {
+      id: 'surfside-atoll-pvp-maps',
+      name: 'Surfside-Atoll PvP Maps',
+      status: 'unavailable',
+      detail: 'Set a valid game installation to manage this DLC.',
+      installedFiles: 0,
+      totalFiles: 4
+    }
+  ],
+  failedDlcStatus: (_id: string, message: string) => ({
+    id: 'surfside-atoll-pvp-maps',
+    name: 'Surfside-Atoll PvP Maps',
+    status: 'error',
+    detail: message,
+    installedFiles: 0,
+    totalFiles: 4
+  })
+}));
+
 import { Orchestrator } from '../src/main/Orchestrator';
 import { defaultSettings, type ConfigStore } from '../src/main/services/ConfigStore';
 import type { LauncherUpdater } from '../src/main/services/LauncherUpdater';
@@ -158,6 +187,32 @@ beforeEach(() => {
   });
   serviceMocks.clientDisable.mockResolvedValue(undefined);
   serviceMocks.clientRemoveManaged.mockResolvedValue(true);
+  serviceMocks.dlcEnsure.mockResolvedValue({
+    id: 'surfside-atoll-pvp-maps',
+    name: 'Surfside-Atoll PvP Maps',
+    status: 'installed',
+    detail: 'All 4 verified map files are installed.',
+    installedFiles: 4,
+    totalFiles: 4
+  });
+  serviceMocks.dlcInspectAll.mockResolvedValue([
+    {
+      id: 'surfside-atoll-pvp-maps',
+      name: 'Surfside-Atoll PvP Maps',
+      status: 'installed',
+      detail: 'All 4 verified map files are installed.',
+      installedFiles: 4,
+      totalFiles: 4
+    }
+  ]);
+  serviceMocks.dlcRemove.mockResolvedValue({
+    id: 'surfside-atoll-pvp-maps',
+    name: 'Surfside-Atoll PvP Maps',
+    status: 'missing',
+    detail: 'The map files are not installed.',
+    installedFiles: 0,
+    totalFiles: 4
+  });
   serviceMocks.probeServer.mockResolvedValue('online');
   serviceMocks.profileLoad.mockResolvedValue(undefined);
   serviceMocks.profileSnapshot.mockReturnValue({ profiles: [], selectedProfileId: null });
@@ -220,6 +275,7 @@ describe('game setup patch preparation', () => {
 
     expect(serviceMocks.applyIniClientPatch).not.toHaveBeenCalled();
     expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.dlcEnsure).not.toHaveBeenCalled();
 
     settings = { ...settings, gameExePath: install.exePath };
     await orchestrator.refresh();
@@ -243,11 +299,74 @@ describe('game setup patch preparation', () => {
       process.platform,
       expect.any(Function)
     );
+    expect(serviceMocks.dlcEnsure).toHaveBeenCalledWith(
+      install,
+      'surfside-atoll-pvp-maps',
+      expect.any(Function)
+    );
 
     await orchestrator.refresh();
 
     expect(serviceMocks.applyIniClientPatch).toHaveBeenCalledTimes(2);
     expect(serviceMocks.clientPrepare).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks an enabled DLC before every Play and honors its saved opt-out', async () => {
+    vi.useFakeTimers();
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.developer.enabled = true;
+    settings.patches.gameClientPatch = false;
+    settings.launch.closeAfterLaunch = false;
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings: vi.fn(async () => settings)
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn(),
+      ensureCurrent: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    await orchestrator.refresh();
+    expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+
+    await orchestrator.play();
+    expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.gameLaunch).toHaveBeenCalledTimes(1);
+    vi.runOnlyPendingTimers();
+
+    settings.dlcs.surfsideAtollPvpMaps = false;
+    await orchestrator.play();
+    expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.gameLaunch).toHaveBeenCalledTimes(2);
+
+    for (const result of serviceMocks.gameLaunch.mock.results) {
+      (result.value as ChildProcess).emit('exit', 0, null);
+    }
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   it('restores the selected profile before disabled-patch cleanup and every launch INI mutation', async () => {

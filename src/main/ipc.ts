@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
-import type { DeepPartial, Settings } from '@shared/types';
+import type { DeepPartial, DlcId, Settings } from '@shared/types';
 import { IPC } from '@shared/ipc';
 import type { Orchestrator } from './Orchestrator';
 import type { ConfigStore } from './services/ConfigStore';
@@ -130,6 +130,32 @@ export function registerIpc(
     const previousEnabled = config.get().patches.gameClientPatch;
     const updated = await config.update({ patches: { gameClientPatch: enabled } });
     await commitGameClientPatchChange(previousEnabled, updated);
+    return updated;
+  });
+
+  ipcMain.handle(IPC.setDlcEnabled, async (_event, id: unknown, enabled: unknown) => {
+    if (id !== 'surfside-atoll-pvp-maps') throw new Error('Unknown DLC.');
+    if (typeof enabled !== 'boolean') throw new Error('DLC state is invalid.');
+    const dlcId = id as DlcId;
+    const previousEnabled = config.get().dlcs.surfsideAtollPvpMaps;
+    const updated = await config.update({
+      dlcs: { surfsideAtollPvpMaps: enabled }
+    });
+    try {
+      await orchestrator.dlcChanged(dlcId, enabled);
+    } catch (error) {
+      try {
+        await config.update({
+          dlcs: { surfsideAtollPvpMaps: previousEnabled }
+        });
+      } catch (rollbackError) {
+        throw new Error(
+          `${(error as Error).message}; could not restore the previous DLC setting: ` +
+            (rollbackError as Error).message
+        );
+      }
+      throw error;
+    }
     return updated;
   });
 

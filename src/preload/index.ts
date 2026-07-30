@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   ClientPatchId,
   DeepPartial,
+  DlcId,
   LauncherApi,
   LauncherState,
   Settings
@@ -17,6 +18,8 @@ const api: LauncherApi = {
   updateSettings: (patch: DeepPartial<Settings>) => ipcRenderer.invoke(IPC.updateSettings, patch),
   setGameClientPatch: (enabled: boolean) =>
     ipcRenderer.invoke(IPC.setGameClientPatch, enabled),
+  setDlcEnabled: (id: DlcId, enabled: boolean) =>
+    ipcRenderer.invoke(IPC.setDlcEnabled, id, enabled),
   browseForGame: () => ipcRenderer.invoke(IPC.browseForGame),
   autoDetectGame: () => ipcRenderer.invoke(IPC.autoDetectGame),
   play: () => ipcRenderer.invoke(IPC.play),

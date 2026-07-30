@@ -3,6 +3,8 @@ import type { ChildProcess } from 'child_process';
 import type {
   ActionResult,
   ClientPatchId,
+  DlcId,
+  DlcStatus,
   GameClientDllState,
   LauncherState,
   LauncherUpdateStatus,
@@ -41,6 +43,11 @@ import {
 import { managedIniBackupDirectory } from './services/ManagedInstallState';
 import { GameProfileManager } from './services/GameProfileManager';
 import { GameProcessTracker } from './services/GameProcessTracker';
+import {
+  DlcManager,
+  failedDlcStatus,
+  unavailableDlcStatuses
+} from './services/DlcManager';
 
 const PLATFORM = process.platform as LauncherState['platform'];
 const SERVER_PROBE_REFRESH_MS = 65_000;
@@ -52,6 +59,7 @@ const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
 const GAME_PROCESS_REFRESH_MS = 3_000;
+const SURFSIDE_ATOLL_DLC_ID: DlcId = 'surfside-atoll-pvp-maps';
 
 function sameGameExecutable(left: string, right: string): boolean {
   return left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase();
@@ -81,6 +89,7 @@ export class Orchestrator {
   private readonly clientPatchManager: ClientPatchManager;
   private readonly gameProfileManager: GameProfileManager;
   private readonly gameProcessTracker: GameProcessTracker;
+  private readonly dlcManager: DlcManager;
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
@@ -110,6 +119,7 @@ export class Orchestrator {
     this.clientPatchManager = new ClientPatchManager(app.getPath('userData'), log);
     this.gameProfileManager = new GameProfileManager(app.getPath('userData'), log);
     this.gameProcessTracker = new GameProcessTracker(app.getPath('userData'), log);
+    this.dlcManager = new DlcManager(app.getPath('userData'), log);
     const launcherUpdate = launcherUpdater.getSnapshot();
     this.state = {
       phase: 'init',
@@ -136,6 +146,7 @@ export class Orchestrator {
       launcherUpdateError: launcherUpdate.error,
       gameClientDll: unavailableGameClientDllState(),
       clientPatches: unavailableClientPatches(),
+      dlcs: unavailableDlcStatuses(),
       gameProfiles: [],
       selectedGameProfileId: null,
       serverCommits: [],
@@ -169,6 +180,40 @@ export class Orchestrator {
   private patch(patch: Partial<LauncherState>): void {
     this.state = { ...this.state, ...patch };
     this.broadcast(this.state);
+  }
+
+  private patchDlcStatus(status: DlcStatus): void {
+    const existing = this.state.dlcs;
+    const next = existing.some((candidate) => candidate.id === status.id)
+      ? existing.map((candidate) => (candidate.id === status.id ? status : candidate))
+      : [...existing, status];
+    this.patch({ dlcs: next });
+  }
+
+  private showDlcProgress(id: DlcId, detail: string): void {
+    const current =
+      this.state.dlcs.find((candidate) => candidate.id === id)
+      ?? unavailableDlcStatuses().find((candidate) => candidate.id === id)!;
+    this.patchDlcStatus({
+      ...current,
+      status: 'installing',
+      detail
+    });
+  }
+
+  private async ensureDlcInstalled(install: GameInstall, id: DlcId): Promise<DlcStatus> {
+    this.showDlcProgress(id, 'Checking verified map files…');
+    return this.dlcManager.ensureInstalled(install, id, ({ transferred, total }) => {
+      const percent = total > 0
+        ? Math.min(100, Math.round((transferred / total) * 100))
+        : -1;
+      const detail =
+        percent >= 0
+          ? `Downloading verified maps… ${percent}%`
+          : 'Downloading verified maps…';
+      this.showDlcProgress(id, detail);
+      this.patch({ statusLine: detail });
+    });
   }
 
   private async inspectGameClientDll(install: GameInstall): Promise<GameClientDllState> {
@@ -450,6 +495,7 @@ export class Orchestrator {
     ]);
     this.install = install;
     this.linuxRuntime = linuxRuntime;
+    let dlcPreparationError: string | null = null;
     if (linuxRuntime?.suggestedPrefixPath) {
       settings = await this.config.update({
         linux: { winePrefix: linuxRuntime.suggestedPrefixPath }
@@ -462,23 +508,42 @@ export class Orchestrator {
       !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
     ) {
       await this.applyEnabledPatchesForInstall(install, settings);
+      if (settings.dlcs.surfsideAtollPvpMaps) {
+        this.patch({ statusLine: 'Checking Surfside-Atoll PvP Maps…' });
+        try {
+          this.patchDlcStatus(await this.ensureDlcInstalled(install, SURFSIDE_ATOLL_DLC_ID));
+        } catch (error) {
+          dlcPreparationError = (error as Error).message;
+          this.log.warn(`automatic Surfside-Atoll DLC install failed: ${dlcPreparationError}`);
+        }
+      }
       this.patchesPreparedGameExePath = install.exePath;
     }
     let clientPatches = unavailableClientPatches();
     let gameClientDll = unavailableGameClientDllState();
     let dxvk = unavailableDxvkState(PLATFORM);
+    let dlcs = unavailableDlcStatuses();
     if (install) {
-      const [patches, gameIniSettings, inspectedGameClientDll, inspectedDxvk] = await Promise.all([
+      const [patches, gameIniSettings, inspectedGameClientDll, inspectedDxvk, inspectedDlcs] = await Promise.all([
         inspectClientPatches(install),
         inspectGameIniSettings(install),
         this.inspectGameClientDll(install),
         PLATFORM === 'win32'
           ? this.dxvkManager.inspect(install)
-          : Promise.resolve(unavailableDxvkState(PLATFORM))
+          : Promise.resolve(unavailableDxvkState(PLATFORM)),
+        this.dlcManager.inspectAll(install)
       ]);
       clientPatches = patches;
       gameClientDll = inspectedGameClientDll;
       dxvk = inspectedDxvk;
+      dlcs = inspectedDlcs;
+      if (dlcPreparationError) {
+        dlcs = dlcs.map((dlc) =>
+          dlc.id === SURFSIDE_ATOLL_DLC_ID
+            ? failedDlcStatus(dlc.id, dlcPreparationError!)
+            : dlc
+        );
+      }
       settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
     }
     this.log.info(`game install validation: ${install ? 'valid' : 'invalid or unset'}`);
@@ -492,6 +557,7 @@ export class Orchestrator {
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
       gameClientDll,
       clientPatches,
+      dlcs,
       dxvk,
       gameProfiles: profileSnapshot.profiles,
       selectedGameProfileId: profileSnapshot.selectedProfileId
@@ -751,6 +817,23 @@ export class Orchestrator {
         this.hostCandidates(selection).find(
           (candidate) => candidate.toLowerCase() === this.state.resolvedHost.toLowerCase()
         ) ?? selection.host;
+
+      if (settings.dlcs.surfsideAtollPvpMaps) {
+        this.patch({
+          phase: 'checking',
+          statusLine: 'Checking Surfside-Atoll PvP Maps…',
+          errorDetails: null
+        });
+        try {
+          this.patchDlcStatus(
+            await this.ensureDlcInstalled(this.install, SURFSIDE_ATOLL_DLC_ID)
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.log.warn(`Surfside-Atoll DLC unavailable; continuing launch: ${message}`);
+          this.patchDlcStatus(failedDlcStatus(SURFSIDE_ATOLL_DLC_ID, message));
+        }
+      }
 
       const activeProfile = this.gameProfileManager.getSelectedSummary();
       const gameAlreadyRunning = this.state.activeGameInstances > 0;
@@ -1409,6 +1492,58 @@ export class Orchestrator {
     const result = await this.configureClientPatches(enabled);
     if (!result.ok) throw new Error(result.message);
     await this.refresh();
+  }
+
+  async dlcChanged(id: DlcId, enabled: boolean): Promise<void> {
+    if (this.busy || this.state.launchCoolingDown || this.state.phase === 'launching') {
+      throw new Error('The launcher is busy. Try again shortly.');
+    }
+    if (this.state.activeGameInstances > 0) {
+      throw new Error('Close every game instance launched by this launcher before changing DLCs.');
+    }
+
+    this.busy = true;
+    try {
+      if ((await this.refreshTrackedGameProcesses()) > 0) {
+        throw new Error('Close every game instance launched by this launcher before changing DLCs.');
+      }
+      const settings = this.config.get();
+      const install = await validateGameExe(settings.gameExePath);
+      this.install = install;
+      if (!install) {
+        this.patch({
+          gamePathValid: false,
+          validatedGameExePath: settings.gameExePath,
+          dlcs: unavailableDlcStatuses()
+        });
+        return;
+      }
+
+      this.patch({
+        phase: 'checking',
+        statusLine: enabled ? 'Installing Surfside-Atoll PvP Maps…' : 'Removing Surfside-Atoll PvP Maps…',
+        errorDetails: null
+      });
+      const status = enabled
+        ? await this.ensureDlcInstalled(install, id)
+        : await this.dlcManager.remove(install, id);
+      this.patchDlcStatus(status);
+      this.patch({
+        phase: 'ready',
+        statusLine: 'Ready.',
+        gamePathValid: true,
+        validatedGameExePath: settings.gameExePath
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`DLC ${enabled ? 'install' : 'removal'} failed: ${message}`);
+      this.patchDlcStatus(failedDlcStatus(id, message));
+      this.patch({ phase: 'ready', statusLine: 'Ready.' });
+      throw error;
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
   }
 
   async resetLauncher(): Promise<ActionResult> {

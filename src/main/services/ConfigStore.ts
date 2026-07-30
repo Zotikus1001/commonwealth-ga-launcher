@@ -25,7 +25,7 @@ import {
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 14;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 15;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -238,6 +238,22 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 14: {
+        const dlcs = isPlainObject(settings.dlcs) ? settings.dlcs : {};
+        settings = {
+          ...settings,
+          schemaVersion: 15,
+          dlcs: {
+            surfsideAtollPvpMaps:
+              typeof dlcs.surfsideAtollPvpMaps === 'boolean'
+                ? dlcs.surfsideAtollPvpMaps
+                : true
+          }
+        };
+        version = 15;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -264,6 +280,9 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       gameClientPatch: true,
       highFpsMovementStability: true,
       adaptiveClientPerformance: true
+    },
+    dlcs: {
+      surfsideAtollPvpMaps: true
     },
     servers: {
       builtInName,
@@ -468,6 +487,25 @@ function validateUpdatedPatches(value: unknown): Settings['patches'] {
   };
 }
 
+function sanitizeStoredDlcs(value: unknown, fallback: Settings['dlcs']): Settings['dlcs'] {
+  if (!isPlainObject(value)) return structuredClone(fallback);
+  return {
+    surfsideAtollPvpMaps:
+      typeof value.surfsideAtollPvpMaps === 'boolean'
+        ? value.surfsideAtollPvpMaps
+        : fallback.surfsideAtollPvpMaps
+  };
+}
+
+function validateUpdatedDlcs(value: unknown): Settings['dlcs'] {
+  if (!isPlainObject(value) || typeof value.surfsideAtollPvpMaps !== 'boolean') {
+    throw new Error('DLC settings are invalid.');
+  }
+  return {
+    surfsideAtollPvpMaps: value.surfsideAtollPvpMaps
+  };
+}
+
 function sanitizeStoredFpsLimit(
   value: unknown,
   fallback: Settings['fpsLimit']
@@ -626,6 +664,7 @@ export class ConfigStore {
       this.defaults.developer
     );
     this.settings.patches = sanitizeStoredPatches(this.settings.patches, this.defaults.patches);
+    this.settings.dlcs = sanitizeStoredDlcs(this.settings.dlcs, this.defaults.dlcs);
     this.settings.fpsLimit = sanitizeStoredFpsLimit(
       this.settings.fpsLimit,
       this.defaults.fpsLimit
@@ -678,6 +717,7 @@ export class ConfigStore {
     next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
     next.patches = validateUpdatedPatches(next.patches);
+    next.dlcs = validateUpdatedDlcs(next.dlcs);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
     next.linux = validateUpdatedLinux(next.linux);
     if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');

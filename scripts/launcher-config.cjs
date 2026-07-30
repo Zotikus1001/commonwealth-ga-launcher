@@ -25,7 +25,18 @@ const CONFIG_KEYS = new Set([
   'client_patch_revision',
   'client_patch_url',
   'client_patch_size',
-  'client_patch_sha256'
+  'client_patch_sha256',
+  'surfside_atoll_dlc_url',
+  'surfside_atoll_dlc_archive_size',
+  'surfside_atoll_dlc_archive_sha256',
+  'surfside_atoll_dlc_beachhead_package_size',
+  'surfside_atoll_dlc_beachhead_package_sha256',
+  'surfside_atoll_dlc_beachhead_sound_size',
+  'surfside_atoll_dlc_beachhead_sound_sha256',
+  'surfside_atoll_dlc_beachhead2_package_size',
+  'surfside_atoll_dlc_beachhead2_package_sha256',
+  'surfside_atoll_dlc_beachhead2_sound_size',
+  'surfside_atoll_dlc_beachhead2_sound_sha256'
 ]);
 
 function parseQuotedString(value, lineNumber) {
@@ -134,6 +145,17 @@ function assertSha256(value, key) {
   if (!/^[a-f0-9]{64}$/.test(value)) {
     throw new Error(`${key} must be a lowercase SHA-256 digest`);
   }
+}
+
+function parseByteSize(value, key, maximum) {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${key} must be a positive byte count`);
+  }
+  const size = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(size) || size > maximum) {
+    throw new Error(`${key} must not exceed ${maximum} bytes`);
+  }
+  return size;
 }
 
 function loadLauncherConfig(options = {}) {
@@ -300,6 +322,75 @@ function loadLauncherConfig(options = {}) {
     }
     assertSha256(raw.client_patch_sha256, 'client_patch_sha256');
   }
+
+  let surfsideAtollDlcUrl;
+  try {
+    surfsideAtollDlcUrl = new URL(raw.surfside_atoll_dlc_url);
+  } catch {
+    throw new Error('surfside_atoll_dlc_url must be a valid URL');
+  }
+  if (
+    surfsideAtollDlcUrl.protocol !== 'https:' ||
+    !surfsideAtollDlcUrl.pathname.endsWith('.zip') ||
+    surfsideAtollDlcUrl.search ||
+    surfsideAtollDlcUrl.hash ||
+    surfsideAtollDlcUrl.username ||
+    surfsideAtollDlcUrl.password
+  ) {
+    throw new Error('surfside_atoll_dlc_url must be a direct HTTPS ZIP URL');
+  }
+  const surfsideAtollArchiveSize = parseByteSize(
+    raw.surfside_atoll_dlc_archive_size,
+    'surfside_atoll_dlc_archive_size',
+    512 * 1024 * 1024
+  );
+  assertSha256(raw.surfside_atoll_dlc_archive_sha256, 'surfside_atoll_dlc_archive_sha256');
+  const surfsideAtollFiles = [
+    {
+      archivePath: 'Maps/3P_Beachhead/3P_Beachhead_P.ut3',
+      targetPath: '3P_Beachhead/3P_Beachhead_P.ut3',
+      size: parseByteSize(
+        raw.surfside_atoll_dlc_beachhead_package_size,
+        'surfside_atoll_dlc_beachhead_package_size',
+        256 * 1024 * 1024
+      ),
+      sha256: raw.surfside_atoll_dlc_beachhead_package_sha256
+    },
+    {
+      archivePath: 'Maps/3P_Beachhead/3P_Beachhead_Sound.ut3',
+      targetPath: '3P_Beachhead/3P_Beachhead_Sound.ut3',
+      size: parseByteSize(
+        raw.surfside_atoll_dlc_beachhead_sound_size,
+        'surfside_atoll_dlc_beachhead_sound_size',
+        256 * 1024 * 1024
+      ),
+      sha256: raw.surfside_atoll_dlc_beachhead_sound_sha256
+    },
+    {
+      archivePath: 'Maps/3P_Beachhead2/3P_Beachhead2_P.ut3',
+      targetPath: '3P_Beachhead2/3P_Beachhead2_P.ut3',
+      size: parseByteSize(
+        raw.surfside_atoll_dlc_beachhead2_package_size,
+        'surfside_atoll_dlc_beachhead2_package_size',
+        256 * 1024 * 1024
+      ),
+      sha256: raw.surfside_atoll_dlc_beachhead2_package_sha256
+    },
+    {
+      archivePath: 'Maps/3P_Beachhead2/3P_Beachhead2_Sound.ut3',
+      targetPath: '3P_Beachhead2/3P_Beachhead2_Sound.ut3',
+      size: parseByteSize(
+        raw.surfside_atoll_dlc_beachhead2_sound_size,
+        'surfside_atoll_dlc_beachhead2_sound_size',
+        256 * 1024 * 1024
+      ),
+      sha256: raw.surfside_atoll_dlc_beachhead2_sound_sha256
+    }
+  ];
+  for (const [index, file] of surfsideAtollFiles.entries()) {
+    assertSha256(file.sha256, `surfside_atoll_dlc file ${index + 1} SHA-256`);
+  }
+
   assertBranch(raw.server_history_branch, 'server_history_branch');
   const serverHistoryCount = Number.parseInt(raw.server_history_count, 10);
   if (!/^\d+$/.test(raw.server_history_count) || serverHistoryCount < 1 || serverHistoryCount > 10) {
@@ -340,7 +431,17 @@ function loadLauncherConfig(options = {}) {
       size: clientPatchSize,
       sha256: raw.client_patch_sha256,
       publishedAt: null
-    }
+    },
+    dlcs: [
+      {
+        id: 'surfside-atoll-pvp-maps',
+        name: 'Surfside-Atoll PvP Maps',
+        url: surfsideAtollDlcUrl.toString(),
+        archiveSize: surfsideAtollArchiveSize,
+        archiveSha256: raw.surfside_atoll_dlc_archive_sha256,
+        files: surfsideAtollFiles
+      }
+    ]
   };
 }
 

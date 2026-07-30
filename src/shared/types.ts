@@ -47,6 +47,30 @@ export interface PatchSettings {
   adaptiveClientPerformance: boolean;
 }
 
+export type DlcId = 'surfside-atoll-pvp-maps';
+
+export interface DlcSettings {
+  surfsideAtollPvpMaps: boolean;
+}
+
+export type DlcInstallStatus =
+  | 'unavailable'
+  | 'missing'
+  | 'partial'
+  | 'installed'
+  | 'modified'
+  | 'installing'
+  | 'error';
+
+export interface DlcStatus {
+  id: DlcId;
+  name: string;
+  status: DlcInstallStatus;
+  detail: string;
+  installedFiles: number;
+  totalFiles: number;
+}
+
 export type LinuxRunnerType = 'wine' | 'proton';
 
 export type DxvkRendererSetting = 'directx-9' | 'directx-10' | 'unknown';
@@ -94,6 +118,8 @@ export interface Settings {
   gameIniBaseline: GameIniBaseline;
   /** Optional game patches controlled independently from the Patches tab. */
   patches: PatchSettings;
+  /** Optional launcher-managed game content controlled from the DLC's tab. */
+  dlcs: DlcSettings;
   servers: {
     builtInName: string;
     selectedServerId: string;
@@ -205,6 +231,7 @@ export interface LauncherState {
   launcherUpdateError: string | null;
   gameClientDll: GameClientDllState;
   clientPatches: ClientPatchStatus[];
+  dlcs: DlcStatus[];
   gameProfiles: GameProfileSummary[];
   selectedGameProfileId: string | null;
   serverCommits: ServerCommit[];
@@ -249,6 +276,7 @@ export interface LauncherApi {
   getSettings(): Promise<Settings>;
   updateSettings(patch: DeepPartial<Settings>): Promise<Settings>;
   setGameClientPatch(enabled: boolean): Promise<Settings>;
+  setDlcEnabled(id: DlcId, enabled: boolean): Promise<Settings>;
   browseForGame(): Promise<string | null>;
   autoDetectGame(): Promise<string | null>;
   play(): Promise<void>;

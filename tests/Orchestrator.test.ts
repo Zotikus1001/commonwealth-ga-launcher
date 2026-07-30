@@ -467,4 +467,104 @@ describe('game setup patch preparation', () => {
     expect(orchestrator.getState().gameClientDll.status).toBe('managed');
     expect(serviceMocks.clientPrepareLocal).not.toHaveBeenCalled();
   });
+
+  it('updates Developer Mode state without importing active game INI values', () => {
+    const settings = defaultSettings();
+    settings.loginMap = 'LoginElvish_P.ut3';
+    settings.developer.enabled = true;
+    const syncGameIniSettings = vi.fn(async () => {
+      settings.loginMap = 'Login_FreeAgent.ut3';
+      return settings;
+    });
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    orchestrator.developerModeChanged();
+
+    expect(orchestrator.getState().developerMode).toBe(true);
+    expect(syncGameIniSettings).not.toHaveBeenCalled();
+    expect(settings.loginMap).toBe('LoginElvish_P.ut3');
+  });
+
+  it('disables local DLL mode without refreshing unrelated INI patch or login state', async () => {
+    vi.useFakeTimers();
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    serviceMocks.clientInspect.mockResolvedValue({
+      status: 'local',
+      detail: 'Valid local x86 client patch DLL detected.',
+      hasManagedMarker: false
+    });
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.loginMap = 'LoginElvish_P.ut3';
+    settings.developer.enabled = false;
+    settings.developer.useLocalClientDll = false;
+    settings.launch.closeAfterLaunch = false;
+    const syncGameIniSettings = vi.fn(async () => settings);
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn(),
+      ensureCurrent: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    await orchestrator.localClientDllChanged(false);
+
+    expect(orchestrator.getState()).toMatchObject({
+      developerMode: false,
+      gamePathValid: true,
+      gameClientDll: { status: 'local' }
+    });
+    expect(serviceMocks.inspectGameIniSettings).not.toHaveBeenCalled();
+    expect(serviceMocks.inspectClientPatches).not.toHaveBeenCalled();
+    expect(syncGameIniSettings).not.toHaveBeenCalled();
+    expect(settings.loginMap).toBe('LoginElvish_P.ut3');
+
+    await orchestrator.play();
+
+    expect(serviceMocks.ensureClientConfiguration.mock.calls.at(-1)?.[1]).toBe(
+      'LoginElvish_P.ut3'
+    );
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
 });

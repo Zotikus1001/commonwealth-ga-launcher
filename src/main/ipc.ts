@@ -58,6 +58,15 @@ export function registerIpc(
       patch !== null &&
       Object.keys(patch).length === 1 &&
       'uiScale' in patch;
+    const developerModeOnly =
+      typeof patch === 'object' &&
+      patch !== null &&
+      Object.keys(patch).length === 1 &&
+      typeof patch.developer === 'object' &&
+      patch.developer !== null &&
+      !Array.isArray(patch.developer) &&
+      Object.keys(patch.developer).length === 1 &&
+      'enabled' in patch.developer;
     if (!uiScaleOnly) {
       const gamePathChanged = previous.gameExePath !== updated.gameExePath;
       const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
@@ -100,7 +109,15 @@ export function registerIpc(
       if (gameClientPatchChanged) {
         await commitGameClientPatchChange(previous.patches.gameClientPatch, updated);
       }
-      if (!localClientDllChanged && !dxvkChanged && !gameClientPatchChanged) {
+      if (developerModeOnly && !localClientDllChanged) {
+        orchestrator.developerModeChanged();
+      }
+      if (
+        !localClientDllChanged &&
+        !dxvkChanged &&
+        !gameClientPatchChanged &&
+        !developerModeOnly
+      ) {
         if (gamePathChanged) await orchestrator.settingsChanged();
         else void orchestrator.settingsChanged();
       }

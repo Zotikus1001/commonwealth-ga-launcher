@@ -1359,6 +1359,10 @@ export class Orchestrator {
     await this.refresh();
   }
 
+  developerModeChanged(): void {
+    this.applyServerSelection(this.config.get());
+  }
+
   async localClientDllChanged(enabled: boolean): Promise<void> {
     if (
       enabled &&
@@ -1367,22 +1371,31 @@ export class Orchestrator {
       throw new Error('The launcher is busy. Try again shortly.');
     }
     const settings = this.config.get();
+    this.applyServerSelection(settings);
     if (enabled && !settings.developer.enabled) {
       throw new Error('Enable Developer Mode before using a local client DLL.');
     }
     const install = await validateGameExe(settings.gameExePath);
     this.install = install;
     if (!install) {
-      this.patch({ gameClientDll: unavailableGameClientDllState() });
+      this.patchesPreparedGameExePath = '';
+      this.patch({
+        gamePathValid: false,
+        validatedGameExePath: settings.gameExePath,
+        gameClientDll: unavailableGameClientDllState()
+      });
       if (enabled) {
         throw new Error('Set a valid Global Agenda installation before enabling local DLL mode.');
       }
-      await this.refresh();
       return;
     }
 
     const inspection = await this.inspectGameClientDll(install);
-    this.patch({ gameClientDll: inspection });
+    this.patch({
+      gamePathValid: true,
+      validatedGameExePath: settings.gameExePath,
+      gameClientDll: inspection
+    });
     if (enabled && inspection.status !== 'local') {
       throw new Error(
         inspection.status === 'managed'
@@ -1390,7 +1403,6 @@ export class Orchestrator {
           : inspection.detail
       );
     }
-    await this.refresh();
   }
 
   async gameClientPatchChanged(enabled: boolean): Promise<void> {

@@ -1794,8 +1794,7 @@ type GameClientDllNoticeTone = 'active' | 'managed' | 'warning' | 'error' | 'idl
 
 export function gameClientDllNoticeCopy(
   dll: LauncherState['gameClientDll'],
-  localMode: boolean,
-  platform: LauncherState['platform']
+  localMode: boolean
 ): {
   tone: GameClientDllNoticeTone;
   label: string;
@@ -1815,14 +1814,11 @@ export function gameClientDllNoticeCopy(
   if (dll.status === 'local') {
     return {
       tone: 'warning',
-      label: platform === 'win32' ? 'UNMANAGED DLL CAN LOAD' : 'UNMANAGED DLL DETECTED',
-      title: 'Managed patch controls are blocked',
+      label: 'UNMANAGED DLL DETECTED',
+      title: 'Play will reconcile this DLL',
       detail:
-        platform === 'win32'
-          ? `${dll.detail} Windows can still load it while Local DLL Mode is off. ` +
-            'Move or rename it manually to test without the patch.'
-          : `${dll.detail} It is not injected by the launcher while Local DLL Mode is off. ` +
-            'Move or rename it before using the managed patch controls.'
+        `${dll.detail} With Local DLL Override off, Play will replace or remove this file ` +
+        'to match the Game Client Patch setting. Enable Local DLL Override before Play to keep it.'
     };
   }
   if (dll.status === 'managed') {
@@ -1837,8 +1833,10 @@ export function gameClientDllNoticeCopy(
     return {
       tone: 'error',
       label: 'DLL REJECTED',
-      title: 'Client DLL needs attention',
-      detail: `${dll.detail} Move or replace it before using managed or local patch mode.`
+      title: 'Play will try to repair this state',
+      detail:
+        `${dll.detail} With Local DLL Override off, Play will replace or remove a regular DLL ` +
+        'to match the Game Client Patch setting.'
     };
   }
   if (dll.status === 'missing') {
@@ -1861,14 +1859,12 @@ export function gameClientDllNoticeCopy(
 
 export function GameClientDllStatusPanel({
   dll,
-  localMode,
-  platform
+  localMode
 }: {
   dll: LauncherState['gameClientDll'];
   localMode: boolean;
-  platform: LauncherState['platform'];
 }): JSX.Element {
-  const copy = gameClientDllNoticeCopy(dll, localMode, platform);
+  const copy = gameClientDllNoticeCopy(dll, localMode);
   const toneClass: Record<GameClientDllNoticeTone, string> = {
     active: styles.clientDllActive,
     managed: styles.clientDllManaged,
@@ -1898,7 +1894,7 @@ export function gameClientPatchPresentation(
 ): {
   tone: 'applied' | 'pending' | 'removed';
   enabled: boolean;
-  actionLabel: 'APPLY' | 'REMOVE' | 'LOCAL' | 'BLOCKED';
+  actionLabel: 'APPLY' | 'REMOVE' | 'LOCAL';
   actionDisabled: boolean;
   actionTitle: string;
   nextPreference: boolean;
@@ -1906,7 +1902,6 @@ export function gameClientPatchPresentation(
   const enabled =
     (localMode && dll.status === 'local') ||
     (!localMode && preferred && dll.status === 'managed');
-  const unmanagedBlock = dll.status === 'local' || dll.status === 'invalid';
   if (localMode) {
     return {
       tone: enabled ? 'applied' : 'pending',
@@ -1917,17 +1912,8 @@ export function gameClientPatchPresentation(
       nextPreference: preferred
     };
   }
-  if (unmanagedBlock) {
-    return {
-      tone: 'pending',
-      enabled: false,
-      actionLabel: 'BLOCKED',
-      actionDisabled: true,
-      actionTitle: 'Move or rename the unmanaged dinput8.dll before using managed patch controls.',
-      nextPreference: preferred
-    };
-  }
-  const removeInstalled = dll.status === 'managed';
+  const unmanagedOrInvalid = dll.status === 'local' || dll.status === 'invalid';
+  const removeInstalled = dll.status === 'managed' || (!preferred && unmanagedOrInvalid);
   return {
     tone: enabled ? 'applied' : preferred || removeInstalled ? 'pending' : 'removed',
     enabled,
@@ -2074,7 +2060,6 @@ function DeveloperTab({
           <GameClientDllStatusPanel
             dll={state.gameClientDll}
             localMode={settings.developer.useLocalClientDll}
-            platform={state.platform}
           />
           {localClientDllError && (
             <p className={styles.invalid}>{`Could not change the local client DLL: ${localClientDllError}`}</p>
@@ -2214,13 +2199,12 @@ function PatchesTab({
           <div className={styles.patchBody}>
             <div className={styles.patchTitle}>Game Client Patch</div>
             <p className={styles.patchDescription}>
-              Installs and owns the verified release DLL, then checks for updates before Play.
-              Developer-supplied DLLs are detected separately and never changed by this control.
+              Installs and owns the verified release DLL, then checks for updates on Play. Local
+              DLLs remain untouched only while Local DLL Override is enabled.
             </p>
             <GameClientDllStatusPanel
               dll={state.gameClientDll}
               localMode={settings.developer.useLocalClientDll}
-              platform={state.platform}
             />
             <div className={styles.patchFixDetails}>
               <div className={styles.patchFixHeader}>

@@ -67,7 +67,8 @@ Create local packages with `npm run dist:win` or `npm run dist:linux`. Build out
 channels.
 
 Developer Mode can validate and use a local 32-bit x86 client patch DLL. Local DLLs remain
-developer-owned, and the launcher reports them separately from its managed release patch.
+developer-owned while Local DLL Override is enabled. With the override off, pressing Play restores
+the saved managed-patch choice by replacing or removing the client DLL.
 
 Public launcher settings are stored in `launcher.config.yml`.
 

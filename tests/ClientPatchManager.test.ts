@@ -105,7 +105,7 @@ afterEach(async () => {
 describe('ClientPatchManager', () => {
   it('downloads, verifies, and installs the managed DLL on Windows', async () => {
     const { userData, install } = await fixture();
-    const contents = Buffer.from('patch payload v1');
+    const contents = peDll('managed release');
     const manager = new ClientPatchManager(
       userData,
       logger(),
@@ -153,10 +153,10 @@ describe('ClientPatchManager', () => {
     await expect(readFile(legacyPath)).rejects.toThrow();
   });
 
-  it('never overwrites an unmanaged dinput8.dll', async () => {
+  it('replaces an unmanaged dinput8.dll with the verified managed release', async () => {
     const { userData, install } = await fixture();
     const existing = Buffer.from('third-party wrapper');
-    const contents = Buffer.from('patch payload v1');
+    const contents = peDll('managed release');
     await writeFile(join(install.binariesDir, 'DINPUT8.dll'), existing);
     const manager = new ClientPatchManager(
       userData,
@@ -166,10 +166,12 @@ describe('ClientPatchManager', () => {
       unavailableReleases
     );
 
-    await expect(manager.prepareForLaunch(install, 'win32')).rejects.toThrow(
-      'unmanaged dinput8.dll'
-    );
-    expect(await readFile(join(install.binariesDir, 'DINPUT8.dll'))).toEqual(existing);
+    await expect(manager.prepareForLaunch(install, 'win32')).resolves.toEqual({});
+    expect(await readFile(join(install.binariesDir, 'DINPUT8.dll'))).toEqual(contents);
+    await expect(manager.inspect(install)).resolves.toMatchObject({
+      status: 'managed',
+      hasManagedMarker: true
+    });
   });
 
   it('updates a previously launcher-managed payload', async () => {
@@ -287,6 +289,46 @@ describe('ClientPatchManager', () => {
     await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
   });
 
+  it('removes a replacement DLL and stale ownership when the managed patch is disabled', async () => {
+    const { userData, install } = await fixture();
+    const managed = peDll('managed release');
+    const unmanaged = peDll('unmanaged payload');
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+    await manager.prepareForLaunch(install, 'win32');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), unmanaged);
+
+    await manager.disable(install);
+
+    await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
+    await expect(
+      readFile(managedInstallStatePath(userData, install, 'client-patches.json'))
+    ).rejects.toThrow();
+  });
+
+  it('removes an unmanaged DLL when the managed payload cannot be downloaded', async () => {
+    const { userData, install } = await fixture();
+    const managed = peDll('managed release');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), peDll('unmanaged payload'));
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      async () => {
+        throw new Error('download failed');
+      },
+      unavailableReleases
+    );
+
+    await expect(manager.prepareForLaunch(install, 'win32')).rejects.toThrow('download failed');
+    await expect(readFile(join(install.binariesDir, 'dinput8.dll'))).rejects.toThrow();
+  });
+
   it('adds the Wine override without replacing existing overrides', async () => {
     const { userData, install } = await fixture();
     const contents = Buffer.from('patch payload v1');
@@ -383,6 +425,29 @@ describe('ClientPatchManager', () => {
       hasManagedMarker: true
     });
     await expect(manager.prepareLocalForLaunch(install, 'win32')).resolves.toEqual({});
+  });
+
+  it('replaces a local DLL left over stale managed ownership in normal mode', async () => {
+    const { userData, install } = await fixture();
+    const managed = peDll('managed release');
+    const local = peDll('local development payload');
+    const manager = new ClientPatchManager(
+      userData,
+      logger(),
+      definition('1', managed),
+      downloader(managed),
+      unavailableReleases
+    );
+    await manager.prepareForLaunch(install, 'win32');
+    await writeFile(join(install.binariesDir, 'dinput8.dll'), local);
+
+    await manager.prepareForLaunch(install, 'win32');
+
+    expect(await readFile(join(install.binariesDir, 'dinput8.dll'))).toEqual(managed);
+    await expect(manager.inspect(install)).resolves.toMatchObject({
+      status: 'managed',
+      hasManagedMarker: true
+    });
   });
 
   it('rejects a local DLL that is not a 32-bit x86 PE DLL', async () => {

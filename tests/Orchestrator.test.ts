@@ -239,7 +239,7 @@ beforeEach(() => {
 });
 
 describe('game setup patch preparation', () => {
-  it('applies every enabled patch as soon as a game install becomes valid', async () => {
+  it('applies enabled INI patches and DLC without mutating the client DLL on setup', async () => {
     const install = {
       exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
       binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
@@ -294,11 +294,8 @@ describe('game setup patch preparation', () => {
       expect.any(String),
       1_024
     );
-    expect(serviceMocks.clientPrepare).toHaveBeenCalledWith(
-      install,
-      process.platform,
-      expect.any(Function)
-    );
+    expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     expect(serviceMocks.dlcEnsure).toHaveBeenCalledWith(
       install,
       'surfside-atoll-pvp-maps',
@@ -308,7 +305,8 @@ describe('game setup patch preparation', () => {
     await orchestrator.refresh();
 
     expect(serviceMocks.applyIniClientPatch).toHaveBeenCalledTimes(2);
-    expect(serviceMocks.clientPrepare).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
   });
 
@@ -350,16 +348,19 @@ describe('game setup patch preparation', () => {
 
     await orchestrator.refresh();
     expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     vi.clearAllMocks();
 
     await orchestrator.play();
     expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.clientDisable).toHaveBeenCalledTimes(1);
     expect(serviceMocks.gameLaunch).toHaveBeenCalledTimes(1);
     vi.runOnlyPendingTimers();
 
     settings.dlcs.surfsideAtollPvpMaps = false;
     await orchestrator.play();
     expect(serviceMocks.dlcEnsure).toHaveBeenCalledTimes(1);
+    expect(serviceMocks.clientDisable).toHaveBeenCalledTimes(2);
     expect(serviceMocks.gameLaunch).toHaveBeenCalledTimes(2);
 
     for (const result of serviceMocks.gameLaunch.mock.results) {
@@ -367,6 +368,59 @@ describe('game setup patch preparation', () => {
     }
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+  });
+
+  it('does not launch while a disabled client patch DLL could not be removed', async () => {
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    serviceMocks.clientDisable.mockRejectedValue(new Error('access denied'));
+    serviceMocks.clientInspect.mockResolvedValue({
+      status: 'managed',
+      detail: 'Launcher-managed Game Client Patch release detected.',
+      hasManagedMarker: true
+    });
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.developer.enabled = true;
+    settings.patches.gameClientPatch = false;
+    settings.dlcs.surfsideAtollPvpMaps = false;
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings: vi.fn(async () => settings)
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn(),
+      ensureCurrent: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+    await orchestrator.refresh();
+
+    await orchestrator.play();
+
+    expect(serviceMocks.clientDisable).toHaveBeenCalledWith(install);
+    expect(serviceMocks.gameLaunch).not.toHaveBeenCalled();
+    expect(orchestrator.getState()).toMatchObject({
+      phase: 'ready',
+      statusLine: 'Could not replace or remove the existing client DLL.',
+      errorDetails: 'access denied'
+    });
   });
 
   it('removes an optional DLC immediately after the user disables it', async () => {
@@ -493,6 +547,9 @@ describe('game setup patch preparation', () => {
       serviceMocks.ensureClientConfiguration.mock.invocationCallOrder[0]
     );
     expect(serviceMocks.ensureClientConfiguration.mock.invocationCallOrder[0]).toBeLessThan(
+      serviceMocks.clientDisable.mock.invocationCallOrder[0]
+    );
+    expect(serviceMocks.clientDisable.mock.invocationCallOrder[0]).toBeLessThan(
       serviceMocks.dxvkPrepare.mock.invocationCallOrder[0]
     );
     expect(serviceMocks.dxvkPrepare.mock.invocationCallOrder[0]).toBeLessThan(
@@ -567,14 +624,16 @@ describe('game setup patch preparation', () => {
 
     await orchestrator.refresh();
 
-    expect(serviceMocks.clientPrepareLocal).toHaveBeenCalledWith(install, process.platform);
+    expect(serviceMocks.clientPrepareLocal).not.toHaveBeenCalled();
     expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     vi.clearAllMocks();
 
     await orchestrator.play();
 
     expect(serviceMocks.clientPrepareLocal).toHaveBeenCalledWith(install, process.platform);
     expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     expect(serviceMocks.gameLaunch).toHaveBeenCalledWith(
       settings,
       '127.0.0.1',
@@ -721,9 +780,17 @@ describe('game setup patch preparation', () => {
     expect(serviceMocks.inspectClientPatches).not.toHaveBeenCalled();
     expect(syncGameIniSettings).not.toHaveBeenCalled();
     expect(settings.loginMap).toBe('LoginElvish_P.ut3');
+    expect(serviceMocks.clientPrepare).not.toHaveBeenCalled();
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
 
     await orchestrator.play();
 
+    expect(serviceMocks.clientPrepare).toHaveBeenCalledWith(
+      install,
+      process.platform,
+      expect.any(Function)
+    );
+    expect(serviceMocks.clientDisable).not.toHaveBeenCalled();
     expect(serviceMocks.ensureClientConfiguration.mock.calls.at(-1)?.[1]).toBe(
       'LoginElvish_P.ut3'
     );

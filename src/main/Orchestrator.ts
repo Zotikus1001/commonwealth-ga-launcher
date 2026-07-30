@@ -507,7 +507,7 @@ export class Orchestrator {
       !this.patchesPreparedGameExePath ||
       !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
     ) {
-      await this.applyEnabledPatchesForInstall(install, settings);
+      await this.applyEnabledIniPatchesForInstall(install, settings);
       if (settings.dlcs.surfsideAtollPvpMaps) {
         this.patch({ statusLine: 'Checking Surfside-Atoll PvP Maps…' });
         try {
@@ -588,7 +588,7 @@ export class Orchestrator {
     this.patch({ phase: 'ready', statusLine: 'Ready.' });
   }
 
-  private async applyEnabledPatchesForInstall(
+  private async applyEnabledIniPatchesForInstall(
     install: GameInstall,
     settings: Settings
   ): Promise<void> {
@@ -621,36 +621,6 @@ export class Orchestrator {
       } catch (error) {
         this.log.warn(`automatic client performance patch failed: ${(error as Error).message}`);
       }
-    }
-    const localDll = settings.developer.useLocalClientDll;
-    if (!localDll && !settings.patches.gameClientPatch) return;
-
-    this.patch({
-      statusLine: localDll
-        ? 'Preparing local client DLL…'
-        : 'Applying Game Client Patch…'
-    });
-    try {
-      if (localDll) {
-        await this.clientPatchManager.prepareLocalForLaunch(install, PLATFORM);
-      } else {
-        await this.clientPatchManager.prepareForLaunch(
-          install,
-          PLATFORM,
-          ({ transferred, total }) => {
-            const percent = total > 0
-              ? Math.min(100, Math.round((transferred / total) * 100))
-              : -1;
-            this.patch({
-              statusLine: percent >= 0
-                ? `Downloading Game Client Patch… ${percent}%`
-                : 'Downloading Game Client Patch…'
-            });
-          }
-        );
-      }
-    } catch (error) {
-      this.log.warn(`automatic Game Client Patch failed: ${(error as Error).message}`);
     }
   }
 
@@ -882,35 +852,57 @@ export class Orchestrator {
 
       let clientPatchEnvironment: NodeJS.ProcessEnv = {};
       const localClientDll = settings.developer.useLocalClientDll;
-      if (localClientDll || settings.patches.gameClientPatch) {
-        this.patch({
-          statusLine: localClientDll
-            ? 'Preparing local client DLL…'
-            : 'Checking Game Client Patch…'
-        });
-        try {
-          clientPatchEnvironment = localClientDll
-            ? await this.clientPatchManager.prepareLocalForLaunch(this.install, PLATFORM)
-            : await this.clientPatchManager.prepareForLaunch(
-                this.install,
-                PLATFORM,
-                ({ transferred, total }) => {
-                  const percent = total > 0
-                    ? Math.min(100, Math.round((transferred / total) * 100))
-                    : -1;
-                  this.patch({
-                    statusLine: percent >= 0
-                      ? `Downloading Game Client Patch… ${percent}%`
-                      : 'Downloading Game Client Patch…'
-                  });
-                }
-              );
-        } catch (error) {
-          this.log.warn(
-            `client patches unavailable; continuing without them: ${(error as Error).message}`
+      this.patch({
+        statusLine: localClientDll
+          ? 'Preparing local client DLL…'
+          : settings.patches.gameClientPatch
+            ? 'Checking Game Client Patch…'
+            : 'Removing Game Client Patch…'
+      });
+      let clientPatchError: string | null = null;
+      try {
+        if (localClientDll) {
+          clientPatchEnvironment = await this.clientPatchManager.prepareLocalForLaunch(
+            this.install,
+            PLATFORM
           );
+        } else if (settings.patches.gameClientPatch) {
+          clientPatchEnvironment = await this.clientPatchManager.prepareForLaunch(
+            this.install,
+            PLATFORM,
+            ({ transferred, total }) => {
+              const percent = total > 0
+                ? Math.min(100, Math.round((transferred / total) * 100))
+                : -1;
+              this.patch({
+                statusLine: percent >= 0
+                  ? `Downloading Game Client Patch… ${percent}%`
+                  : 'Downloading Game Client Patch…'
+              });
+            }
+          );
+        } else {
+          await this.clientPatchManager.disable(this.install);
         }
-        this.patch({ gameClientDll: await this.inspectGameClientDll(this.install) });
+      } catch (error) {
+        clientPatchError = error instanceof Error ? error.message : String(error);
+        this.log.warn(`client patch reconciliation failed: ${clientPatchError}`);
+      }
+      const gameClientDll = await this.inspectGameClientDll(this.install);
+      this.patch({ gameClientDll });
+      if (
+        !localClientDll &&
+        clientPatchError &&
+        (settings.patches.gameClientPatch
+          ? gameClientDll.status === 'local' || gameClientDll.status === 'invalid'
+          : gameClientDll.status !== 'missing')
+      ) {
+        this.patch({
+          phase: 'ready',
+          statusLine: 'Could not replace or remove the existing client DLL.',
+          errorDetails: clientPatchError
+        });
+        return;
       }
 
       let useDxvk = false;

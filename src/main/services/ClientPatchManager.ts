@@ -359,18 +359,6 @@ export class ClientPatchManager {
     const marker = await this.readMarker(install);
     const targetExists = await isFile(target);
     const targetHash = targetExists ? await sha256File(target) : null;
-
-    if (!marker && targetExists && targetHash !== definition.sha256) {
-      throw new Error('an unmanaged dinput8.dll is already installed; it was left untouched');
-    }
-    if (
-      marker &&
-      targetHash &&
-      targetHash !== marker.installedSha256 &&
-      targetHash !== marker.pendingSha256
-    ) {
-      throw new Error('the launcher-managed dinput8.dll was modified; it was left untouched');
-    }
     if (targetHash === definition.sha256) {
       await this.writeMarker(install, {
         schemaVersion: 1,
@@ -385,13 +373,17 @@ export class ClientPatchManager {
       return;
     }
 
+    const previousWasManaged =
+      marker !== null &&
+      targetHash !== null &&
+      (targetHash === marker.installedSha256 || targetHash === marker.pendingSha256);
     const transaction: ClientPatchMarker = {
       schemaVersion: 1,
       owner: 'commonwealth-ga-launcher',
       phase: 'installing',
       revision: definition.revision,
       publishedAt: definition.publishedAt,
-      installedSha256: targetHash,
+      installedSha256: previousWasManaged ? targetHash : null,
       pendingSha256: definition.sha256
     };
     const incoming = join(install.binariesDir, `.commonwealth-client-patches-${randomUUID()}.tmp`);
@@ -405,6 +397,7 @@ export class ClientPatchManager {
       throw new Error('copied client patch DLL failed verification');
     }
     await this.writeMarker(install, transaction);
+    let committed = false;
     try {
       if (previous) await rename(target, previous);
       await rename(incoming, target);
@@ -417,21 +410,57 @@ export class ClientPatchManager {
         installedSha256: definition.sha256,
         pendingSha256: null
       });
+      committed = true;
       if (previous) await rm(previous, { force: true });
       await this.cleanupTransactionFiles(install);
       this.log.info(`client patches ${definition.revision}: installed for game launches`);
     } catch (error) {
-      await rm(incoming, { force: true }).catch(() => {});
-      if (previous && !(await isFile(target)) && (await isFile(previous))) {
-        await rename(previous, target).catch(() => {});
+      if (committed) {
+        await this.cleanupTransactionFiles(install).catch(() => {});
+        throw error;
       }
+      await rm(incoming, { force: true }).catch(() => {});
+      if (await isFile(target)) await rm(target, { force: true }).catch(() => {});
+      if (previous && (await isFile(previous))) {
+        if (previousWasManaged) await rename(previous, target).catch(() => {});
+        else await rm(previous, { force: true }).catch(() => {});
+      }
+      if (previousWasManaged && marker) await this.writeMarker(install, marker).catch(() => {});
+      else await rm(this.markerPath(install), { force: true }).catch(() => {});
+      await this.cleanupTransactionFiles(install).catch(() => {});
       throw error;
     }
   }
 
-  private async removeOwned(install: GameInstall, requireMarker: boolean): Promise<boolean> {
+  private async removeAnyInstalledDll(install: GameInstall): Promise<boolean> {
+    const target = await this.resolveTarget(install);
+    let removed = false;
+    try {
+      const targetInfo = await lstat(target);
+      if (!targetInfo.isFile()) {
+        throw new Error('dinput8.dll is not a regular file; it was left untouched');
+      }
+      await rm(target);
+      removed = true;
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+    await Promise.all([
+      rm(this.markerPath(install), { force: true }),
+      rm(this.legacyMarkerPath(install), { force: true })
+    ]);
+    await this.cleanupTransactionFiles(install);
+    this.log.info(
+      removed
+        ? 'client patches: existing DLL removed'
+        : 'client patches: no DLL was installed'
+    );
+    return removed;
+  }
+
+  private async removeOwned(install: GameInstall): Promise<boolean> {
     const marker = await this.readMarker(install);
-    if (requireMarker && !marker) {
+    if (!marker) {
       await this.cleanupTransactionFiles(install);
       this.log.info('client patches: no launcher-managed DLL to remove');
       return false;
@@ -450,7 +479,6 @@ export class ClientPatchManager {
 
     if (targetHash) {
       const ownedHashes = new Set<string>();
-      if (!requireMarker) ownedHashes.add(this.definition.sha256);
       if (marker?.installedSha256) ownedHashes.add(marker.installedSha256);
       if (marker?.pendingSha256) ownedHashes.add(marker.pendingSha256);
       if (!ownedHashes.has(targetHash)) {
@@ -465,17 +493,33 @@ export class ClientPatchManager {
   }
 
   async disable(install: GameInstall): Promise<void> {
-    await this.removeOwned(install, false);
+    await this.removeAnyInstalledDll(install);
   }
 
   async removeManaged(install: GameInstall): Promise<boolean> {
-    return this.removeOwned(install, true);
+    return this.removeOwned(install);
   }
 
   private async validManagedMarker(install: GameInstall): Promise<ClientPatchMarker | null> {
     const marker = await this.readMarker(install);
-    if (!marker) return null;
     const target = await this.resolveTarget(install);
+    if (!marker) {
+      if (!this.definition.enabled || !(await this.validPayload(target, this.definition))) {
+        return null;
+      }
+      const claimed: ClientPatchMarker = {
+        schemaVersion: 1,
+        owner: 'commonwealth-ga-launcher',
+        phase: 'active',
+        revision: this.definition.revision,
+        publishedAt: this.definition.publishedAt,
+        installedSha256: this.definition.sha256,
+        pendingSha256: null
+      };
+      await this.writeMarker(install, claimed);
+      await this.cleanupTransactionFiles(install);
+      return claimed;
+    }
     if (!(await isFile(target))) return null;
     const hash = await sha256File(target);
     if (marker.phase === 'installing' && hash === marker.pendingSha256) {
@@ -632,7 +676,15 @@ export class ClientPatchManager {
     onProgress: (progress: DownloadProgress) => void = () => {}
   ): Promise<NodeJS.ProcessEnv> {
     if (!this.definition.enabled) return {};
-    const installedBeforeCheck = await this.validManagedMarker(install);
+    let installedBeforeCheck: ClientPatchMarker | null = null;
+    try {
+      installedBeforeCheck = await this.validManagedMarker(install);
+    } catch (error) {
+      this.log.warn(
+        `client patch ownership could not be verified; resetting it: ${(error as Error).message}`
+      );
+    }
+    if (!installedBeforeCheck) await this.removeAnyInstalledDll(install);
     let desired = this.definition;
     try {
       desired = await this.latestReleaseDefinition();
@@ -667,7 +719,17 @@ export class ClientPatchManager {
       await this.installManaged(install, payload, desired);
     } catch (error) {
       const stillManaged = await this.validManagedMarker(install).catch(() => null);
-      if (!stillManaged) throw error;
+      if (!stillManaged) {
+        try {
+          await this.removeAnyInstalledDll(install);
+        } catch (cleanupError) {
+          throw new Error(
+            `${(error as Error).message}; could not remove the uncontrolled dinput8.dll: ` +
+              (cleanupError as Error).message
+          );
+        }
+        throw error;
+      }
       await this.cleanupTransactionFiles(install);
       this.log.warn(
         `client patch update failed; keeping installed release ${stillManaged.revision}: ` +

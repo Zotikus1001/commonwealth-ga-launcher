@@ -134,7 +134,7 @@ describe('Game Client Patch actual state', () => {
     });
   });
 
-  it('blocks managed controls for an unmanaged or invalid DLL', () => {
+  it('offers replacement for an unmanaged or invalid DLL when the patch is enabled', () => {
     for (const status of ['local', 'invalid'] as const) {
       expect(
         gameClientPatchPresentation(true, false, {
@@ -145,15 +145,34 @@ describe('Game Client Patch actual state', () => {
       ).toMatchObject({
         tone: 'pending',
         enabled: false,
-        actionLabel: 'BLOCKED',
-        actionDisabled: true
+        actionLabel: 'APPLY',
+        actionDisabled: false,
+        nextPreference: true
+      });
+    }
+  });
+
+  it('offers deletion for an unmanaged or invalid DLL when the patch is disabled', () => {
+    for (const status of ['local', 'invalid'] as const) {
+      expect(
+        gameClientPatchPresentation(false, false, {
+          status,
+          detail: 'Unmanaged DLL needs attention.',
+          hasManagedMarker: false
+        })
+      ).toMatchObject({
+        tone: 'pending',
+        enabled: false,
+        actionLabel: 'REMOVE',
+        actionDisabled: false,
+        nextPreference: false
       });
     }
   });
 });
 
 describe('local client DLL status panel', () => {
-  it('warns that an unmanaged Windows DLL can load while local mode is off', () => {
+  it('explains that Play reconciles an unmanaged DLL while local mode is off', () => {
     const markup = renderToStaticMarkup(
       <GameClientDllStatusPanel
         dll={{
@@ -162,12 +181,12 @@ describe('local client DLL status panel', () => {
           hasManagedMarker: false
         }}
         localMode={false}
-        platform="win32"
       />
     );
 
-    expect(markup).toContain('UNMANAGED DLL CAN LOAD');
-    expect(markup).toContain('Move or rename it manually');
+    expect(markup).toContain('UNMANAGED DLL DETECTED');
+    expect(markup).toContain('Play will replace or remove this file');
+    expect(markup).toContain('Enable Local DLL Override before Play to keep it');
     expect(markup).toContain('data-tone="warning"');
   });
 
@@ -180,7 +199,6 @@ describe('local client DLL status panel', () => {
           hasManagedMarker: false
         }}
         localMode
-        platform="linux"
       />
     );
 

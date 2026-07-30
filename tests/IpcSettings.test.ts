@@ -47,6 +47,7 @@ function registerSettingsHandler(previous: ReturnType<typeof defaultSettings>, u
   handler: IpcHandler;
   orchestrator: {
     developerModeChanged: ReturnType<typeof vi.fn>;
+    dlcChanged: ReturnType<typeof vi.fn>;
     localClientDllChanged: ReturnType<typeof vi.fn>;
     settingsChanged: ReturnType<typeof vi.fn>;
   };
@@ -54,6 +55,7 @@ function registerSettingsHandler(previous: ReturnType<typeof defaultSettings>, u
   const orchestrator = {
     setBroadcast: vi.fn(),
     developerModeChanged: vi.fn(),
+    dlcChanged: vi.fn(),
     localClientDllChanged: vi.fn(),
     settingsChanged: vi.fn(),
     gameClientPatchChanged: vi.fn()
@@ -105,5 +107,23 @@ describe('settings IPC DEV transitions', () => {
     expect(orchestrator.developerModeChanged).toHaveBeenCalledOnce();
     expect(orchestrator.localClientDllChanged).not.toHaveBeenCalled();
     expect(orchestrator.settingsChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('DLC settings IPC', () => {
+  it('saves the preference and applies the requested DLC state immediately', async () => {
+    const previous = defaultSettings();
+    const updated = structuredClone(previous);
+    updated.dlcs.surfsideAtollPvpMaps = false;
+    const { orchestrator } = registerSettingsHandler(previous, updated);
+    const handler = ipcMocks.handlers.get(IPC.setDlcEnabled);
+    if (!handler) throw new Error('DLC IPC handler was not registered');
+
+    await handler(null, 'surfside-atoll-pvp-maps', false);
+
+    expect(orchestrator.dlcChanged).toHaveBeenCalledWith(
+      'surfside-atoll-pvp-maps',
+      false
+    );
   });
 });

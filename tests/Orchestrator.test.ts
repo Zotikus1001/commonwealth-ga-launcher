@@ -369,6 +369,50 @@ describe('game setup patch preparation', () => {
     vi.useRealTimers();
   });
 
+  it('removes an optional DLC immediately after the user disables it', async () => {
+    const install = {
+      exePath: 'C:\\Games\\Global Agenda\\Binaries\\GlobalAgenda.exe',
+      binariesDir: 'C:\\Games\\Global Agenda\\Binaries',
+      rootDir: 'C:\\Games\\Global Agenda',
+      configDir: 'C:\\Games\\Global Agenda\\TgGame\\Config'
+    };
+    serviceMocks.validateGameExe.mockResolvedValue(install);
+    const settings = defaultSettings();
+    settings.gameExePath = install.exePath;
+    settings.dlcs.surfsideAtollPvpMaps = false;
+    const config = {
+      get: vi.fn(() => settings),
+      update: vi.fn(async () => settings),
+      syncGameIniSettings: vi.fn(async () => settings)
+    } as unknown as ConfigStore;
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as unknown as Log;
+    const updater = {
+      getSnapshot: vi.fn(() => ({
+        status: 'disabled',
+        version: null,
+        error: null,
+        progress: null
+      })),
+      setEvents: vi.fn()
+    } as unknown as LauncherUpdater;
+    const orchestrator = new Orchestrator(config, log, '127.0.0.1', '', updater);
+
+    await orchestrator.dlcChanged('surfside-atoll-pvp-maps', false);
+
+    expect(serviceMocks.dlcRemove).toHaveBeenCalledWith(
+      install,
+      'surfside-atoll-pvp-maps'
+    );
+    expect(orchestrator.getState().dlcs[0]).toMatchObject({
+      status: 'missing',
+      installedFiles: 0
+    });
+  });
+
   it('restores the selected profile before disabled-patch cleanup and every launch INI mutation', async () => {
     vi.useFakeTimers();
     const install = {

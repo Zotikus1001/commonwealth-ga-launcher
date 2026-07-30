@@ -1173,6 +1173,7 @@
 
 .dlcStatusPanel p {
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--text-faint);
   font-size: 10px;
   line-height: 1.5;

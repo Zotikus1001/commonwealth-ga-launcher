@@ -2036,12 +2036,22 @@ export function manualPatchErrorMessage(result: ActionResult): string | null {
 
 type IniPatchCardTone = 'applied' | 'pending' | 'removed';
 
-export function iniPatchCardTone(
+export function iniPatchCardPresentation(
   preferred: boolean,
   applied: boolean | null
-): IniPatchCardTone {
-  if (!preferred) return 'removed';
-  return applied === true ? 'applied' : 'pending';
+): {
+  tone: IniPatchCardTone;
+  enabled: boolean;
+  actionLabel: 'APPLY' | 'REMOVE';
+  nextPreference: boolean;
+} {
+  const enabled = applied === true;
+  return {
+    tone: enabled ? (preferred ? 'applied' : 'pending') : preferred ? 'pending' : 'removed',
+    enabled,
+    actionLabel: enabled ? 'REMOVE' : 'APPLY',
+    nextPreference: !enabled
+  };
 }
 
 export function PatchEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element | null {
@@ -2190,29 +2200,29 @@ function PatchesTab({
               : 'adaptiveClientPerformance';
           const preferred = settings.patches[preferenceKey];
           const patchChanging = changing?.id === patch.id;
-          const cardTone = iniPatchCardTone(preferred, patch.applied);
+          const presentation = iniPatchCardPresentation(preferred, patch.applied);
           const tone =
-            cardTone === 'applied'
+            presentation.tone === 'applied'
               ? styles.patchApplied
-              : cardTone === 'pending'
+              : presentation.tone === 'pending'
                 ? styles.patchPending
                 : styles.patchUnknown;
           return (
             <article key={patch.id} className={`${styles.patchCard} ${tone}`}>
               <button
                 className={`${styles.patchIcon} ${styles.patchApplyButton} ${
-                  preferred ? styles.patchRemoveButton : ''
+                  presentation.actionLabel === 'REMOVE' ? styles.patchRemoveButton : ''
                 }`}
                 disabled={changing !== null || gameClientPatchSaving || state.launchCoolingDown}
-                aria-label={`${preferred ? 'Remove' : 'Apply'} ${copy.title} patch`}
+                aria-label={`${presentation.actionLabel === 'REMOVE' ? 'Remove' : 'Apply'} ${copy.title} patch`}
                 title={
                   state.launchCoolingDown
                     ? 'Wait for launch to finish.'
-                    : `${preferred ? 'Remove' : 'Apply'} patch`
+                    : `${presentation.actionLabel === 'REMOVE' ? 'Remove' : 'Apply'} patch`
                 }
-                onClick={() => void changePatch(patch.id, !preferred)}
+                onClick={() => void changePatch(patch.id, presentation.nextPreference)}
               >
-                {patchChanging ? '…' : preferred ? 'REMOVE' : 'APPLY'}
+                {patchChanging ? '…' : presentation.actionLabel}
               </button>
               <div className={styles.patchBody}>
                 <div className={styles.patchTitle}>{copy.title}</div>
@@ -2221,7 +2231,7 @@ function PatchesTab({
                   <p className={styles.patchResultError}>{resultError.message}</p>
                 )}
               </div>
-              <PatchEnabledCheck enabled={preferred} />
+              <PatchEnabledCheck enabled={presentation.enabled} />
             </article>
           );
         })}

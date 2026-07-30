@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GameClientDllStatusPanel,
   gameClientPatchPresentation,
-  iniPatchCardTone,
+  iniPatchCardPresentation,
   manualPatchErrorMessage,
   PatchEnabledCheck
 } from '../src/renderer/src/screens/Settings';
@@ -22,18 +22,46 @@ describe('manual patch feedback', () => {
   });
 });
 
-describe('INI patch card tone', () => {
-  it('uses a removed neutral card when the preference is off despite stale applied inspection', () => {
-    expect(iniPatchCardTone(false, true)).toBe('removed');
+describe('INI patch card presentation', () => {
+  it('uses green and Remove only while the preferred patch is verified', () => {
+    expect(iniPatchCardPresentation(true, true)).toEqual({
+      tone: 'applied',
+      enabled: true,
+      actionLabel: 'REMOVE',
+      nextPreference: false
+    });
   });
 
-  it('uses green only while the patch is enabled and verified', () => {
-    expect(iniPatchCardTone(true, true)).toBe('applied');
+  it('offers Apply when an enabled preference needs repair', () => {
+    expect(iniPatchCardPresentation(true, false)).toEqual({
+      tone: 'pending',
+      enabled: false,
+      actionLabel: 'APPLY',
+      nextPreference: true
+    });
+    expect(iniPatchCardPresentation(true, null)).toMatchObject({
+      tone: 'pending',
+      enabled: false,
+      actionLabel: 'APPLY'
+    });
   });
 
-  it('uses amber while an enabled patch is not verified', () => {
-    expect(iniPatchCardTone(true, false)).toBe('pending');
-    expect(iniPatchCardTone(true, null)).toBe('pending');
+  it('offers Remove when an installed patch remains after preference drift', () => {
+    expect(iniPatchCardPresentation(false, true)).toEqual({
+      tone: 'pending',
+      enabled: true,
+      actionLabel: 'REMOVE',
+      nextPreference: false
+    });
+  });
+
+  it('uses a neutral Apply state when the patch is disabled and absent', () => {
+    expect(iniPatchCardPresentation(false, false)).toEqual({
+      tone: 'removed',
+      enabled: false,
+      actionLabel: 'APPLY',
+      nextPreference: true
+    });
   });
 });
 

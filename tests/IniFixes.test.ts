@@ -272,6 +272,36 @@ describe('adaptive client performance INI patch', () => {
     })).toBe(original);
   });
 
+  it('recognizes the last effective network values when the game restores earlier defaults', async () => {
+    const effective =
+      '[Engine.Player]\n' +
+      'ConfiguredInternetSpeed=10000\n' +
+      'ConfiguredLanSpeed=20000\n' +
+      'ConfiguredInternetSpeed=50000\n' +
+      'ConfiguredLanSpeed=50000\n';
+    const { install } = await fixture(effective);
+
+    expect((await inspectClientPatches(install))[0]).toEqual({
+      id: 'high-fps-movement-stability',
+      applied: true
+    });
+  });
+
+  it('rejects the network patch when a later game value overrides it', async () => {
+    const overridden =
+      '[Engine.Player]\n' +
+      'ConfiguredInternetSpeed=50000\n' +
+      'ConfiguredLanSpeed=50000\n' +
+      'ConfiguredInternetSpeed=10000\n' +
+      'ConfiguredLanSpeed=20000\n';
+    const { install } = await fixture(overridden);
+
+    expect((await inspectClientPatches(install))[0]).toEqual({
+      id: 'high-fps-movement-stability',
+      applied: false
+    });
+  });
+
   it('removes a section added by the patch without leaving separator bytes behind', async () => {
     const original = '[Core.System]\r\nPaths=../System/*.u\r\n';
     const { install, userData } = await fixture(original);

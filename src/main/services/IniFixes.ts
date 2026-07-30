@@ -376,6 +376,13 @@ function effectiveSectionValues(text: string, sectionName: string, keyName: stri
   return values;
 }
 
+function hasEffectiveEnginePlayerPatch(text: string): boolean {
+  return NET_SPEED_KEYS.every((key) => {
+    const values = effectiveSectionValues(text, 'Engine.Player', key);
+    return Number(values.at(-1)) === CLIENT_NET_SPEED;
+  });
+}
+
 function verifyAdaptivePerformance(
   text: string,
   fileName: string,
@@ -829,9 +836,7 @@ export async function inspectClientPatches(
   ] as const) {
     try {
       const text = await readFile(path, { encoding: 'utf-8' });
-      try {
-        verifyEnginePlayerSection(text, basename(path));
-      } catch {
+      if (!hasEffectiveEnginePlayerPatch(text)) {
         networkApplied = false;
       }
       try {

@@ -23,9 +23,13 @@ import {
   validateServerSettings
 } from '@shared/serverProfiles';
 import { DEFAULT_UI_SCALE, isUiScale } from '@shared/uiScale';
+import {
+  DEFAULT_LINUX_COMMAND_TEMPLATE,
+  validateLinuxCommandTemplate
+} from '@shared/linuxCommandTemplate';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 15;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 16;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -254,6 +258,24 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 15: {
+        const linux = isPlainObject(settings.linux) ? settings.linux : {};
+        settings = {
+          ...settings,
+          schemaVersion: 16,
+          linux: {
+            ...linux,
+            commandTemplate:
+              typeof linux.commandTemplate === 'string' &&
+              validateLinuxCommandTemplate(linux.commandTemplate) === null
+                ? linux.commandTemplate
+                : DEFAULT_LINUX_COMMAND_TEMPLATE
+          }
+        };
+        version = 16;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -303,6 +325,7 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       umuPath: '',
       winePrefix: join(homedir(), '.local', 'share', 'commonwealth-ga', 'prefix'),
       gameMode: false,
+      commandTemplate: DEFAULT_LINUX_COMMAND_TEMPLATE,
       wineDebug: false
     },
     developer: {
@@ -526,6 +549,11 @@ function validateUpdatedFpsLimit(value: unknown): Settings['fpsLimit'] {
 
 function sanitizeStoredLinux(value: unknown, fallback: Settings['linux']): Settings['linux'] {
   if (!isPlainObject(value)) return structuredClone(fallback);
+  const commandTemplate =
+    typeof value.commandTemplate === 'string' &&
+    validateLinuxCommandTemplate(value.commandTemplate) === null
+      ? value.commandTemplate
+      : fallback.commandTemplate;
   return {
     runner: value.runner === 'wine' || value.runner === 'proton' ? value.runner : fallback.runner,
     winePath: typeof value.winePath === 'string' ? value.winePath : fallback.winePath,
@@ -533,6 +561,7 @@ function sanitizeStoredLinux(value: unknown, fallback: Settings['linux']): Setti
     umuPath: typeof value.umuPath === 'string' ? value.umuPath : fallback.umuPath,
     winePrefix: typeof value.winePrefix === 'string' ? value.winePrefix : fallback.winePrefix,
     gameMode: typeof value.gameMode === 'boolean' ? value.gameMode : fallback.gameMode,
+    commandTemplate,
     wineDebug: typeof value.wineDebug === 'boolean' ? value.wineDebug : fallback.wineDebug
   };
 }
@@ -547,6 +576,8 @@ function validateUpdatedLinux(value: unknown): Settings['linux'] {
   if (typeof value.gameMode !== 'boolean' || typeof value.wineDebug !== 'boolean') {
     throw new Error('Linux compatibility options are invalid.');
   }
+  const commandTemplateError = validateLinuxCommandTemplate(value.commandTemplate);
+  if (commandTemplateError) throw new Error(commandTemplateError);
   return {
     runner: value.runner,
     winePath: value.winePath as string,
@@ -554,6 +585,7 @@ function validateUpdatedLinux(value: unknown): Settings['linux'] {
     umuPath: value.umuPath as string,
     winePrefix: value.winePrefix as string,
     gameMode: value.gameMode,
+    commandTemplate: value.commandTemplate as string,
     wineDebug: value.wineDebug
   };
 }

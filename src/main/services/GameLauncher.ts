@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
+import { accessSync, constants, statSync } from 'fs';
+import { delimiter, isAbsolute, join, resolve } from 'path';
+import { expandLinuxCommandTemplate } from '@shared/linuxCommandTemplate';
 import type { Settings } from '@shared/types';
 import type { Log } from './Log';
 import type { LinuxRuntimeInspection } from './LinuxRuntime';
@@ -9,10 +12,43 @@ export interface LinuxLaunchCommand {
   env: NodeJS.ProcessEnv;
 }
 
+function isExecutableFile(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function assertLinuxWrapperExecutable(
+  command: string,
+  baseCommand: string,
+  environment: NodeJS.ProcessEnv,
+  cwd: string
+): void {
+  if (command === baseCommand) return;
+
+  const hasPathSeparator = command.includes('/') || command.includes('\\');
+  const candidates = hasPathSeparator
+    ? [isAbsolute(command) ? command : resolve(cwd, command)]
+    : (environment.PATH ?? '')
+        .split(delimiter)
+        .map((entry) =>
+          join(entry && isAbsolute(entry) ? entry : resolve(cwd, entry || '.'), command)
+        );
+  if (candidates.some(isExecutableFile)) return;
+  throw new Error(
+    `Linux command wrapper executable was not found or is not executable: ${command}`
+  );
+}
+
 export function buildLinuxLaunchCommand(
   settings: Settings,
   runtime: LinuxRuntimeInspection,
-  gameArgs: string[]
+  gameArgs: string[],
+  inheritedEnvironment: NodeJS.ProcessEnv = process.env,
+  launchEnvironment: NodeJS.ProcessEnv = {}
 ): LinuxLaunchCommand {
   const env: NodeJS.ProcessEnv = { WINEPREFIX: runtime.prefixPath };
   let command: string;
@@ -34,7 +70,13 @@ export function buildLinuxLaunchCommand(
     args = [command, ...args];
     command = runtime.gameModePath;
   }
-  return { command, args, env };
+  const wrapped = expandLinuxCommandTemplate(
+    settings.linux.commandTemplate,
+    command,
+    args,
+    { ...inheritedEnvironment, ...env, ...launchEnvironment }
+  );
+  return { ...wrapped, env };
 }
 
 /**
@@ -75,6 +117,7 @@ export class GameLauncher {
    *  - Linux/Wine: spawn <wine> <exePath> with the resolved prefix.
    *  - Linux/Proton: spawn <umu-run> <exePath> with WINEPREFIX and PROTONPATH.
    *    Optional GameMode wraps either runner without changing its arguments.
+   *    The saved command template can then wrap that final command without invoking a shell.
    *    Wine receives the dinput8 override only after a managed or local DLL passes preparation,
    *    without changing the user's prefix configuration globally.
    *    The exe path stays NATIVE — Wine maps it via the Z: drive; no winepath translation.
@@ -109,7 +152,21 @@ export class GameLauncher {
       if (settings.linux.gameMode && !linuxRuntime.gameModePath) {
         this.log.warn('GameMode was requested but gamemoderun is unavailable; launching without it');
       }
-      const launch = buildLinuxLaunchCommand(settings, linuxRuntime, args);
+      const launch = buildLinuxLaunchCommand(
+        settings,
+        linuxRuntime,
+        args,
+        process.env,
+        launchEnvironment
+      );
+      const baseCommand =
+        settings.linux.gameMode && linuxRuntime.gameModePath
+          ? linuxRuntime.gameModePath
+          : settings.linux.runner === 'proton'
+            ? linuxRuntime.umuPath
+            : linuxRuntime.winePath;
+      const environment = { ...process.env, ...launch.env, ...launchEnvironment };
+      assertLinuxWrapperExecutable(launch.command, baseCommand, environment, binariesDir);
       this.log.info(
         `launching ${settings.gameExePath} with ${settings.linux.runner} ` +
           `(prefix ${linuxRuntime.prefixPath}, GameMode=${settings.linux.gameMode && !!linuxRuntime.gameModePath}) ` +
@@ -117,7 +174,7 @@ export class GameLauncher {
       );
       child = spawn(launch.command, launch.args, {
         cwd: binariesDir,
-        env: { ...process.env, ...launch.env, ...launchEnvironment },
+        env: environment,
         detached: !settings.linux.wineDebug,
         stdio: settings.linux.wineDebug ? ['ignore', 'pipe', 'pipe'] : 'ignore'
       });

@@ -13,6 +13,12 @@ import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import {
+  GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE,
+  LINUX_COMMAND_PLACEHOLDER,
+  MAX_LINUX_COMMAND_TEMPLATE_LENGTH,
+  validateLinuxCommandTemplate
+} from '@shared/linuxCommandTemplate';
+import {
   MAX_GAME_PROFILES,
   MAX_GAME_PROFILE_NAME_LENGTH,
   normalizeGameProfileName,
@@ -164,6 +170,13 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       setSaveError(
         `FPS limit must be a whole number from ${MIN_FPS_LIMIT} to ${MAX_FPS_LIMIT}.`
       );
+      return false;
+    }
+    const linuxCommandTemplateError = validateLinuxCommandTemplate(
+      draft.linux.commandTemplate
+    );
+    if (linuxCommandTemplateError) {
+      setSaveError(linuxCommandTemplateError);
       return false;
     }
     const validationError = validateServerSettings(
@@ -540,6 +553,9 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
         ? 'valid install'
         : 'invalid install';
   const gamePathIsValid = pathMatchesValidation && state.gamePathValid;
+  const linuxCommandTemplateError = validateLinuxCommandTemplate(
+    draft.linux.commandTemplate
+  );
 
   return (
     <div className={styles.settings}>
@@ -799,6 +815,71 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                         : 'Optional. Feral GameMode was not detected; install it to let Linux temporarily prioritize the game while it runs.'}
                     </span>
                   </label>
+                </div>
+
+                <div className={`${styles.fieldRow} ${styles.commandWrapper}`}>
+                  <div className={styles.commandWrapperHeading}>
+                    <label htmlFor="linux-command-wrapper">Command Wrapper</label>
+                    <span>advanced · Linux only</span>
+                  </div>
+                  <input
+                    id="linux-command-wrapper"
+                    className={styles.commandWrapperInput}
+                    type="text"
+                    value={draft.linux.commandTemplate}
+                    maxLength={MAX_LINUX_COMMAND_TEMPLATE_LENGTH}
+                    spellCheck={false}
+                    aria-invalid={linuxCommandTemplateError !== null}
+                    aria-describedby={
+                      linuxCommandTemplateError
+                        ? 'linux-command-wrapper-help linux-command-wrapper-error'
+                        : 'linux-command-wrapper-help'
+                    }
+                    onChange={(event) =>
+                      edit((d) => ({
+                        ...d,
+                        linux: { ...d.linux, commandTemplate: event.target.value }
+                      }))
+                    }
+                  />
+                  <div id="linux-command-wrapper-help" className={styles.commandWrapperHelp}>
+                    <span>
+                      Put exactly one standalone{' '}
+                      <code>{LINUX_COMMAND_PLACEHOLDER}</code> where the launcher-managed
+                      Wine or UMU command should run.
+                    </span>
+                    <span>
+                      Arguments and quoted paths are supported. Shell operators are not.
+                      Use <code>env KEY=value</code> to set child variables; Linux variables
+                      such as <code>$HOME</code> are expanded. GameMode is already inside{' '}
+                      <code>{LINUX_COMMAND_PLACEHOLDER}</code> when enabled above.
+                    </span>
+                  </div>
+                  <div className={styles.commandWrapperExample}>
+                    <div>
+                      <span>Gamescope ultrawide example</span>
+                      <code>{GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE}</code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        edit((d) => ({
+                          ...d,
+                          linux: {
+                            ...d.linux,
+                            commandTemplate: GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE
+                          }
+                        }))
+                      }
+                    >
+                      Use Example
+                    </button>
+                  </div>
+                  {linuxCommandTemplateError && (
+                    <span id="linux-command-wrapper-error" className={styles.invalid}>
+                      {linuxCommandTemplateError}
+                    </span>
+                  )}
                 </div>
 
                 <div className={styles.checkRow}>

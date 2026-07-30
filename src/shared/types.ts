@@ -139,6 +139,8 @@ export interface Settings {
     umuPath: string;
     winePrefix: string;
     gameMode: boolean;
+    /** Shell-free Linux argv template containing exactly one standalone %command%. */
+    commandTemplate: string;
     wineDebug: boolean;
   };
   developer: {

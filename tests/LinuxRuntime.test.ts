@@ -29,6 +29,7 @@ function settings(): Settings {
       umuPath: '',
       winePrefix: '',
       gameMode: false,
+      commandTemplate: '%command%',
       wineDebug: false
     }
   } as Settings;

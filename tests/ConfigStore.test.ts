@@ -155,6 +155,47 @@ describe('DXVK/Vulkan settings migration', () => {
       surfsideAtollPvpMaps: true
     });
   });
+
+  it('adds the default Linux command wrapper when schema 15 settings are upgraded', () => {
+    const current = defaultSettings();
+    const { commandTemplate: _removedCommandTemplate, ...previousLinux } = current.linux;
+    const schema15 = {
+      ...current,
+      schemaVersion: 15,
+      linux: previousLinux
+    };
+
+    expect(migrateStoredSettings(schema15).settings).toMatchObject({
+      schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+      linux: {
+        ...previousLinux,
+        commandTemplate: '%command%'
+      }
+    });
+  });
+
+  it('defaults the Linux command wrapper to the managed game command', () => {
+    expect(defaultSettings().linux.commandTemplate).toBe('%command%');
+  });
+
+  it('preserves a valid pre-release wrapper while upgrading schema 15', () => {
+    const current = defaultSettings();
+    const schema15 = {
+      ...current,
+      schemaVersion: 15,
+      linux: {
+        ...current.linux,
+        commandTemplate: 'taskset -c 0,1 %command%'
+      }
+    };
+
+    expect(migrateStoredSettings(schema15).settings).toMatchObject({
+      schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+      linux: {
+        commandTemplate: 'taskset -c 0,1 %command%'
+      }
+    });
+  });
 });
 
 describe('launcher settings reset', () => {
@@ -247,6 +288,55 @@ describe('game patch settings', () => {
       developer: {
         enabled: false,
         useLocalClientDll: false
+      }
+    });
+  });
+});
+
+describe('Linux command wrapper settings', () => {
+  it('rejects an invalid command wrapper update', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'commonwealth-config-wrapper-'));
+    roots.push(root);
+    const defaults = defaultSettings();
+    const store = new ConfigStore(root, defaults, {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as never);
+
+    await store.load();
+    await expect(
+      store.update({ linux: { commandTemplate: 'gamescope --' } })
+    ).rejects.toThrow('exactly one standalone %command%');
+  });
+
+  it('repairs only an invalid stored command wrapper', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'commonwealth-config-wrapper-load-'));
+    roots.push(root);
+    const defaults = defaultSettings();
+    const file = join(root, 'settings.json');
+    await writeFile(
+      file,
+      JSON.stringify({
+        ...defaults,
+        gameExePath: '/games/GlobalAgenda.exe',
+        linux: {
+          ...defaults.linux,
+          commandTemplate: 'gamescope %command% | other-command'
+        }
+      }),
+      { encoding: 'utf-8' }
+    );
+    const store = new ConfigStore(root, defaults, {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    } as never);
+
+    await expect(store.load()).resolves.toMatchObject({
+      gameExePath: '/games/GlobalAgenda.exe',
+      linux: {
+        commandTemplate: '%command%'
       }
     });
   });

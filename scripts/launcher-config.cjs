@@ -36,7 +36,12 @@ const CONFIG_KEYS = new Set([
   'surfside_atoll_dlc_beachhead2_package_size',
   'surfside_atoll_dlc_beachhead2_package_sha256',
   'surfside_atoll_dlc_beachhead2_sound_size',
-  'surfside_atoll_dlc_beachhead2_sound_sha256'
+  'surfside_atoll_dlc_beachhead2_sound_sha256',
+  'carbon_capture_dlc_url',
+  'carbon_capture_dlc_archive_size',
+  'carbon_capture_dlc_archive_sha256',
+  'carbon_capture_dlc_map_size',
+  'carbon_capture_dlc_map_sha256'
 ]);
 
 function parseQuotedString(value, lineNumber) {
@@ -156,6 +161,26 @@ function parseByteSize(value, key, maximum) {
     throw new Error(`${key} must not exceed ${maximum} bytes`);
   }
   return size;
+}
+
+function parseDirectZipUrl(value, key) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${key} must be a valid URL`);
+  }
+  if (
+    url.protocol !== 'https:' ||
+    !url.pathname.endsWith('.zip') ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error(`${key} must be a direct HTTPS ZIP URL`);
+  }
+  return url;
 }
 
 function loadLauncherConfig(options = {}) {
@@ -323,22 +348,10 @@ function loadLauncherConfig(options = {}) {
     assertSha256(raw.client_patch_sha256, 'client_patch_sha256');
   }
 
-  let surfsideAtollDlcUrl;
-  try {
-    surfsideAtollDlcUrl = new URL(raw.surfside_atoll_dlc_url);
-  } catch {
-    throw new Error('surfside_atoll_dlc_url must be a valid URL');
-  }
-  if (
-    surfsideAtollDlcUrl.protocol !== 'https:' ||
-    !surfsideAtollDlcUrl.pathname.endsWith('.zip') ||
-    surfsideAtollDlcUrl.search ||
-    surfsideAtollDlcUrl.hash ||
-    surfsideAtollDlcUrl.username ||
-    surfsideAtollDlcUrl.password
-  ) {
-    throw new Error('surfside_atoll_dlc_url must be a direct HTTPS ZIP URL');
-  }
+  const surfsideAtollDlcUrl = parseDirectZipUrl(
+    raw.surfside_atoll_dlc_url,
+    'surfside_atoll_dlc_url'
+  );
   const surfsideAtollArchiveSize = parseByteSize(
     raw.surfside_atoll_dlc_archive_size,
     'surfside_atoll_dlc_archive_size',
@@ -391,6 +404,30 @@ function loadLauncherConfig(options = {}) {
     assertSha256(file.sha256, `surfside_atoll_dlc file ${index + 1} SHA-256`);
   }
 
+  const carbonCaptureDlcUrl = parseDirectZipUrl(
+    raw.carbon_capture_dlc_url,
+    'carbon_capture_dlc_url'
+  );
+  const carbonCaptureArchiveSize = parseByteSize(
+    raw.carbon_capture_dlc_archive_size,
+    'carbon_capture_dlc_archive_size',
+    512 * 1024 * 1024
+  );
+  assertSha256(raw.carbon_capture_dlc_archive_sha256, 'carbon_capture_dlc_archive_sha256');
+  const carbonCaptureFiles = [
+    {
+      archivePath: 'Maps/Rot_10v10_Carbon_Capture1/Rot_10v10_Carbon_Capture1.ut3',
+      targetPath: 'Rot_10v10_Carbon_Capture1/Rot_10v10_Carbon_Capture1.ut3',
+      size: parseByteSize(
+        raw.carbon_capture_dlc_map_size,
+        'carbon_capture_dlc_map_size',
+        256 * 1024 * 1024
+      ),
+      sha256: raw.carbon_capture_dlc_map_sha256
+    }
+  ];
+  assertSha256(carbonCaptureFiles[0].sha256, 'carbon_capture_dlc map SHA-256');
+
   assertBranch(raw.server_history_branch, 'server_history_branch');
   const serverHistoryCount = Number.parseInt(raw.server_history_count, 10);
   if (!/^\d+$/.test(raw.server_history_count) || serverHistoryCount < 1 || serverHistoryCount > 10) {
@@ -436,10 +473,24 @@ function loadLauncherConfig(options = {}) {
       {
         id: 'surfside-atoll-pvp-maps',
         name: 'Surfside-Atoll PvP Maps',
+        mapCount: 2,
+        description:
+          'Adds Surfside and Atoll as two additional PvP maps. Install or remove the pack independently without changing the base game files around it.',
         url: surfsideAtollDlcUrl.toString(),
         archiveSize: surfsideAtollArchiveSize,
         archiveSha256: raw.surfside_atoll_dlc_archive_sha256,
         files: surfsideAtollFiles
+      },
+      {
+        id: 'carbon-capture',
+        name: 'Carbon Capture PvP Map',
+        mapCount: 1,
+        description:
+          'Adds Carbon Capture as an additional PvP map. Install or remove it independently without changing the base game files around it.',
+        url: carbonCaptureDlcUrl.toString(),
+        archiveSize: carbonCaptureArchiveSize,
+        archiveSha256: raw.carbon_capture_dlc_archive_sha256,
+        files: carbonCaptureFiles
       }
     ]
   };

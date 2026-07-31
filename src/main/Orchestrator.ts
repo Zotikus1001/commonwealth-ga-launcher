@@ -1,17 +1,19 @@
 import { app } from 'electron';
 import type { ChildProcess } from 'child_process';
-import type {
-  ActionResult,
-  ClientPatchId,
-  DlcId,
-  DlcStatus,
-  GameClientDllState,
-  LauncherState,
-  LauncherUpdateStatus,
-  ServerChoice,
-  Settings,
-  UpdateProgress
+import {
+  DLC_SETTING_KEY_BY_ID,
+  type ActionResult,
+  type ClientPatchId,
+  type DlcId,
+  type DlcStatus,
+  type GameClientDllState,
+  type LauncherState,
+  type LauncherUpdateStatus,
+  type ServerChoice,
+  type Settings,
+  type UpdateProgress
 } from '@shared/types';
+import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
@@ -59,8 +61,6 @@ const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
 const LAUNCH_COOLDOWN_MS = 5_000;
 const GAME_PROCESS_REFRESH_MS = 3_000;
-const SURFSIDE_ATOLL_DLC_ID: DlcId = 'surfside-atoll-pvp-maps';
-
 function sameGameExecutable(left: string, right: string): boolean {
   return left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase();
 }
@@ -75,6 +75,12 @@ interface ServerSelection {
 interface CandidateProbeResult {
   host: string;
   status: ServerProbeStatus;
+}
+
+function enabledDlcDefinitions(settings: Settings) {
+  return LAUNCHER_CONFIG.dlcs.filter(
+    (definition) => settings.dlcs[DLC_SETTING_KEY_BY_ID[definition.id]]
+  );
 }
 
 /** Owns launcher state and keeps the renderer as a pure state consumer. */
@@ -495,7 +501,7 @@ export class Orchestrator {
     ]);
     this.install = install;
     this.linuxRuntime = linuxRuntime;
-    let dlcPreparationError: string | null = null;
+    const dlcPreparationErrors = new Map<DlcId, string>();
     if (linuxRuntime?.suggestedPrefixPath) {
       settings = await this.config.update({
         linux: { winePrefix: linuxRuntime.suggestedPrefixPath }
@@ -508,13 +514,14 @@ export class Orchestrator {
       !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
     ) {
       await this.applyEnabledIniPatchesForInstall(install, settings);
-      if (settings.dlcs.surfsideAtollPvpMaps) {
-        this.patch({ statusLine: 'Checking Surfside-Atoll PvP Maps…' });
+      for (const definition of enabledDlcDefinitions(settings)) {
+        this.patch({ statusLine: `Checking ${definition.name}…` });
         try {
-          this.patchDlcStatus(await this.ensureDlcInstalled(install, SURFSIDE_ATOLL_DLC_ID));
+          this.patchDlcStatus(await this.ensureDlcInstalled(install, definition.id));
         } catch (error) {
-          dlcPreparationError = (error as Error).message;
-          this.log.warn(`automatic Surfside-Atoll DLC install failed: ${dlcPreparationError}`);
+          const message = error instanceof Error ? error.message : String(error);
+          dlcPreparationErrors.set(definition.id, message);
+          this.log.warn(`automatic ${definition.name} install failed: ${message}`);
         }
       }
       this.patchesPreparedGameExePath = install.exePath;
@@ -537,10 +544,10 @@ export class Orchestrator {
       gameClientDll = inspectedGameClientDll;
       dxvk = inspectedDxvk;
       dlcs = inspectedDlcs;
-      if (dlcPreparationError) {
+      if (dlcPreparationErrors.size > 0) {
         dlcs = dlcs.map((dlc) =>
-          dlc.id === SURFSIDE_ATOLL_DLC_ID
-            ? failedDlcStatus(dlc.id, dlcPreparationError!)
+          dlcPreparationErrors.has(dlc.id)
+            ? failedDlcStatus(dlc.id, dlcPreparationErrors.get(dlc.id)!)
             : dlc
         );
       }
@@ -788,20 +795,18 @@ export class Orchestrator {
           (candidate) => candidate.toLowerCase() === this.state.resolvedHost.toLowerCase()
         ) ?? selection.host;
 
-      if (settings.dlcs.surfsideAtollPvpMaps) {
+      for (const definition of enabledDlcDefinitions(settings)) {
         this.patch({
           phase: 'checking',
-          statusLine: 'Checking Surfside-Atoll PvP Maps…',
+          statusLine: `Checking ${definition.name}…`,
           errorDetails: null
         });
         try {
-          this.patchDlcStatus(
-            await this.ensureDlcInstalled(this.install, SURFSIDE_ATOLL_DLC_ID)
-          );
+          this.patchDlcStatus(await this.ensureDlcInstalled(this.install, definition.id));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this.log.warn(`Surfside-Atoll DLC unavailable; continuing launch: ${message}`);
-          this.patchDlcStatus(failedDlcStatus(SURFSIDE_ATOLL_DLC_ID, message));
+          this.log.warn(`${definition.name} unavailable; continuing launch: ${message}`);
+          this.patchDlcStatus(failedDlcStatus(definition.id, message));
         }
       }
 

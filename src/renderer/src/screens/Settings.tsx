@@ -1,13 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import type {
-  ActionResult,
-  ClientPatchStatus,
-  DlcId,
-  DlcStatus,
-  GameProfileSummary,
-  LauncherState,
-  LinuxRuntimeOptions,
-  Settings as SettingsModel,
+import {
+  DLC_SETTING_KEY_BY_ID,
+  type ActionResult,
+  type ClientPatchStatus,
+  type DlcId,
+  type DlcStatus,
+  type GameProfileSummary,
+  type LauncherState,
+  type LinuxRuntimeOptions,
+  type Settings as SettingsModel
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
@@ -429,10 +430,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
   const saveDlc = async (id: DlcId, enabled: boolean): Promise<void> => {
     if (!draft || dlcSaving) return;
-    const previous = draft.dlcs.surfsideAtollPvpMaps;
+    const settingKey = DLC_SETTING_KEY_BY_ID[id];
+    const previous = draft.dlcs[settingKey];
     setDraft((current) =>
       current
-        ? { ...current, dlcs: { ...current.dlcs, surfsideAtollPvpMaps: enabled } }
+        ? { ...current, dlcs: { ...current.dlcs, [settingKey]: enabled } }
         : current
     );
     setDlcSaving(id);
@@ -445,7 +447,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               ...current,
               dlcs: {
                 ...current.dlcs,
-                surfsideAtollPvpMaps: updated.dlcs.surfsideAtollPvpMaps
+                [settingKey]: updated.dlcs[settingKey]
               }
             }
           : current
@@ -453,7 +455,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     } catch (error) {
       setDraft((current) =>
         current
-          ? { ...current, dlcs: { ...current.dlcs, surfsideAtollPvpMaps: previous } }
+          ? { ...current, dlcs: { ...current.dlcs, [settingKey]: previous } }
           : current
       );
       setDlcError({
@@ -2437,7 +2439,7 @@ function DlcsTab({
       <div className={styles.patchList}>
         {state.dlcs.map((dlc) => {
           const definition = LAUNCHER_CONFIG.dlcs.find((candidate) => candidate.id === dlc.id);
-          const preferred = settings.dlcs.surfsideAtollPvpMaps;
+          const preferred = settings.dlcs[DLC_SETTING_KEY_BY_ID[dlc.id]];
           const presentation = dlcCardPresentation(preferred, dlc.status);
           const tone =
             presentation.tone === 'installed'
@@ -2492,12 +2494,14 @@ function DlcsTab({
                     <div className={styles.patchTitle}>{dlc.name}</div>
                   </div>
                   <span className={styles.dlcFileCount}>
-                    02 maps · {dlc.totalFiles.toString().padStart(2, '0')} files
+                    {(definition?.mapCount ?? 0).toString().padStart(2, '0')}{' '}
+                    {definition?.mapCount === 1 ? 'map' : 'maps'} ·{' '}
+                    {dlc.totalFiles.toString().padStart(2, '0')}{' '}
+                    {dlc.totalFiles === 1 ? 'file' : 'files'}
                   </span>
                 </div>
                 <p className={styles.patchDescription}>
-                  Adds Surfside and Atoll as two additional PvP maps. Install or remove the pack
-                  independently without changing the base game files around it.
+                  {definition?.description ?? 'Additional verified game content.'}
                 </p>
 
                 <div

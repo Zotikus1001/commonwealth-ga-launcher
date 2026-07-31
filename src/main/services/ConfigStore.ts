@@ -29,7 +29,7 @@ import {
 } from '@shared/linuxCommandTemplate';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 16;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 17;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -276,6 +276,21 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 16: {
+        const dlcs = isPlainObject(settings.dlcs) ? settings.dlcs : {};
+        settings = {
+          ...settings,
+          schemaVersion: 17,
+          dlcs: {
+            ...dlcs,
+            carbonCapture:
+              typeof dlcs.carbonCapture === 'boolean' ? dlcs.carbonCapture : true
+          }
+        };
+        version = 17;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -304,7 +319,8 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       adaptiveClientPerformance: true
     },
     dlcs: {
-      surfsideAtollPvpMaps: true
+      surfsideAtollPvpMaps: true,
+      carbonCapture: true
     },
     servers: {
       builtInName,
@@ -516,16 +532,25 @@ function sanitizeStoredDlcs(value: unknown, fallback: Settings['dlcs']): Setting
     surfsideAtollPvpMaps:
       typeof value.surfsideAtollPvpMaps === 'boolean'
         ? value.surfsideAtollPvpMaps
-        : fallback.surfsideAtollPvpMaps
+        : fallback.surfsideAtollPvpMaps,
+    carbonCapture:
+      typeof value.carbonCapture === 'boolean'
+        ? value.carbonCapture
+        : fallback.carbonCapture
   };
 }
 
 function validateUpdatedDlcs(value: unknown): Settings['dlcs'] {
-  if (!isPlainObject(value) || typeof value.surfsideAtollPvpMaps !== 'boolean') {
+  if (
+    !isPlainObject(value) ||
+    typeof value.surfsideAtollPvpMaps !== 'boolean' ||
+    typeof value.carbonCapture !== 'boolean'
+  ) {
     throw new Error('DLC settings are invalid.');
   }
   return {
-    surfsideAtollPvpMaps: value.surfsideAtollPvpMaps
+    surfsideAtollPvpMaps: value.surfsideAtollPvpMaps,
+    carbonCapture: value.carbonCapture
   };
 }
 

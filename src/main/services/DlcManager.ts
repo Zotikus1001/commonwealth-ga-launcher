@@ -360,7 +360,10 @@ function statusFromInspection(
       id: definition.id,
       name: definition.name,
       status: 'installed',
-      detail: `All ${total} verified map files are installed.`,
+      detail:
+        total === 1
+          ? 'The verified map file is installed.'
+          : `All ${total} verified map files are installed.`,
       installedFiles: exact,
       totalFiles: total
     };
@@ -370,7 +373,7 @@ function statusFromInspection(
       id: definition.id,
       name: definition.name,
       status: 'missing',
-      detail: 'The map files are not installed.',
+      detail: total === 1 ? 'The map file is not installed.' : 'The map files are not installed.',
       installedFiles: 0,
       totalFiles: total
     };
@@ -606,7 +609,20 @@ export class DlcManager {
     private readonly definitions: readonly DlcDefinition[] = LAUNCHER_CONFIG.dlcs,
     private readonly downloader: Downloader = downloadToFile
   ) {
-    for (const definition of definitions) validateDefinition(definition);
+    const ids = new Set<DlcId>();
+    const targetPaths = new Set<string>();
+    for (const definition of definitions) {
+      validateDefinition(definition);
+      if (ids.has(definition.id)) throw new Error(`Duplicate DLC definition: ${definition.id}`);
+      ids.add(definition.id);
+      for (const file of definition.files) {
+        const targetPath = file.targetPath.toLowerCase();
+        if (targetPaths.has(targetPath)) {
+          throw new Error(`DLC definitions share target path ${file.targetPath}.`);
+        }
+        targetPaths.add(targetPath);
+      }
+    }
   }
 
   private definition(id: DlcId): DlcDefinition {
@@ -758,7 +774,10 @@ export class DlcManager {
         throw new Error('The DLC could not be verified after installation.');
       }
       await this.writeMarker(install, definition);
-      this.log.info(`${definition.name}: installed ${definition.files.length} verified map files`);
+      this.log.info(
+        `${definition.name}: installed ${definition.files.length} verified map ` +
+          `file${definition.files.length === 1 ? '' : 's'}`
+      );
       return statusFromInspection(definition, installed);
     } catch (error) {
       for (const file of published) {

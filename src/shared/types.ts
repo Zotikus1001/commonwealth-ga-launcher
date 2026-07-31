@@ -47,10 +47,23 @@ export interface PatchSettings {
   adaptiveClientPerformance: boolean;
 }
 
-export type DlcId = 'surfside-atoll-pvp-maps';
+export type DlcId = 'surfside-atoll-pvp-maps' | 'carbon-capture';
 
 export interface DlcSettings {
   surfsideAtollPvpMaps: boolean;
+  carbonCapture: boolean;
+}
+
+export const DLC_SETTING_KEY_BY_ID: Readonly<Record<DlcId, keyof DlcSettings>> = {
+  'surfside-atoll-pvp-maps': 'surfsideAtollPvpMaps',
+  'carbon-capture': 'carbonCapture'
+};
+
+export function isDlcId(value: unknown): value is DlcId {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(DLC_SETTING_KEY_BY_ID, value)
+  );
 }
 
 export type DlcInstallStatus =

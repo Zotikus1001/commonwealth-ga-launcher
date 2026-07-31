@@ -38,7 +38,8 @@ The launcher updates itself automatically.
   UI preferences
 - Game patches enabled by default, with one-click Apply and Remove controls
 - A Game Client Patch that fixes scope-transition stutters
-- Optional Surfside-Atoll PvP maps with one-click install, repair, and removal
+- Optional Surfside-Atoll and Carbon Capture PvP map DLCs with one-click install, repair, and
+  removal
 - Useful game options
 - A player Info and FAQ guide for performance, graphics stability, and account setup
 - Agenda Stats and Discord access

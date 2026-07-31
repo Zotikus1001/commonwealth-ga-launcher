@@ -7,6 +7,9 @@ server.
 
 ## Download and Install
 
+For a fresh game installation, start Global Agenda normally once and close it after the login
+screen appears. This creates the configuration files the launcher manages.
+
 ### Windows
 
 **[Download the latest Windows installer](../../releases/latest/download/Commonwealth-GA-Launcher-Windows-x64-Setup.exe)**

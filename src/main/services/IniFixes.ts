@@ -16,6 +16,9 @@ import { FALLBACK_TEXTURE_POOL_MB, MAX_TEXTURE_POOL_MB } from './GpuMemory';
 export const CLIENT_NET_SPEED = 50_000;
 type IniLog = Pick<Log, 'info' | 'warn' | 'error'>;
 
+const MISSING_GAME_CONFIG_MESSAGE =
+  'Global Agenda has not created its configuration files yet. Launch the game normally once ' +
+  'outside this launcher, close it after the login screen appears, then try again.';
 const NET_SPEED_KEYS = ['ConfiguredInternetSpeed', 'ConfiguredLanSpeed'] as const;
 type NetSpeedKey = (typeof NET_SPEED_KEYS)[number];
 const LOGIN_MAP_KEYS = ['Map', 'LocalMap'] as const;
@@ -1478,7 +1481,9 @@ async function applyIniEdits(
         log.warn(`client ini: ${basename(path)} is absent; active config will still be repaired`);
         continue;
       }
-      throw new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
+      throw (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? new Error(MISSING_GAME_CONFIG_MESSAGE)
+        : new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
     }
 
     try {
@@ -1601,7 +1606,9 @@ export async function removeClientPatch(
       await access(path, constants.R_OK | constants.W_OK);
     } catch (error) {
       if (!required && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
+      throw (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? new Error(MISSING_GAME_CONFIG_MESSAGE)
+        : new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
     }
 
     try {

@@ -2371,7 +2371,7 @@ export function dlcCardPresentation(
 ): {
   tone: DlcCardTone;
   enabled: boolean;
-  actionLabel: 'APPLY' | 'REMOVE';
+  actionLabel: 'INSTALL' | 'REMOVE';
   nextPreference: boolean;
   actionDisabled: boolean;
   statusLabel: string;
@@ -2384,6 +2384,7 @@ export function dlcCardPresentation(
     installed: 'INSTALLED // VERIFIED',
     modified: 'FILE CONFLICT',
     installing: 'INSTALLING',
+    removing: 'REMOVING',
     error: 'DLC ERROR'
   };
   return {
@@ -2392,16 +2393,61 @@ export function dlcCardPresentation(
         ? 'installed'
         : status === 'modified' || status === 'error'
           ? 'problem'
-          : preferred && status !== 'unavailable'
+          : status === 'installing' ||
+              status === 'removing' ||
+              (preferred && status !== 'unavailable')
             ? 'pending'
             : 'idle',
     enabled,
-    actionLabel: enabled ? 'REMOVE' : 'APPLY',
+    actionLabel: enabled ? 'REMOVE' : 'INSTALL',
     nextPreference: !enabled,
     actionDisabled:
-      status === 'unavailable' || status === 'installing' || status === 'modified',
+      status === 'unavailable' ||
+      status === 'installing' ||
+      status === 'removing' ||
+      status === 'modified',
     statusLabel: statusLabel[status]
   };
+}
+
+export function DlcOperationProgress({
+  status,
+  progressPhase,
+  progressPercent
+}: Pick<DlcStatus, 'status' | 'progressPhase' | 'progressPercent'>): JSX.Element | null {
+  if (status !== 'installing' && status !== 'removing') return null;
+  const determinate = typeof progressPercent === 'number' && progressPercent >= 0;
+  const percent = determinate
+    ? Math.min(100, Math.max(0, Math.round(progressPercent)))
+    : -1;
+  const operation =
+    progressPhase === 'download'
+      ? 'Downloading DLC'
+      : status === 'removing'
+        ? 'Removing DLC'
+        : 'Installing DLC';
+  return (
+    <div className={styles.dlcProgress}>
+      <div
+        className={styles.dlcProgressTrack}
+        role="progressbar"
+        aria-label={operation}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={determinate ? percent : undefined}
+      >
+        <span
+          className={`${styles.dlcProgressFill} ${
+            determinate ? '' : styles.dlcProgressIndeterminate
+          }`}
+          style={determinate ? { width: `${percent}%` } : undefined}
+        />
+      </div>
+      <span className={styles.dlcProgressLabel}>
+        {determinate ? `${percent}%` : 'WORKING'}
+      </span>
+    </div>
+  );
 }
 
 export function DlcEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element | null {
@@ -2529,6 +2575,15 @@ function DlcsTab({
           const definition = LAUNCHER_CONFIG.dlcs.find((candidate) => candidate.id === dlc.id);
           const preferred = settings.dlcs[DLC_SETTING_KEY_BY_ID[dlc.id]];
           const presentation = dlcCardPresentation(preferred, dlc.status);
+          const operationBusy = dlc.status === 'installing' || dlc.status === 'removing';
+          const operationStatusLabel =
+            dlc.progressPhase === 'download'
+              ? 'DOWNLOADING'
+              : dlc.progressPhase === 'install'
+                ? 'INSTALLING'
+                : dlc.progressPhase === 'remove'
+                  ? 'REMOVING'
+                  : presentation.statusLabel;
           const tone =
             presentation.tone === 'installed'
               ? styles.patchApplied
@@ -2564,7 +2619,7 @@ function DlcsTab({
             <article
               key={dlc.id}
               className={`${styles.patchCard} ${styles.dlcCard} ${tone}`}
-              aria-busy={saving === dlc.id || dlc.status === 'installing'}
+              aria-busy={saving === dlc.id || operationBusy}
             >
               <button
                 className={`${styles.patchIcon} ${styles.patchApplyButton} ${
@@ -2575,7 +2630,7 @@ function DlcsTab({
                 title={actionTitle}
                 onClick={() => onChange(dlc.id, presentation.nextPreference)}
               >
-                {saving === dlc.id || dlc.status === 'installing'
+                {saving === dlc.id || operationBusy
                   ? '…'
                   : presentation.actionLabel}
               </button>
@@ -2611,12 +2666,17 @@ function DlcsTab({
                   }`}
                 >
                   <div className={styles.dlcStatusReadout}>
-                    <span>{presentation.statusLabel}</span>
+                    <span>{operationStatusLabel}</span>
                     <strong>
                       {dlc.installedFiles}/{dlc.totalFiles}
                     </strong>
                   </div>
                   <p>{dlc.detail}</p>
+                  <DlcOperationProgress
+                    status={dlc.status}
+                    progressPhase={dlc.progressPhase}
+                    progressPercent={dlc.progressPercent}
+                  />
                 </div>
 
                 <DlcActivationTip id={dlc.id} />

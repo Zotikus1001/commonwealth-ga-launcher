@@ -65,6 +65,11 @@ function sameGameExecutable(left: string, right: string): boolean {
   return left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase();
 }
 
+function dlcPhasePercent(completed: number, total: number): number {
+  if (total <= 0) return -1;
+  return Math.min(100, Math.max(0, Math.round((completed / total) * 100)));
+}
+
 interface ServerSelection {
   id: string;
   name: string;
@@ -196,29 +201,48 @@ export class Orchestrator {
     this.patch({ dlcs: next });
   }
 
-  private showDlcProgress(id: DlcId, detail: string): void {
+  private showDlcProgress(
+    id: DlcId,
+    status: 'installing' | 'removing',
+    detail: string,
+    progressPercent = -1,
+    progressPhase?: DlcStatus['progressPhase']
+  ): void {
     const current =
       this.state.dlcs.find((candidate) => candidate.id === id)
       ?? unavailableDlcStatuses().find((candidate) => candidate.id === id)!;
     this.patchDlcStatus({
       ...current,
-      status: 'installing',
-      detail
+      status,
+      detail,
+      progressPhase,
+      progressPercent
     });
   }
 
   private async ensureDlcInstalled(install: GameInstall, id: DlcId): Promise<DlcStatus> {
-    this.showDlcProgress(id, 'Checking verified DLC files…');
-    return this.dlcManager.ensureInstalled(install, id, ({ transferred, total }) => {
-      const percent = total > 0
-        ? Math.min(100, Math.round((transferred / total) * 100))
-        : -1;
+    this.showDlcProgress(id, 'installing', 'Checking verified DLC files…');
+    return this.dlcManager.ensureInstalled(install, id, ({ phase, completed, total }) => {
+      const progressPercent = dlcPhasePercent(completed, total);
+      const progressPhase = phase === 'download' ? 'download' : 'install';
       const detail =
-        percent >= 0
-          ? `Downloading verified DLC… ${percent}%`
-          : 'Downloading verified DLC…';
-      this.showDlcProgress(id, detail);
-      this.patch({ statusLine: detail });
+        phase === 'download'
+          ? 'Downloading verified DLC…'
+          : 'Installing and verifying DLC files…';
+      this.showDlcProgress(id, 'installing', detail, progressPercent, progressPhase);
+    });
+  }
+
+  private async removeDlc(install: GameInstall, id: DlcId): Promise<DlcStatus> {
+    this.showDlcProgress(id, 'removing', 'Preparing verified DLC removal…');
+    return this.dlcManager.remove(install, id, ({ phase, completed, total }) => {
+      const progressPercent = dlcPhasePercent(completed, total);
+      const progressPhase = phase === 'download' ? 'download' : 'remove';
+      const detail =
+        phase === 'download'
+          ? 'Downloading verified restore data…'
+          : 'Removing DLC and restoring files…';
+      this.showDlcProgress(id, 'removing', detail, progressPercent, progressPhase);
     });
   }
 
@@ -1518,14 +1542,16 @@ export class Orchestrator {
         return;
       }
 
+      const definition = LAUNCHER_CONFIG.dlcs.find((candidate) => candidate.id === id);
+      const dlcName = definition?.name ?? 'DLC';
       this.patch({
         phase: 'checking',
-        statusLine: enabled ? 'Installing Surfside-Atoll PvP Maps…' : 'Removing Surfside-Atoll PvP Maps…',
+        statusLine: `${enabled ? 'Installing' : 'Removing'} ${dlcName}…`,
         errorDetails: null
       });
       const status = enabled
         ? await this.ensureDlcInstalled(install, id)
-        : await this.dlcManager.remove(install, id);
+        : await this.removeDlc(install, id);
       this.patchDlcStatus(status);
       this.patch({
         phase: 'ready',

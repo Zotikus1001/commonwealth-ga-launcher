@@ -75,6 +75,7 @@ export type DlcInstallStatus =
   | 'installed'
   | 'modified'
   | 'installing'
+  | 'removing'
   | 'error';
 
 export interface DlcStatus {
@@ -84,6 +85,8 @@ export interface DlcStatus {
   detail: string;
   installedFiles: number;
   totalFiles: number;
+  progressPhase?: 'download' | 'install' | 'remove';
+  progressPercent?: number;
 }
 
 export type LinuxRunnerType = 'wine' | 'proton';

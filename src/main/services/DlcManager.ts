@@ -57,6 +57,12 @@ export interface DlcDefinition {
 
 type Downloader = typeof downloadToFile;
 
+export interface DlcOperationProgress {
+  phase: 'download' | 'files';
+  completed: number;
+  total: number;
+}
+
 interface ZipEntry {
   name: string;
   flags: number;
@@ -893,7 +899,7 @@ export class DlcManager {
   async ensureInstalled(
     install: GameInstall,
     id: DlcId,
-    onProgress: (progress: DownloadProgress) => void = () => {}
+    onProgress: (progress: DlcOperationProgress) => void = () => {}
   ): Promise<DlcStatus> {
     const definition = this.definition(id);
     const initial = await inspectPayload(install, definition);
@@ -904,17 +910,34 @@ export class DlcManager {
       return statusFromInspection(definition, initial);
     }
 
-    const archivePath = await this.verifiedArchive(definition, onProgress);
+    const archivePath = await this.verifiedArchive(definition, ({ transferred, total }) => {
+      onProgress({
+        phase: 'download',
+        completed: transferred,
+        total: total || definition.archiveSize
+      });
+    });
+    const announcedFileWorkTotal =
+      initial.files.filter((candidate) => candidate.state !== 'exact').length * 2 + 1;
+    onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
     const archive = await readFile(archivePath);
     const entries = parseZipManifest(archive, definition);
     const writable = await inspectPayload(install, definition);
     const writableConflict = writable.files.find((file) => file.state === 'conflict');
     if (writableConflict) throw new Error(writableConflict.detail);
 
+    const filesToInstall = writable.files.filter((candidate) => candidate.state !== 'exact');
+    let completedFileWork = 0;
+    const totalFileWork = filesToInstall.length * 2 + 1;
+    const reportFileProgress = (): void => {
+      onProgress({ phase: 'files', completed: completedFileWork, total: totalFileWork });
+    };
+    if (totalFileWork !== announcedFileWorkTotal) reportFileProgress();
+
     const staged: StagedFile[] = [];
     const mutations: InstallMutation[] = [];
     try {
-      for (const file of writable.files.filter((candidate) => candidate.state !== 'exact')) {
+      for (const file of filesToInstall) {
         staged.push(
           await this.stageArchiveFile(
             archive,
@@ -925,6 +948,8 @@ export class DlcManager {
             file.definition
           )
         );
+        completedFileWork += 1;
+        reportFileProgress();
       }
 
       const beforePublish = await inspectPayload(install, definition);
@@ -934,31 +959,34 @@ export class DlcManager {
         const current = beforePublish.files.find(
           (file) => targetKey(file.definition) === targetKey(stagedFile.definition)
         )!;
-        if (current.state === 'exact') continue;
-        let mutation: InstallMutation | null = null;
-        if (current.state === 'restored') {
-          const rollbackPath = rollbackFilePath(current.path, definition.id);
-          await rename(current.path, rollbackPath);
-          mutation = { definition: current.definition, path: current.path, rollbackPath };
-          mutations.push(mutation);
-        }
-        try {
-          await link(stagedFile.tempPath, current.path);
-          if (!mutation) {
-            mutations.push({ definition: current.definition, path: current.path });
+        if (current.state !== 'exact') {
+          let mutation: InstallMutation | null = null;
+          if (current.state === 'restored') {
+            const rollbackPath = rollbackFilePath(current.path, definition.id);
+            await rename(current.path, rollbackPath);
+            mutation = { definition: current.definition, path: current.path, rollbackPath };
+            mutations.push(mutation);
           }
-        } catch (error) {
-          if (
-            !isAlreadyExists(error) ||
-            !(await exactFile(
-              current.path,
-              stagedFile.definition.size,
-              stagedFile.definition.sha256
-            ))
-          ) {
-            throw error;
+          try {
+            await link(stagedFile.tempPath, current.path);
+            if (!mutation) {
+              mutations.push({ definition: current.definition, path: current.path });
+            }
+          } catch (error) {
+            if (
+              !isAlreadyExists(error) ||
+              !(await exactFile(
+                current.path,
+                stagedFile.definition.size,
+                stagedFile.definition.sha256
+              ))
+            ) {
+              throw error;
+            }
           }
         }
+        completedFileWork += 1;
+        reportFileProgress();
       }
 
       const installed = await inspectPayload(install, definition);
@@ -971,6 +999,8 @@ export class DlcManager {
           `file${definition.files.length === 1 ? '' : 's'}`
       );
       await this.discardRollbackFiles(mutations);
+      completedFileWork += 1;
+      reportFileProgress();
       return statusFromInspection(definition, installed);
     } catch (error) {
       const rollbackFailures = await this.rollbackInstall(mutations);
@@ -985,7 +1015,11 @@ export class DlcManager {
     }
   }
 
-  async remove(install: GameInstall, id: DlcId): Promise<DlcStatus> {
+  async remove(
+    install: GameInstall,
+    id: DlcId,
+    onProgress: (progress: DlcOperationProgress) => void = () => {}
+  ): Promise<DlcStatus> {
     const definition = this.definition(id);
     const inspection = await inspectPayload(install, definition);
     const conflict = inspection.files.find((file) => file.state === 'conflict');
@@ -996,13 +1030,30 @@ export class DlcManager {
     }
 
     let archive: Buffer | null = null;
+    let archivePath: string | null = null;
     let entries = new Map<string, ZipEntry>();
     if (
       inspection.files.some(
         (file) => file.definition.restore && file.state !== 'restored'
       )
     ) {
-      const archivePath = await this.verifiedArchive(definition, () => {});
+      archivePath = await this.verifiedArchive(definition, ({ transferred, total }) => {
+        onProgress({
+          phase: 'download',
+          completed: transferred,
+          total: total || definition.archiveSize
+        });
+      });
+    }
+
+    const announcedFileWorkTotal =
+      inspection.files.filter(
+        (candidate) => candidate.definition.restore && candidate.state !== 'restored'
+      ).length +
+      definition.files.length +
+      1;
+    onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
+    if (archivePath) {
       archive = await readFile(archivePath);
       entries = parseZipManifest(archive, definition);
     }
@@ -1015,13 +1066,21 @@ export class DlcManager {
       );
     }
 
+    const filesToRestore = writable.files.filter(
+      (candidate) => candidate.definition.restore && candidate.state !== 'restored'
+    );
+    let completedFileWork = 0;
+    const totalFileWork = filesToRestore.length + definition.files.length + 1;
+    const reportFileProgress = (): void => {
+      onProgress({ phase: 'files', completed: completedFileWork, total: totalFileWork });
+    };
+    if (totalFileWork !== announcedFileWorkTotal) reportFileProgress();
+
     const staged: StagedFile[] = [];
     const mutations: RemovalMutation[] = [];
     try {
       if (archive) {
-        for (const file of writable.files.filter(
-          (candidate) => candidate.definition.restore && candidate.state !== 'restored'
-        )) {
+        for (const file of filesToRestore) {
           staged.push(
             await this.stageArchiveFile(
               archive,
@@ -1032,6 +1091,8 @@ export class DlcManager {
               file.definition.restore!
             )
           );
+          completedFileWork += 1;
+          reportFileProgress();
         }
       }
 
@@ -1044,7 +1105,12 @@ export class DlcManager {
       }
 
       for (const current of beforeRemoval.files) {
-        if (current.state === 'restored' || (!current.definition.restore && current.state === 'missing')) {
+        if (
+          current.state === 'restored' ||
+          (!current.definition.restore && current.state === 'missing')
+        ) {
+          completedFileWork += 1;
+          reportFileProgress();
           continue;
         }
         const stagedRestore = staged.find(
@@ -1065,7 +1131,11 @@ export class DlcManager {
             publishedRestore: Boolean(current.definition.restore)
           });
         }
-        if (!current.definition.restore) continue;
+        if (!current.definition.restore) {
+          completedFileWork += 1;
+          reportFileProgress();
+          continue;
+        }
 
         try {
           await link(stagedRestore!.tempPath, current.path);
@@ -1088,6 +1158,8 @@ export class DlcManager {
             throw error;
           }
         }
+        completedFileWork += 1;
+        reportFileProgress();
       }
 
       const removed = await inspectPayload(install, definition);
@@ -1101,6 +1173,8 @@ export class DlcManager {
       await rm(this.markerPath(install, definition.id), { force: true });
       await this.discardRollbackFiles(mutations);
       await this.removeEmptyDirectories(removed.location, definition);
+      completedFileWork += 1;
+      reportFileProgress();
       this.log.info(
         definition.files.some((file) => file.restore)
           ? `${definition.name}: removed verified DLC files and restored base-game files`

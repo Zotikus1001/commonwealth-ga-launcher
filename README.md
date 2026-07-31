@@ -42,8 +42,8 @@ The launcher updates itself automatically.
 - Game patches enabled by default, with one-click Apply and Remove controls
 - A Game Client Patch that fixes scope-transition stutters
 - Optional Surfside-Atoll and Carbon Capture PvP maps plus Central Industrial Complex and
-  Recycling Plant 37 PvE maps, with one-click install, repair, safe removal, and per-pack
-  activation guidance
+  Recycling Plant 37 PvE maps, with one-click install, repair, safe removal, separate download
+  and file-operation progress, and per-pack activation guidance
 - Useful game options
 - An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
   in-game chat commands

@@ -1290,6 +1290,62 @@
   color: #e69999;
 }
 
+.dlcProgress {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 9px;
+  margin-top: 2px;
+}
+
+.dlcProgressTrack {
+  height: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(240, 166, 60, 0.28);
+  background: rgba(240, 166, 60, 0.05);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.32);
+}
+
+.dlcProgressFill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(240, 166, 60, 0.58), var(--amber-hi));
+  box-shadow: 0 0 8px rgba(240, 166, 60, 0.24);
+  transition: width 160ms linear;
+}
+
+.dlcProgressIndeterminate {
+  width: 32%;
+  animation: dlcProgressSweep 1.05s ease-in-out infinite alternate;
+}
+
+.dlcProgressLabel {
+  color: var(--amber-hi);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: right;
+}
+
+@keyframes dlcProgressSweep {
+  from {
+    margin-left: 0;
+  }
+
+  to {
+    margin-left: 68%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dlcProgressIndeterminate {
+    animation: none;
+  }
+}
+
 .chatCommandCopy {
   position: relative;
   display: grid;

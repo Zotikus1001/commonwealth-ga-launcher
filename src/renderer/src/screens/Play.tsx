@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActionResult, LauncherState } from '@shared/types';
+import type { ActionResult, DlcStatus, LauncherState } from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import styles from './Play.module.css';
 
@@ -23,6 +23,44 @@ interface CtaSpec {
   disabled: boolean;
   action: () => void;
   loading?: boolean;
+}
+
+export function DlcActivityProgress({ dlc }: { dlc: DlcStatus }): JSX.Element {
+  const progressPercent = dlc.progressPercent;
+  const determinate = typeof progressPercent === 'number' && progressPercent >= 0;
+  const percent = determinate
+    ? Math.min(100, Math.max(0, Math.round(progressPercent)))
+    : -1;
+  const operation =
+    dlc.progressPhase === 'download'
+      ? 'Downloading'
+      : dlc.status === 'removing'
+        ? 'Removing'
+        : 'Installing';
+  return (
+    <div className={styles.dlcActivity} aria-live="polite" title={dlc.detail}>
+      <div className={styles.dlcActivityHead}>
+        <span className={styles.dlcActivityOperation}>{operation}</span>
+        <span className={styles.dlcActivityName}>{dlc.name}</span>
+        <strong>{determinate ? `${percent}%` : 'WORKING'}</strong>
+      </div>
+      <div
+        className={styles.dlcActivityTrack}
+        role="progressbar"
+        aria-label={`${operation} ${dlc.name}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={determinate ? percent : undefined}
+      >
+        <span
+          className={`${styles.dlcActivityFill} ${
+            determinate ? '' : styles.dlcActivityIndeterminate
+          }`}
+          style={determinate ? { width: `${percent}%` } : undefined}
+        />
+      </div>
+    </div>
+  );
 }
 
 function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
@@ -101,6 +139,9 @@ export default function Play({
 }): JSX.Element {
   const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
+  const activeDlcOperation = state.dlcs.find(
+    (dlc) => dlc.status === 'installing' || dlc.status === 'removing'
+  );
   const [discordOpening, setDiscordOpening] = useState(false);
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
   const [agendaStatsOpening, setAgendaStatsOpening] = useState(false);
@@ -399,7 +440,8 @@ export default function Play({
         </div>
         {profileSelectionError && <p className={styles.errorDetails}>{profileSelectionError}</p>}
         {serverSelectionError && <p className={styles.errorDetails}>{serverSelectionError}</p>}
-        {state.statusLine !== 'Ready.' && (
+        {activeDlcOperation && <DlcActivityProgress dlc={activeDlcOperation} />}
+        {!activeDlcOperation && state.statusLine !== 'Ready.' && (
           <p className={styles.statusLine}>{state.statusLine}</p>
         )}
         {state.phase === 'error' && state.errorDetails && (

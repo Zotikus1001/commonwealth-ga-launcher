@@ -1817,6 +1817,58 @@
   margin-top: 2px;
 }
 
+.infoCommandSection {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(240, 166, 60, 0.28);
+  background:
+    linear-gradient(110deg, rgba(240, 166, 60, 0.075), transparent 48%),
+    rgba(7, 10, 16, 0.4);
+}
+
+.infoCommandSectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 2px 3px;
+}
+
+.infoCommandSectionHead h3 {
+  margin: 0;
+  color: var(--amber-hi);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.infoCommandSectionHead p {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.infoCommandSectionList {
+  display: grid;
+  gap: 8px;
+}
+
+.infoCommandSection .infoCommand {
+  border-color: rgba(240, 166, 60, 0.2);
+  background:
+    linear-gradient(100deg, rgba(240, 166, 60, 0.055), transparent 45%),
+    rgba(7, 10, 16, 0.5);
+}
+
+.infoCommandSection .infoCommandIdentity {
+  border-right-color: rgba(240, 166, 60, 0.2);
+}
+
 .infoCommand {
   display: grid;
   grid-template-columns: 178px minmax(0, 1fr);
@@ -2220,6 +2272,20 @@
     padding-bottom: 8px;
     border-right: 0;
     border-bottom: 1px solid rgba(69, 200, 218, 0.17);
+  }
+
+  .infoCommandSectionHead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .infoCommandSectionHead p {
+    text-align: left;
+  }
+
+  .infoCommandSection .infoCommandIdentity {
+    border-bottom-color: rgba(240, 166, 60, 0.2);
   }
 
   .infoAccount {

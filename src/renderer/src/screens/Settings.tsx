@@ -2842,29 +2842,56 @@ export function InfoTab(): JSX.Element {
               </div>
             </div>
 
-            <div className={styles.infoCommand}>
-              <div className={styles.infoCommandIdentity}>
-                <ChatCommandCopy command="-togglebrokensuits" />
-                <span>Saved per player</span>
-              </div>
-              <div className={styles.infoCommandBody}>
-                <p>
-                  Controls whether Commonwealth suits appear in Mercenary matches. If those suits
-                  cause stutters, disable them to see alternate suits instead. Your choice is saved,
-                  so you only need to set it once. Without a number, the command toggles that choice.
-                </p>
-                <div className={styles.infoCommandVariants}>
-                  <ChatCommandCopy
-                    command="-togglebrokensuits 1"
-                    detail="Enable Commonwealth suits"
-                  />
-                  <ChatCommandCopy
-                    command="-togglebrokensuits 0"
-                    detail="Use alternate suits"
-                  />
+            <section
+              className={styles.infoCommandSection}
+              aria-labelledby="performance-commands-title"
+            >
+              <header className={styles.infoCommandSectionHead}>
+                <h3 id="performance-commands-title">Performance commands</h3>
+                <p>Suit cosmetic controls that may improve performance or reduce stuttering.</p>
+              </header>
+
+              <div className={styles.infoCommandSectionList}>
+                <div className={styles.infoCommand}>
+                  <div className={styles.infoCommandIdentity}>
+                    <ChatCommandCopy command="-toggleallsuits" />
+                    <span>Other players only</span>
+                  </div>
+                  <div className={styles.infoCommandBody}>
+                    <p>
+                      Disables or restores every suit and helmet cosmetic on other players. When
+                      disabled, other players appear without suits or helmets, which may improve
+                      performance.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={styles.infoCommand}>
+                  <div className={styles.infoCommandIdentity}>
+                    <ChatCommandCopy command="-togglebrokensuits" />
+                    <span>Self + other players</span>
+                  </div>
+                  <div className={styles.infoCommandBody}>
+                    <p>
+                      Enables or disables custom unreleased suits on your character and other
+                      players. Disabling them may improve performance or fix stuttering issues.
+                      This preference is saved per player, so you only need to set it once. Without
+                      a number, the command toggles that choice.
+                    </p>
+                    <div className={styles.infoCommandVariants}>
+                      <ChatCommandCopy
+                        command="-togglebrokensuits 1"
+                        detail="Enable custom unreleased suits"
+                      />
+                      <ChatCommandCopy
+                        command="-togglebrokensuits 0"
+                        detail="Disable custom unreleased suits"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
 
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>

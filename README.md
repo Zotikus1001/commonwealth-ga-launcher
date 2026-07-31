@@ -47,7 +47,7 @@ The launcher updates itself automatically.
   and file-operation progress, plus per-pack matchmaking include and exclude commands
 - Useful game options
 - An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
-  in-game chat commands
+  in-game chat commands, including suit-cosmetic performance controls
 - Agenda Stats and Discord access
 - Diagnostics and a one-click recovery reset
 - Windows support and flexible Linux compatibility options, including custom command wrappers

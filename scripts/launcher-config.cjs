@@ -496,7 +496,7 @@ function loadLauncherConfig(options = {}) {
         'factory04_package'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Maps/1P_CPFactory04/1P_CPFactory04_P.ut3'
+      targetPath: 'Maps/1P_CPFactory04/1P_CPFactory04_P.ut3'
     },
     {
       ...pveFactoryPinnedFile(
@@ -504,7 +504,7 @@ function loadLauncherConfig(options = {}) {
         'factory04_sound'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Maps/1P_CPFactory04/1P_CPFactory04_Sound.ut3'
+      targetPath: 'Maps/1P_CPFactory04/1P_CPFactory04_Sound.ut3'
     },
     {
       ...pveFactoryPinnedFile(
@@ -512,7 +512,7 @@ function loadLauncherConfig(options = {}) {
         'factory03_sound'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Maps/1P_CPFactory03/1P_CPFactory03_Sound.ut3'
+      targetPath: 'Maps/1P_CPFactory03/1P_CPFactory03_Sound.ut3'
     },
     {
       ...pveFactoryPinnedFile(
@@ -520,12 +520,12 @@ function loadLauncherConfig(options = {}) {
         'factory03_package'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Maps/1P_CPFactory03/1P_CPFactory03_P.ut3'
+      targetPath: 'Maps/1P_CPFactory03/1P_CPFactory03_P.ut3'
     },
     {
       ...pveFactoryPinnedFile('DLC/Sounds/SND_ENV_CPFactory.upk', 'sound_environment'),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Sounds/SND_ENV_CPFactory.upk',
+      targetPath: 'Sounds/SND_ENV_CPFactory.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Sounds/SND_ENV_CPFactory.upk',
         'backup_sound_environment'
@@ -537,7 +537,7 @@ function loadLauncherConfig(options = {}) {
         'mining_interior'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
+      targetPath: 'Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
         'backup_mining_interior'
@@ -549,7 +549,7 @@ function loadLauncherConfig(options = {}) {
         'general_piping'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/Dev_Gen_Library/Gen_Piping.upk',
+      targetPath: 'Environments/Dev_Gen_Library/Gen_Piping.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/Dev_Gen_Library/Gen_Piping.upk',
         'backup_general_piping'
@@ -561,7 +561,7 @@ function loadLauncherConfig(options = {}) {
         'commonwealth_props'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
+      targetPath: 'Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
         'backup_commonwealth_props'
@@ -573,7 +573,7 @@ function loadLauncherConfig(options = {}) {
         'factory_wallsets'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factories_WallSets.upk',
+      targetPath: 'Environments/CMW_Factories/CMW_Factories_WallSets.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/CMW_Factories/CMW_Factories_WallSets.upk',
         'backup_factory_wallsets'
@@ -585,7 +585,7 @@ function loadLauncherConfig(options = {}) {
         'factory_exterior'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
+      targetPath: 'Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
         'backup_factory_exterior'
@@ -597,7 +597,7 @@ function loadLauncherConfig(options = {}) {
         'factory_conveyor'
       ),
       targetRoot: 'cooked-pc',
-      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
+      targetPath: 'Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
       restore: pveFactoryPinnedFile(
         'Backup/Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
         'backup_factory_conveyor'

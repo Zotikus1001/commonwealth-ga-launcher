@@ -208,15 +208,15 @@ export class Orchestrator {
   }
 
   private async ensureDlcInstalled(install: GameInstall, id: DlcId): Promise<DlcStatus> {
-    this.showDlcProgress(id, 'Checking verified map files…');
+    this.showDlcProgress(id, 'Checking verified DLC files…');
     return this.dlcManager.ensureInstalled(install, id, ({ transferred, total }) => {
       const percent = total > 0
         ? Math.min(100, Math.round((transferred / total) * 100))
         : -1;
       const detail =
         percent >= 0
-          ? `Downloading verified maps… ${percent}%`
-          : 'Downloading verified maps…';
+          ? `Downloading verified DLC… ${percent}%`
+          : 'Downloading verified DLC…';
       this.showDlcProgress(id, detail);
       this.patch({ statusLine: detail });
     });

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto';
 import { createReadStream } from 'fs';
 import {
   link,
+  lstat,
   mkdir,
   readFile,
   readdir,
@@ -9,7 +10,6 @@ import {
   rm,
   rmdir,
   stat,
-  unlink,
   writeFile
 } from 'fs/promises';
 import { dirname, join } from 'path';
@@ -23,18 +23,27 @@ import type { Log } from './Log';
 import { managedInstallStatePath } from './ManagedInstallState';
 
 const inflateRawAsync = promisify(inflateRaw);
-const MARKER_SCHEMA = 1;
+const MARKER_SCHEMA = 2;
 const ZIP_END_SIGNATURE = 0x06054b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_LOCAL_SIGNATURE = 0x04034b50;
 const ZIP_MAX_COMMENT_LENGTH = 0xffff;
 const ZIP_SUPPORTED_FLAGS = 0x0808;
 
-export interface DlcFileDefinition {
+interface DlcArchiveFileDefinition {
   archivePath: string;
-  targetPath: string;
   size: number;
   sha256: string;
+}
+
+export type DlcTargetRoot = 'dlc-maps' | 'cooked-pc' | 'binaries';
+
+export interface DlcRestoreDefinition extends DlcArchiveFileDefinition {}
+
+export interface DlcFileDefinition extends DlcArchiveFileDefinition {
+  targetRoot?: DlcTargetRoot;
+  targetPath: string;
+  restore?: DlcRestoreDefinition;
 }
 
 export interface DlcDefinition {
@@ -63,12 +72,13 @@ interface DlcLocation {
   dlcDir: string;
   mapsDir: string;
   mapsDirExists: boolean;
+  binariesDir: string;
 }
 
 interface InspectedFile {
   definition: DlcFileDefinition;
   path: string;
-  state: 'missing' | 'exact' | 'conflict';
+  state: 'missing' | 'exact' | 'restored' | 'conflict';
   detail: string;
 }
 
@@ -82,14 +92,40 @@ interface StagedFile {
   tempPath: string;
 }
 
+interface InstallMutation {
+  definition: DlcFileDefinition;
+  path: string;
+  rollbackPath?: string;
+}
+
+interface RemovalMutation {
+  definition: DlcFileDefinition;
+  path: string;
+  rollbackPath?: string;
+  publishedRestore: boolean;
+}
+
 interface DlcMarker {
   schema: number;
   id: DlcId;
   archiveSha256: string;
   files: Array<{
+    root: DlcTargetRoot;
     path: string;
     sha256: string;
+    restoreSha256?: string;
   }>;
+}
+
+function targetRootOf(definition: DlcFileDefinition): DlcTargetRoot {
+  return definition.targetRoot ?? 'dlc-maps';
+}
+
+function targetKey(definition: DlcFileDefinition): string {
+  const path = definition.targetPath.toLowerCase();
+  return targetRootOf(definition) === 'dlc-maps'
+    ? `cooked-pc:dlc/maps/${path}`
+    : `${targetRootOf(definition)}:${path}`;
 }
 
 function normalizeRelativePath(value: string, label: string): string[] {
@@ -137,16 +173,32 @@ function validateDefinition(definition: DlcDefinition): void {
   for (const file of definition.files) {
     normalizeRelativePath(file.archivePath, 'DLC archive path');
     normalizeRelativePath(file.targetPath, 'DLC target path');
-    if (archivePaths.has(file.archivePath) || targetPaths.has(file.targetPath.toLowerCase())) {
+    if (!['dlc-maps', 'cooked-pc', 'binaries'].includes(targetRootOf(file))) {
+      throw new Error(`${definition.name} contains an invalid target root.`);
+    }
+    if (archivePaths.has(file.archivePath.toLowerCase()) || targetPaths.has(targetKey(file))) {
       throw new Error(`${definition.name} contains a duplicate payload path.`);
     }
-    archivePaths.add(file.archivePath);
-    targetPaths.add(file.targetPath.toLowerCase());
+    archivePaths.add(file.archivePath.toLowerCase());
+    targetPaths.add(targetKey(file));
     if (!Number.isSafeInteger(file.size) || file.size < 1) {
       throw new Error(`${definition.name} contains an invalid payload size.`);
     }
     if (!/^[a-f0-9]{64}$/.test(file.sha256)) {
       throw new Error(`${definition.name} contains an invalid payload hash.`);
+    }
+    if (file.restore) {
+      normalizeRelativePath(file.restore.archivePath, 'DLC restore archive path');
+      if (archivePaths.has(file.restore.archivePath.toLowerCase())) {
+        throw new Error(`${definition.name} contains a duplicate archive path.`);
+      }
+      archivePaths.add(file.restore.archivePath.toLowerCase());
+      if (!Number.isSafeInteger(file.restore.size) || file.restore.size < 1) {
+        throw new Error(`${definition.name} contains an invalid restore size.`);
+      }
+      if (!/^[a-f0-9]{64}$/.test(file.restore.sha256)) {
+        throw new Error(`${definition.name} contains an invalid restore hash.`);
+      }
     }
   }
 }
@@ -160,7 +212,7 @@ async function sha256File(path: string): Promise<string> {
 
 async function exactFile(path: string, size: number, sha256: string): Promise<boolean> {
   try {
-    const info = await stat(path);
+    const info = await lstat(path);
     return info.isFile() && info.size === size && (await sha256File(path)) === sha256;
   } catch {
     return false;
@@ -191,7 +243,7 @@ async function findCaseInsensitiveChild(
 async function existingChildDirectory(parent: string, name: string): Promise<string | null> {
   const child = await findCaseInsensitiveChild(parent, name);
   if (!child) return null;
-  if (!(await stat(child.path)).isDirectory()) {
+  if (!(await lstat(child.path)).isDirectory()) {
     throw new Error(`${child.path} blocks the required DLC directory.`);
   }
   return child.path;
@@ -200,6 +252,20 @@ async function existingChildDirectory(parent: string, name: string): Promise<str
 async function requiredChildDirectory(parent: string, name: string): Promise<string> {
   const path = await existingChildDirectory(parent, name);
   if (!path) throw new Error(`The game installation is missing ${join(parent, name)}.`);
+  return path;
+}
+
+async function requiredDirectory(path: string): Promise<string> {
+  let info;
+  try {
+    info = await stat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`The game installation is missing ${path}.`);
+    }
+    throw error;
+  }
+  if (!info.isDirectory()) throw new Error(`${path} is not a game directory.`);
   return path;
 }
 
@@ -216,55 +282,61 @@ async function ensureChildDirectory(parent: string, name: string): Promise<strin
   return requiredChildDirectory(parent, name);
 }
 
-async function resolveDlcLocation(
-  install: GameInstall,
-  createManagedDirectories: boolean
-): Promise<DlcLocation> {
+async function resolveDlcLocation(install: GameInstall): Promise<DlcLocation> {
   const tgGameDir = dirname(install.configDir);
   const cookedPcDir = await requiredChildDirectory(tgGameDir, 'CookedPC');
   const existingDlcDir = await existingChildDirectory(cookedPcDir, 'DLC');
-  const dlcDir = existingDlcDir
-    ?? (createManagedDirectories
-      ? await ensureChildDirectory(cookedPcDir, 'DLC')
-      : join(cookedPcDir, 'DLC'));
-  if (!existingDlcDir && !createManagedDirectories) {
+  const dlcDir = existingDlcDir ?? join(cookedPcDir, 'DLC');
+  if (!existingDlcDir) {
     return {
       cookedPcDir,
       dlcDir,
       mapsDir: join(dlcDir, 'Maps'),
-      mapsDirExists: false
+      mapsDirExists: false,
+      binariesDir: await requiredDirectory(install.binariesDir)
     };
   }
 
   const existingMapsDir = await existingChildDirectory(dlcDir, 'Maps');
-  const mapsDir = existingMapsDir
-    ?? (createManagedDirectories
-      ? await ensureChildDirectory(dlcDir, 'Maps')
-      : join(dlcDir, 'Maps'));
   return {
     cookedPcDir,
     dlcDir,
-    mapsDir,
-    mapsDirExists: existingMapsDir !== null || createManagedDirectories
+    mapsDir: existingMapsDir ?? join(dlcDir, 'Maps'),
+    mapsDirExists: existingMapsDir !== null,
+    binariesDir: await requiredDirectory(install.binariesDir)
   };
 }
 
+function targetRootLocation(
+  location: DlcLocation,
+  definition: DlcFileDefinition
+): { path: string; exists: boolean } {
+  switch (targetRootOf(definition)) {
+    case 'cooked-pc':
+      return { path: location.cookedPcDir, exists: true };
+    case 'binaries':
+      return { path: location.binariesDir, exists: true };
+    case 'dlc-maps':
+      return { path: location.mapsDir, exists: location.mapsDirExists };
+  }
+}
+
 async function resolveTargetFile(
-  mapsDir: string,
-  mapsDirExists: boolean,
+  location: DlcLocation,
   definition: DlcFileDefinition
 ): Promise<InspectedFile> {
   const parts = normalizeRelativePath(definition.targetPath, 'DLC target path');
-  if (!mapsDirExists) {
+  const root = targetRootLocation(location, definition);
+  if (!root.exists) {
     return {
       definition,
-      path: join(mapsDir, ...parts),
+      path: join(root.path, ...parts),
       state: 'missing',
       detail: 'File is missing.'
     };
   }
 
-  let parent = mapsDir;
+  let parent = root.path;
   for (const [index, directoryName] of parts.slice(0, -1).entries()) {
     const directory = await findCaseInsensitiveChild(parent, directoryName);
     if (!directory) {
@@ -275,7 +347,7 @@ async function resolveTargetFile(
         detail: 'File is missing.'
       };
     }
-    if (!(await stat(directory.path)).isDirectory()) {
+    if (!(await lstat(directory.path)).isDirectory()) {
       return {
         definition,
         path: directory.path,
@@ -296,7 +368,7 @@ async function resolveTargetFile(
       detail: 'File is missing.'
     };
   }
-  const info = await stat(file.path);
+  const info = await lstat(file.path);
   if (!info.isFile()) {
     return {
       definition,
@@ -305,35 +377,33 @@ async function resolveTargetFile(
       detail: `${file.path} is not a regular file.`
     };
   }
-  if (info.size !== definition.size) {
-    return {
-      definition,
-      path: file.path,
-      state: 'conflict',
-      detail: `${file.path} differs from the verified DLC payload.`
-    };
-  }
-  const hash = await sha256File(file.path);
+  const couldBePayload = info.size === definition.size;
+  const couldBeRestore = definition.restore?.size === info.size;
+  const hash = couldBePayload || couldBeRestore ? await sha256File(file.path) : '';
+  const payloadMatches = couldBePayload && hash === definition.sha256;
+  const restoreMatches = couldBeRestore && hash === definition.restore?.sha256;
   return {
     definition,
     path: file.path,
-    state: hash === definition.sha256 ? 'exact' : 'conflict',
-    detail:
-      hash === definition.sha256
-        ? 'Verified file is installed.'
-        : `${file.path} differs from the verified DLC payload.`
+    state: payloadMatches ? 'exact' : restoreMatches ? 'restored' : 'conflict',
+    detail: payloadMatches
+      ? 'Verified file is installed.'
+      : restoreMatches
+        ? 'Verified base-game file is restored.'
+        : definition.restore
+          ? `${file.path} differs from both the verified DLC payload and its base-game backup.`
+          : `${file.path} differs from the verified DLC payload.`
   };
 }
 
 async function inspectPayload(
   install: GameInstall,
-  definition: DlcDefinition,
-  createManagedDirectories = false
+  definition: DlcDefinition
 ): Promise<PayloadInspection> {
-  const location = await resolveDlcLocation(install, createManagedDirectories);
+  const location = await resolveDlcLocation(install);
   const files: InspectedFile[] = [];
   for (const file of definition.files) {
-    files.push(await resolveTargetFile(location.mapsDir, location.mapsDirExists, file));
+    files.push(await resolveTargetFile(location, file));
   }
   return { location, files };
 }
@@ -362,8 +432,8 @@ function statusFromInspection(
       status: 'installed',
       detail:
         total === 1
-          ? 'The verified map file is installed.'
-          : `All ${total} verified map files are installed.`,
+          ? 'The verified DLC file is installed.'
+          : `All ${total} verified DLC files are installed.`,
       installedFiles: exact,
       totalFiles: total
     };
@@ -373,7 +443,7 @@ function statusFromInspection(
       id: definition.id,
       name: definition.name,
       status: 'missing',
-      detail: total === 1 ? 'The map file is not installed.' : 'The map files are not installed.',
+      detail: total === 1 ? 'The DLC file is not installed.' : 'The DLC files are not installed.',
       installedFiles: 0,
       totalFiles: total
     };
@@ -382,7 +452,7 @@ function statusFromInspection(
     id: definition.id,
     name: definition.name,
     status: 'partial',
-    detail: `${exact} of ${total} verified map files are installed.`,
+    detail: `${exact} of ${total} verified DLC files are installed.`,
     installedFiles: exact,
     totalFiles: total
   };
@@ -398,7 +468,11 @@ function locateZipEnd(archive: Buffer): number {
   throw new Error('The DLC archive has no valid ZIP end record.');
 }
 
-function allowedArchiveDirectories(files: readonly DlcFileDefinition[]): Set<string> {
+function archiveFiles(definition: DlcDefinition): DlcArchiveFileDefinition[] {
+  return definition.files.flatMap((file) => file.restore ? [file, file.restore] : [file]);
+}
+
+function allowedArchiveDirectories(files: readonly DlcArchiveFileDefinition[]): Set<string> {
   const directories = new Set<string>();
   for (const file of files) {
     const parts = normalizeRelativePath(file.archivePath, 'DLC archive path');
@@ -440,8 +514,9 @@ function parseZipManifest(
     throw new Error('The DLC ZIP central directory is invalid.');
   }
 
-  const expectedFiles = new Map(definition.files.map((file) => [file.archivePath, file]));
-  const allowedDirectories = allowedArchiveDirectories(definition.files);
+  const expectedArchiveFiles = archiveFiles(definition);
+  const expectedFiles = new Map(expectedArchiveFiles.map((file) => [file.archivePath, file]));
+  const allowedDirectories = allowedArchiveDirectories(expectedArchiveFiles);
   const entries = new Map<string, ZipEntry>();
   const seenNames = new Set<string>();
   let cursor = centralOffset;
@@ -553,9 +628,18 @@ async function extractZipEntry(archive: Buffer, entry: ZipEntry): Promise<Buffer
   return output;
 }
 
-async function ensureTargetParent(mapsDir: string, targetPath: string): Promise<string> {
-  const parts = normalizeRelativePath(targetPath, 'DLC target path');
-  let parent = mapsDir;
+async function ensureTargetParent(
+  location: DlcLocation,
+  definition: DlcFileDefinition
+): Promise<string> {
+  const parts = normalizeRelativePath(definition.targetPath, 'DLC target path');
+  let parent: string;
+  if (targetRootOf(definition) === 'dlc-maps') {
+    const dlcDir = await ensureChildDirectory(location.cookedPcDir, 'DLC');
+    parent = await ensureChildDirectory(dlcDir, 'Maps');
+  } else {
+    parent = targetRootLocation(location, definition).path;
+  }
   for (const directoryName of parts.slice(0, -1)) {
     parent = await ensureChildDirectory(parent, directoryName);
   }
@@ -566,10 +650,29 @@ function isAlreadyExists(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === 'EEXIST';
 }
 
-async function removeIfExact(path: string, definition: DlcFileDefinition): Promise<void> {
-  if (await exactFile(path, definition.size, definition.sha256)) {
-    await rm(path, { force: true });
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
+}
+
+async function removeExactOrMissing(
+  path: string,
+  expected: DlcArchiveFileDefinition
+): Promise<void> {
+  if (!(await pathExists(path))) return;
+  if (!(await exactFile(path, expected.size, expected.sha256))) {
+    throw new Error(`Rollback stopped because ${path} changed during the DLC operation.`);
+  }
+  await rm(path, { force: true });
+}
+
+function rollbackFilePath(path: string, id: DlcId): string {
+  return join(dirname(path), `.commonwealth-dlc-${id}-${randomUUID()}.rollback`);
 }
 
 export function unavailableDlcStatuses(
@@ -616,7 +719,7 @@ export class DlcManager {
       if (ids.has(definition.id)) throw new Error(`Duplicate DLC definition: ${definition.id}`);
       ids.add(definition.id);
       for (const file of definition.files) {
-        const targetPath = file.targetPath.toLowerCase();
+        const targetPath = targetKey(file);
         if (targetPaths.has(targetPath)) {
           throw new Error(`DLC definitions share target path ${file.targetPath}.`);
         }
@@ -645,8 +748,10 @@ export class DlcManager {
       id: definition.id,
       archiveSha256: definition.archiveSha256,
       files: definition.files.map((file) => ({
+        root: targetRootOf(file),
         path: file.targetPath,
-        sha256: file.sha256
+        sha256: file.sha256,
+        ...(file.restore ? { restoreSha256: file.restore.sha256 } : {})
       }))
     };
     const path = this.markerPath(install, definition.id);
@@ -702,6 +807,89 @@ export class DlcManager {
     return statuses;
   }
 
+  private async stageArchiveFile(
+    archive: Buffer,
+    entries: ReadonlyMap<string, ZipEntry>,
+    location: DlcLocation,
+    definition: DlcDefinition,
+    file: DlcFileDefinition,
+    archiveFile: DlcArchiveFileDefinition
+  ): Promise<StagedFile> {
+    const entry = entries.get(archiveFile.archivePath);
+    if (!entry) throw new Error(`The DLC ZIP is missing ${archiveFile.archivePath}.`);
+    const payload = await extractZipEntry(archive, entry);
+    if (createHash('sha256').update(payload).digest('hex') !== archiveFile.sha256) {
+      throw new Error(`The DLC ZIP entry ${entry.name} failed SHA-256 verification.`);
+    }
+    const targetParent = await ensureTargetParent(location, file);
+    const temporary = join(
+      targetParent,
+      `.commonwealth-dlc-${definition.id}-${randomUUID()}.tmp`
+    );
+    await writeFile(temporary, payload, { flag: 'wx' });
+    return { definition: file, tempPath: temporary };
+  }
+
+  private async rollbackInstall(mutations: readonly InstallMutation[]): Promise<string[]> {
+    const failures: string[] = [];
+    for (const mutation of [...mutations].reverse()) {
+      try {
+        await removeExactOrMissing(mutation.path, mutation.definition);
+        if (mutation.rollbackPath) {
+          const restore = mutation.definition.restore!;
+          if (!(await exactFile(mutation.rollbackPath, restore.size, restore.sha256))) {
+            throw new Error(`The rollback copy for ${mutation.path} is missing or modified.`);
+          }
+          await rename(mutation.rollbackPath, mutation.path);
+        }
+      } catch (error) {
+        failures.push((error as Error).message);
+      }
+    }
+    return failures;
+  }
+
+  private async rollbackRemoval(mutations: readonly RemovalMutation[]): Promise<string[]> {
+    const failures: string[] = [];
+    for (const mutation of [...mutations].reverse()) {
+      try {
+        if (mutation.publishedRestore) {
+          await removeExactOrMissing(mutation.path, mutation.definition.restore!);
+        } else if (await pathExists(mutation.path)) {
+          throw new Error(`Rollback stopped because ${mutation.path} changed during removal.`);
+        }
+        if (mutation.rollbackPath) {
+          if (
+            !(await exactFile(
+              mutation.rollbackPath,
+              mutation.definition.size,
+              mutation.definition.sha256
+            ))
+          ) {
+            throw new Error(`The rollback copy for ${mutation.path} is missing or modified.`);
+          }
+          await rename(mutation.rollbackPath, mutation.path);
+        }
+      } catch (error) {
+        failures.push((error as Error).message);
+      }
+    }
+    return failures;
+  }
+
+  private async discardRollbackFiles(
+    mutations: ReadonlyArray<InstallMutation | RemovalMutation>
+  ): Promise<void> {
+    for (const mutation of mutations) {
+      if (!mutation.rollbackPath) continue;
+      await rm(mutation.rollbackPath, { force: true }).catch((error) => {
+        this.log.warn(
+          `DLC rollback-file cleanup skipped for ${mutation.rollbackPath}: ${(error as Error).message}`
+        );
+      });
+    }
+  }
+
   async ensureInstalled(
     install: GameInstall,
     id: DlcId,
@@ -719,29 +907,24 @@ export class DlcManager {
     const archivePath = await this.verifiedArchive(definition, onProgress);
     const archive = await readFile(archivePath);
     const entries = parseZipManifest(archive, definition);
-    const writable = await inspectPayload(install, definition, true);
+    const writable = await inspectPayload(install, definition);
     const writableConflict = writable.files.find((file) => file.state === 'conflict');
     if (writableConflict) throw new Error(writableConflict.detail);
 
     const staged: StagedFile[] = [];
-    const published: Array<{ path: string; definition: DlcFileDefinition }> = [];
+    const mutations: InstallMutation[] = [];
     try {
-      for (const file of writable.files.filter((candidate) => candidate.state === 'missing')) {
-        const entry = entries.get(file.definition.archivePath)!;
-        const payload = await extractZipEntry(archive, entry);
-        if (createHash('sha256').update(payload).digest('hex') !== file.definition.sha256) {
-          throw new Error(`The DLC ZIP entry ${entry.name} failed SHA-256 verification.`);
-        }
-        const targetParent = await ensureTargetParent(
-          writable.location.mapsDir,
-          file.definition.targetPath
+      for (const file of writable.files.filter((candidate) => candidate.state !== 'exact')) {
+        staged.push(
+          await this.stageArchiveFile(
+            archive,
+            entries,
+            writable.location,
+            definition,
+            file.definition,
+            file.definition
+          )
         );
-        const temporary = join(
-          targetParent,
-          `.commonwealth-dlc-${definition.id}-${randomUUID()}.tmp`
-        );
-        await writeFile(temporary, payload, { flag: 'wx' });
-        staged.push({ definition: file.definition, tempPath: temporary });
       }
 
       const beforePublish = await inspectPayload(install, definition);
@@ -749,12 +932,21 @@ export class DlcManager {
       if (publishConflict) throw new Error(publishConflict.detail);
       for (const stagedFile of staged) {
         const current = beforePublish.files.find(
-          (file) => file.definition.targetPath === stagedFile.definition.targetPath
+          (file) => targetKey(file.definition) === targetKey(stagedFile.definition)
         )!;
         if (current.state === 'exact') continue;
+        let mutation: InstallMutation | null = null;
+        if (current.state === 'restored') {
+          const rollbackPath = rollbackFilePath(current.path, definition.id);
+          await rename(current.path, rollbackPath);
+          mutation = { definition: current.definition, path: current.path, rollbackPath };
+          mutations.push(mutation);
+        }
         try {
           await link(stagedFile.tempPath, current.path);
-          published.push({ path: current.path, definition: stagedFile.definition });
+          if (!mutation) {
+            mutations.push({ definition: current.definition, path: current.path });
+          }
         } catch (error) {
           if (
             !isAlreadyExists(error) ||
@@ -775,13 +967,17 @@ export class DlcManager {
       }
       await this.writeMarker(install, definition);
       this.log.info(
-        `${definition.name}: installed ${definition.files.length} verified map ` +
+        `${definition.name}: installed ${definition.files.length} verified DLC ` +
           `file${definition.files.length === 1 ? '' : 's'}`
       );
+      await this.discardRollbackFiles(mutations);
       return statusFromInspection(definition, installed);
     } catch (error) {
-      for (const file of published) {
-        await removeIfExact(file.path, file.definition).catch(() => {});
+      const rollbackFailures = await this.rollbackInstall(mutations);
+      if (rollbackFailures.length) {
+        throw new Error(
+          `${(error as Error).message} DLC rollback was incomplete: ${rollbackFailures.join(' ')}`
+        );
       }
       throw error;
     } finally {
@@ -799,14 +995,129 @@ export class DlcManager {
       );
     }
 
-    for (const file of inspection.files.filter((candidate) => candidate.state === 'exact')) {
-      await unlink(file.path);
+    let archive: Buffer | null = null;
+    let entries = new Map<string, ZipEntry>();
+    if (
+      inspection.files.some(
+        (file) => file.definition.restore && file.state !== 'restored'
+      )
+    ) {
+      const archivePath = await this.verifiedArchive(definition, () => {});
+      archive = await readFile(archivePath);
+      entries = parseZipManifest(archive, definition);
     }
-    await rm(this.markerPath(install, definition.id), { force: true });
-    await this.removeEmptyDirectories(inspection.location, definition);
-    const removed = await inspectPayload(install, definition);
-    this.log.info(`${definition.name}: removed verified map files`);
-    return statusFromInspection(definition, removed);
+
+    const writable = await inspectPayload(install, definition);
+    const writableConflict = writable.files.find((file) => file.state === 'conflict');
+    if (writableConflict) {
+      throw new Error(
+        `The DLC was not removed because ${writableConflict.path} is not a verified managed file.`
+      );
+    }
+
+    const staged: StagedFile[] = [];
+    const mutations: RemovalMutation[] = [];
+    try {
+      if (archive) {
+        for (const file of writable.files.filter(
+          (candidate) => candidate.definition.restore && candidate.state !== 'restored'
+        )) {
+          staged.push(
+            await this.stageArchiveFile(
+              archive,
+              entries,
+              writable.location,
+              definition,
+              file.definition,
+              file.definition.restore!
+            )
+          );
+        }
+      }
+
+      const beforeRemoval = await inspectPayload(install, definition);
+      const removalConflict = beforeRemoval.files.find((file) => file.state === 'conflict');
+      if (removalConflict) {
+        throw new Error(
+          `The DLC was not removed because ${removalConflict.path} is not a verified managed file.`
+        );
+      }
+
+      for (const current of beforeRemoval.files) {
+        if (current.state === 'restored' || (!current.definition.restore && current.state === 'missing')) {
+          continue;
+        }
+        const stagedRestore = staged.find(
+          (file) => targetKey(file.definition) === targetKey(current.definition)
+        );
+        if (current.definition.restore && !stagedRestore) {
+          throw new Error(`${current.path} changed while the DLC removal was being prepared.`);
+        }
+
+        let rollbackPath: string | undefined;
+        if (current.state === 'exact') {
+          rollbackPath = rollbackFilePath(current.path, definition.id);
+          await rename(current.path, rollbackPath);
+          mutations.push({
+            definition: current.definition,
+            path: current.path,
+            rollbackPath,
+            publishedRestore: Boolean(current.definition.restore)
+          });
+        }
+        if (!current.definition.restore) continue;
+
+        try {
+          await link(stagedRestore!.tempPath, current.path);
+          if (!rollbackPath) {
+            mutations.push({
+              definition: current.definition,
+              path: current.path,
+              publishedRestore: true
+            });
+          }
+        } catch (error) {
+          if (
+            !isAlreadyExists(error) ||
+            !(await exactFile(
+              current.path,
+              current.definition.restore.size,
+              current.definition.restore.sha256
+            ))
+          ) {
+            throw error;
+          }
+        }
+      }
+
+      const removed = await inspectPayload(install, definition);
+      if (
+        !removed.files.every((file) =>
+          file.definition.restore ? file.state === 'restored' : file.state === 'missing'
+        )
+      ) {
+        throw new Error('The DLC could not be verified after removal.');
+      }
+      await rm(this.markerPath(install, definition.id), { force: true });
+      await this.discardRollbackFiles(mutations);
+      await this.removeEmptyDirectories(removed.location, definition);
+      this.log.info(
+        definition.files.some((file) => file.restore)
+          ? `${definition.name}: removed verified DLC files and restored base-game files`
+          : `${definition.name}: removed verified DLC files`
+      );
+      return statusFromInspection(definition, removed);
+    } catch (error) {
+      const rollbackFailures = await this.rollbackRemoval(mutations);
+      if (rollbackFailures.length) {
+        throw new Error(
+          `${(error as Error).message} DLC rollback was incomplete: ${rollbackFailures.join(' ')}`
+        );
+      }
+      throw error;
+    } finally {
+      await Promise.all(staged.map((file) => rm(file.tempPath, { force: true }).catch(() => {})));
+    }
   }
 
   private async removeEmptyDirectories(
@@ -816,16 +1127,22 @@ export class DlcManager {
     const directories = new Set<string>();
     for (const file of definition.files) {
       const parts = normalizeRelativePath(file.targetPath, 'DLC target path');
-      let parent = location.mapsDir;
+      const root = targetRootLocation(location, file);
+      if (!root.exists) continue;
+      let parent = root.path;
       for (const name of parts.slice(0, -1)) {
         const child = await existingChildDirectory(parent, name).catch(() => null);
         if (!child) break;
         directories.add(child);
         parent = child;
       }
+      if (targetRootOf(file) === 'dlc-maps') {
+        directories.add(location.mapsDir);
+        directories.add(location.dlcDir);
+      }
     }
     const ordered = [...directories].sort((left, right) => right.length - left.length);
-    for (const directory of [...ordered, location.mapsDir, location.dlcDir]) {
+    for (const directory of ordered) {
       try {
         await rmdir(directory);
       } catch (error) {

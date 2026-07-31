@@ -2519,10 +2519,9 @@ function DlcsTab({
     <section className={`${styles.section} ${styles.dlcSection}`}>
       <div className="panel-title">Optional Game Content</div>
       <p className={styles.hint}>
-        DLC downloads are enabled by default and kept separate under the game&apos;s DLC folder. The
-        launcher verifies their exact files at startup and before every Play, while your Remove
-        choice prevents automatic reinstallation. After installation, activate each pack in-game
-        with the chat command shown on its card.
+        DLC downloads are enabled by default. The launcher verifies their exact files at startup
+        and before every Play, while your Remove choice prevents automatic reinstallation. After
+        installation, activate each pack in-game with the chat command shown on its card.
       </p>
 
       <div className={styles.patchList}>
@@ -2555,6 +2554,11 @@ function DlcsTab({
           const downloadSize = definition
             ? `${(definition.archiveSize / (1024 * 1024)).toFixed(1)} MiB download`
             : 'Verified download';
+          const installLocation = definition?.files.some(
+            (file) => 'targetRoot' in file && file.targetRoot === 'binaries'
+          )
+            ? 'CookedPC + Binaries'
+            : 'CookedPC / DLC / Maps';
 
           return (
             <article
@@ -2579,7 +2583,9 @@ function DlcsTab({
               <div className={styles.patchBody}>
                 <div className={styles.dlcHeading}>
                   <div>
-                    <span className={styles.dlcEyebrow}>PvP map pack // optional</span>
+                    <span className={styles.dlcEyebrow}>
+                      {definition?.mode ?? 'Map'} map pack // optional
+                    </span>
                     <div className={styles.patchTitle}>{dlc.name}</div>
                   </div>
                   <span className={styles.dlcFileCount}>
@@ -2617,7 +2623,7 @@ function DlcsTab({
 
                 <div className={styles.dlcMetaStrip}>
                   <span>{downloadSize}</span>
-                  <code>TgGame / CookedPC / DLC / Maps</code>
+                  <code>{installLocation}</code>
                 </div>
 
                 {error?.id === dlc.id && (

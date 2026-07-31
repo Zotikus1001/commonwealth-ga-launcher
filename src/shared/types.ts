@@ -47,16 +47,18 @@ export interface PatchSettings {
   adaptiveClientPerformance: boolean;
 }
 
-export type DlcId = 'surfside-atoll-pvp-maps' | 'carbon-capture';
+export type DlcId = 'surfside-atoll-pvp-maps' | 'carbon-capture' | 'pve-factory-3-4';
 
 export interface DlcSettings {
   surfsideAtollPvpMaps: boolean;
   carbonCapture: boolean;
+  pveFactory34: boolean;
 }
 
 export const DLC_SETTING_KEY_BY_ID: Readonly<Record<DlcId, keyof DlcSettings>> = {
   'surfside-atoll-pvp-maps': 'surfsideAtollPvpMaps',
-  'carbon-capture': 'carbonCapture'
+  'carbon-capture': 'carbonCapture',
+  'pve-factory-3-4': 'pveFactory34'
 };
 
 export function isDlcId(value: unknown): value is DlcId {

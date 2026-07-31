@@ -41,7 +41,48 @@ const CONFIG_KEYS = new Set([
   'carbon_capture_dlc_archive_size',
   'carbon_capture_dlc_archive_sha256',
   'carbon_capture_dlc_map_size',
-  'carbon_capture_dlc_map_sha256'
+  'carbon_capture_dlc_map_sha256',
+  'pve_factory_3_4_dlc_url',
+  'pve_factory_3_4_dlc_archive_size',
+  'pve_factory_3_4_dlc_archive_sha256',
+  'pve_factory_3_4_dlc_factory04_package_size',
+  'pve_factory_3_4_dlc_factory04_package_sha256',
+  'pve_factory_3_4_dlc_factory04_sound_size',
+  'pve_factory_3_4_dlc_factory04_sound_sha256',
+  'pve_factory_3_4_dlc_factory03_package_size',
+  'pve_factory_3_4_dlc_factory03_package_sha256',
+  'pve_factory_3_4_dlc_factory03_sound_size',
+  'pve_factory_3_4_dlc_factory03_sound_sha256',
+  'pve_factory_3_4_dlc_sound_environment_size',
+  'pve_factory_3_4_dlc_sound_environment_sha256',
+  'pve_factory_3_4_dlc_mining_interior_size',
+  'pve_factory_3_4_dlc_mining_interior_sha256',
+  'pve_factory_3_4_dlc_general_piping_size',
+  'pve_factory_3_4_dlc_general_piping_sha256',
+  'pve_factory_3_4_dlc_commonwealth_props_size',
+  'pve_factory_3_4_dlc_commonwealth_props_sha256',
+  'pve_factory_3_4_dlc_factory_wallsets_size',
+  'pve_factory_3_4_dlc_factory_wallsets_sha256',
+  'pve_factory_3_4_dlc_factory_exterior_size',
+  'pve_factory_3_4_dlc_factory_exterior_sha256',
+  'pve_factory_3_4_dlc_factory_conveyor_size',
+  'pve_factory_3_4_dlc_factory_conveyor_sha256',
+  'pve_factory_3_4_dlc_shader_worker_size',
+  'pve_factory_3_4_dlc_shader_worker_sha256',
+  'pve_factory_3_4_dlc_backup_sound_environment_size',
+  'pve_factory_3_4_dlc_backup_sound_environment_sha256',
+  'pve_factory_3_4_dlc_backup_mining_interior_size',
+  'pve_factory_3_4_dlc_backup_mining_interior_sha256',
+  'pve_factory_3_4_dlc_backup_general_piping_size',
+  'pve_factory_3_4_dlc_backup_general_piping_sha256',
+  'pve_factory_3_4_dlc_backup_commonwealth_props_size',
+  'pve_factory_3_4_dlc_backup_commonwealth_props_sha256',
+  'pve_factory_3_4_dlc_backup_factory_wallsets_size',
+  'pve_factory_3_4_dlc_backup_factory_wallsets_sha256',
+  'pve_factory_3_4_dlc_backup_factory_exterior_size',
+  'pve_factory_3_4_dlc_backup_factory_exterior_sha256',
+  'pve_factory_3_4_dlc_backup_factory_conveyor_size',
+  'pve_factory_3_4_dlc_backup_factory_conveyor_sha256'
 ]);
 
 function parseQuotedString(value, lineNumber) {
@@ -428,6 +469,150 @@ function loadLauncherConfig(options = {}) {
   ];
   assertSha256(carbonCaptureFiles[0].sha256, 'carbon_capture_dlc map SHA-256');
 
+  const pveFactoryDlcUrl = parseDirectZipUrl(
+    raw.pve_factory_3_4_dlc_url,
+    'pve_factory_3_4_dlc_url'
+  );
+  const pveFactoryArchiveSize = parseByteSize(
+    raw.pve_factory_3_4_dlc_archive_size,
+    'pve_factory_3_4_dlc_archive_size',
+    512 * 1024 * 1024
+  );
+  assertSha256(raw.pve_factory_3_4_dlc_archive_sha256, 'pve_factory_3_4_dlc_archive_sha256');
+  const pveFactoryPinnedFile = (archivePath, key) => {
+    const field = `pve_factory_3_4_dlc_${key}`;
+    const sha256 = raw[`${field}_sha256`];
+    assertSha256(sha256, `${field}_sha256`);
+    return {
+      archivePath,
+      size: parseByteSize(raw[`${field}_size`], `${field}_size`, 256 * 1024 * 1024),
+      sha256
+    };
+  };
+  const pveFactoryFiles = [
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Maps/1P_CPFactory04/1P_CPFactory04_P.ut3',
+        'factory04_package'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Maps/1P_CPFactory04/1P_CPFactory04_P.ut3'
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Maps/1P_CPFactory04/1P_CPFactory04_Sound.ut3',
+        'factory04_sound'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Maps/1P_CPFactory04/1P_CPFactory04_Sound.ut3'
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Maps/1P_CPFactory03/1P_CPFactory03_Sound.ut3',
+        'factory03_sound'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Maps/1P_CPFactory03/1P_CPFactory03_Sound.ut3'
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Maps/1P_CPFactory03/1P_CPFactory03_P.ut3',
+        'factory03_package'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Maps/1P_CPFactory03/1P_CPFactory03_P.ut3'
+    },
+    {
+      ...pveFactoryPinnedFile('DLC/Sounds/SND_ENV_CPFactory.upk', 'sound_environment'),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Sounds/SND_ENV_CPFactory.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Sounds/SND_ENV_CPFactory.upk',
+        'backup_sound_environment'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
+        'mining_interior'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/SAAM_S_American_Arms_Market/SAAM_Mining_IntA00.upk',
+        'backup_mining_interior'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/Dev_Gen_Library/Gen_Piping.upk',
+        'general_piping'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/Dev_Gen_Library/Gen_Piping.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/Dev_Gen_Library/Gen_Piping.upk',
+        'backup_general_piping'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
+        'commonwealth_props'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/Commonwealth/Comm_Props/Commonwealth_Props.upk',
+        'backup_commonwealth_props'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/CMW_Factories/CMW_Factories_WallSets.upk',
+        'factory_wallsets'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factories_WallSets.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/CMW_Factories/CMW_Factories_WallSets.upk',
+        'backup_factory_wallsets'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
+        'factory_exterior'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/CMW_Factories/CMW_Factory_ExteriorA01.upk',
+        'backup_factory_exterior'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'DLC/Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
+        'factory_conveyor'
+      ),
+      targetRoot: 'cooked-pc',
+      targetPath: 'DLC/Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
+      restore: pveFactoryPinnedFile(
+        'Backup/Environments/CMW_Factories/CMW_Factories_Conveyor.upk',
+        'backup_factory_conveyor'
+      )
+    },
+    {
+      ...pveFactoryPinnedFile(
+        'Binaries/UE3ShaderCompileWorker.exe',
+        'shader_worker'
+      ),
+      targetRoot: 'binaries',
+      targetPath: 'UE3ShaderCompileWorker.exe'
+    }
+  ];
+
   assertBranch(raw.server_history_branch, 'server_history_branch');
   const serverHistoryCount = Number.parseInt(raw.server_history_count, 10);
   if (!/^\d+$/.test(raw.server_history_count) || serverHistoryCount < 1 || serverHistoryCount > 10) {
@@ -473,6 +658,7 @@ function loadLauncherConfig(options = {}) {
       {
         id: 'surfside-atoll-pvp-maps',
         name: 'Surfside-Atoll PvP Maps',
+        mode: 'PvP',
         mapCount: 2,
         description:
           'Adds Surfside and Atoll as two additional PvP maps. Install or remove the pack independently without changing the base game files around it.',
@@ -484,6 +670,7 @@ function loadLauncherConfig(options = {}) {
       {
         id: 'carbon-capture',
         name: 'Carbon Capture PvP Map',
+        mode: 'PvP',
         mapCount: 1,
         description:
           'Adds Carbon Capture as an additional PvP map. Install or remove it independently without changing the base game files around it.',
@@ -491,6 +678,18 @@ function loadLauncherConfig(options = {}) {
         archiveSize: carbonCaptureArchiveSize,
         archiveSha256: raw.carbon_capture_dlc_archive_sha256,
         files: carbonCaptureFiles
+      },
+      {
+        id: 'pve-factory-3-4',
+        name: 'Factory 3-4 PvE Maps',
+        mode: 'PvE',
+        mapCount: 2,
+        description:
+          'Adds Central Industrial Complex and Recycling Plant 37 as two PvE maps, including their required support files. Remove restores the verified base-game files.',
+        url: pveFactoryDlcUrl.toString(),
+        archiveSize: pveFactoryArchiveSize,
+        archiveSha256: raw.pve_factory_3_4_dlc_archive_sha256,
+        files: pveFactoryFiles
       }
     ]
   };

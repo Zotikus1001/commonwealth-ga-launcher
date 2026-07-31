@@ -29,7 +29,7 @@ import {
 } from '@shared/linuxCommandTemplate';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 17;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 18;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -291,6 +291,21 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 17: {
+        const dlcs = isPlainObject(settings.dlcs) ? settings.dlcs : {};
+        settings = {
+          ...settings,
+          schemaVersion: 18,
+          dlcs: {
+            ...dlcs,
+            pveFactory34:
+              typeof dlcs.pveFactory34 === 'boolean' ? dlcs.pveFactory34 : true
+          }
+        };
+        version = 18;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -320,7 +335,8 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
     },
     dlcs: {
       surfsideAtollPvpMaps: true,
-      carbonCapture: true
+      carbonCapture: true,
+      pveFactory34: true
     },
     servers: {
       builtInName,
@@ -536,7 +552,11 @@ function sanitizeStoredDlcs(value: unknown, fallback: Settings['dlcs']): Setting
     carbonCapture:
       typeof value.carbonCapture === 'boolean'
         ? value.carbonCapture
-        : fallback.carbonCapture
+        : fallback.carbonCapture,
+    pveFactory34:
+      typeof value.pveFactory34 === 'boolean'
+        ? value.pveFactory34
+        : fallback.pveFactory34
   };
 }
 
@@ -544,13 +564,15 @@ function validateUpdatedDlcs(value: unknown): Settings['dlcs'] {
   if (
     !isPlainObject(value) ||
     typeof value.surfsideAtollPvpMaps !== 'boolean' ||
-    typeof value.carbonCapture !== 'boolean'
+    typeof value.carbonCapture !== 'boolean' ||
+    typeof value.pveFactory34 !== 'boolean'
   ) {
     throw new Error('DLC settings are invalid.');
   }
   return {
     surfsideAtollPvpMaps: value.surfsideAtollPvpMaps,
-    carbonCapture: value.carbonCapture
+    carbonCapture: value.carbonCapture,
+    pveFactory34: value.pveFactory34
   };
 }
 

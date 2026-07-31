@@ -669,12 +669,10 @@ function sameGamePath(left: string, right: string): boolean {
 function reconcileIniValue<T extends string | number | boolean>(
   current: T,
   baseline: T | null,
-  observed: T | null,
-  sameSource: boolean
+  observed: T | null
 ): T {
   if (observed === null) return current;
-  if (!sameSource || baseline === null || current === baseline) return observed;
-  return current;
+  return baseline !== null && current !== baseline ? current : observed;
 }
 
 // JSON settings in userData/settings.json, merged over defaults, saved atomically (tmp + rename).
@@ -790,9 +788,10 @@ export class ConfigStore {
 
   async update(patch: DeepPartial<Settings>): Promise<Settings> {
     if (this.readOnlyReason) throw new Error(this.readOnlyReason);
+    const previous = this.settings;
     const next = mergeInto(this.settings, patch);
     next.schemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION;
-    next.gameIniBaseline = structuredClone(this.settings.gameIniBaseline);
+    const gameIniBaseline = structuredClone(previous.gameIniBaseline);
     next.servers = validateUpdatedServers(next.servers);
     next.developer = validateUpdatedDeveloper(next.developer);
     next.patches = validateUpdatedPatches(next.patches);
@@ -807,6 +806,30 @@ export class ConfigStore {
     if (typeof next.launch.closeAfterLaunch !== 'boolean') {
       next.launch.closeAfterLaunch = this.defaults.launch.closeAfterLaunch;
     }
+    // Seed unknown baselines only when the user makes a choice, so untouched defaults can still
+    // hydrate from the first valid install while pre-path choices remain pending.
+    if (gameIniBaseline.loginMap === null && next.loginMap !== previous.loginMap) {
+      gameIniBaseline.loginMap = previous.loginMap;
+    }
+    if (
+      gameIniBaseline.showOverhealing === null &&
+      next.showOverhealing !== previous.showOverhealing
+    ) {
+      gameIniBaseline.showOverhealing = previous.showOverhealing;
+    }
+    if (
+      gameIniBaseline.fpsLimit.enabled === null &&
+      next.fpsLimit.enabled !== previous.fpsLimit.enabled
+    ) {
+      gameIniBaseline.fpsLimit.enabled = previous.fpsLimit.enabled;
+    }
+    if (
+      gameIniBaseline.fpsLimit.value === null &&
+      next.fpsLimit.value !== previous.fpsLimit.value
+    ) {
+      gameIniBaseline.fpsLimit.value = previous.fpsLimit.value;
+    }
+    next.gameIniBaseline = gameIniBaseline;
     this.settings = next;
     await this.save();
     return this.settings;
@@ -829,38 +852,52 @@ export class ConfigStore {
     next.loginMap = reconcileIniValue(
       current.loginMap,
       previous.loginMap,
-      observed.loginMap,
-      sameSource
+      observed.loginMap
     );
     next.showOverhealing = reconcileIniValue(
       current.showOverhealing,
       previous.showOverhealing,
-      observed.showOverhealing,
-      sameSource
+      observed.showOverhealing
     );
     next.fpsLimit.enabled = reconcileIniValue(
       current.fpsLimit.enabled,
       previous.fpsLimit.enabled,
-      observed.fpsLimit.enabled,
-      sameSource
+      observed.fpsLimit.enabled
     );
     next.fpsLimit.value = reconcileIniValue(
       current.fpsLimit.value,
       previous.fpsLimit.value,
-      observed.fpsLimit.value,
-      sameSource
+      observed.fpsLimit.value
     );
 
     baseline.gameExePath = gameExePath;
     if (observed.loginMap !== null) baseline.loginMap = observed.loginMap;
+    else if (previous.loginMap !== null && current.loginMap !== previous.loginMap) {
+      baseline.loginMap = previous.loginMap;
+    }
     if (observed.showOverhealing !== null) {
       baseline.showOverhealing = observed.showOverhealing;
+    } else if (
+      previous.showOverhealing !== null &&
+      current.showOverhealing !== previous.showOverhealing
+    ) {
+      baseline.showOverhealing = previous.showOverhealing;
     }
     if (observed.fpsLimit.enabled !== null) {
       baseline.fpsLimit.enabled = observed.fpsLimit.enabled;
+    } else if (
+      previous.fpsLimit.enabled !== null &&
+      current.fpsLimit.enabled !== previous.fpsLimit.enabled
+    ) {
+      baseline.fpsLimit.enabled = previous.fpsLimit.enabled;
     }
     if (observed.fpsLimit.value !== null) {
       baseline.fpsLimit.value = observed.fpsLimit.value;
+    } else if (
+      previous.fpsLimit.value !== null &&
+      current.fpsLimit.value !== previous.fpsLimit.value
+    ) {
+      baseline.fpsLimit.value = previous.fpsLimit.value;
     }
     next.gameIniBaseline = baseline;
 

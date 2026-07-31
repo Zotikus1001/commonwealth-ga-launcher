@@ -31,6 +31,7 @@ import {
 import {
   applyClientPatch as applyIniClientPatch,
   ensureClientConfiguration,
+  ensureGameIniSettings,
   inspectClientPatches,
   inspectGameIniSettings,
   removeClientPatch as removeIniClientPatch,
@@ -85,6 +86,18 @@ interface CandidateProbeResult {
 function enabledDlcDefinitions(settings: Settings) {
   return LAUNCHER_CONFIG.dlcs.filter(
     (definition) => settings.dlcs[DLC_SETTING_KEY_BY_ID[definition.id]]
+  );
+}
+
+function hasPendingGameIniSettings(settings: Settings): boolean {
+  const baseline = settings.gameIniBaseline;
+  return (
+    (baseline.loginMap !== null && settings.loginMap !== baseline.loginMap) ||
+    (baseline.showOverhealing !== null &&
+      settings.showOverhealing !== baseline.showOverhealing) ||
+    (baseline.fpsLimit.enabled !== null &&
+      settings.fpsLimit.enabled !== baseline.fpsLimit.enabled) ||
+    (baseline.fpsLimit.value !== null && settings.fpsLimit.value !== baseline.fpsLimit.value)
   );
 }
 
@@ -603,6 +616,26 @@ export class Orchestrator {
       );
     }
     settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
+    if (hasPendingGameIniSettings(settings)) {
+      this.patch({ statusLine: 'Applying saved game settings…' });
+      try {
+        await ensureGameIniSettings(
+          install,
+          settings.loginMap,
+          settings.showOverhealing,
+          settings.fpsLimit.enabled,
+          settings.fpsLimit.value,
+          this.log,
+          managedIniBackupDirectory(app.getPath('userData'), install)
+        );
+        settings = await this.config.syncGameIniSettings(
+          settings.gameExePath,
+          await inspectGameIniSettings(install)
+        );
+      } catch (error) {
+        this.log.warn(`automatic game settings apply failed: ${(error as Error).message}`);
+      }
+    }
     this.log.info('game install validation: valid');
     this.patch({
       gameClientDll,

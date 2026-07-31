@@ -1765,6 +1765,32 @@ export async function restoreDxvkRenderer(
   return result;
 }
 
+export async function ensureGameIniSettings(
+  install: GameInstall,
+  loginMap: LoginMap,
+  showOverhealing: boolean,
+  fpsLimitEnabled: boolean,
+  fpsLimit: number,
+  log: Log,
+  backupDirectory: string
+): Promise<IniRepairResult> {
+  const loginMapResult = await ensureLoginMap(install, loginMap, log, backupDirectory);
+  const overhealingResult = await ensureOverhealing(
+    install,
+    showOverhealing,
+    log,
+    backupDirectory
+  );
+  const fpsResult = await ensureFpsLimit(
+    install,
+    fpsLimitEnabled,
+    fpsLimit,
+    log,
+    backupDirectory
+  );
+  return mergeRepairResults([loginMapResult, overhealingResult, fpsResult]);
+}
+
 /** Applies each configured INI setting independently before every game launch. */
 export async function ensureClientConfiguration(
   install: GameInstall,
@@ -1794,27 +1820,16 @@ export async function ensureClientConfiguration(
         texturePoolMb
       )
     : { checkedFiles: [], changedFiles: [], backupFiles: [] };
-  const loginMapResult = await ensureLoginMap(install, loginMap, log, backupDirectory);
-  const overhealingResult = await ensureOverhealing(
+  const gameSettingsResult = await ensureGameIniSettings(
     install,
+    loginMap,
     showOverhealing,
-    log,
-    backupDirectory
-  );
-  const fpsResult = await ensureFpsLimit(
-    install,
     fpsLimitEnabled,
     fpsLimit,
     log,
     backupDirectory
   );
-  const result = mergeRepairResults([
-    networkResult,
-    performanceResult,
-    loginMapResult,
-    overhealingResult,
-    fpsResult
-  ]);
+  const result = mergeRepairResults([networkResult, performanceResult, gameSettingsResult]);
 
   log.info(
     `client ini: ${CLIENT_NET_SPEED}/${CLIENT_NET_SPEED}, ${loginMap}, and overhealing ` +

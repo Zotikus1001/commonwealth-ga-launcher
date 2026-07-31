@@ -35,7 +35,8 @@ The launcher updates itself automatically.
 ## Features
 
 - Automatic updates
-- Easy game setup and launching
+- Easy game setup and launching, with saved game settings and enabled content prepared as soon as
+  the install location validates
 - Server status and server selection
 - Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
   UI preferences

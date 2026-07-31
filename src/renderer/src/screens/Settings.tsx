@@ -2541,15 +2541,15 @@ export function DlcActivationTip({ id }: { id: DlcId }): JSX.Element {
       <div className={styles.dlcActivationIntro}>
         <span>In-game map access</span>
         <p>
-          Install controls the files. Use these chat commands to allow or exclude this pack's maps
-          in your games.
+          Install controls the files. Use these chat commands to include or exclude this pack's
+          maps from matchmaking.
         </p>
       </div>
       <div className={styles.dlcActivationCommands}>
-        <ChatCommandCopy command={`-enabledlc ${id}`} detail="Include these maps in your games" />
+        <ChatCommandCopy command={`-enabledlc ${id}`} detail="Include these maps in matchmaking" />
         <ChatCommandCopy
           command={`-disabledlc ${id}`}
-          detail="Exclude these maps from your games"
+          detail="Exclude these maps from matchmaking"
         />
       </div>
     </div>

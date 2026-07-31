@@ -43,6 +43,7 @@ const api: LauncherApi = {
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),
   openSteamInstall: () => ipcRenderer.invoke(IPC.openSteamInstall),
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
+  copyChatCommand: (command: string) => ipcRenderer.invoke(IPC.copyChatCommand, command),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),
   getLogTail: () => ipcRenderer.invoke(IPC.getLogTail),
   resetLauncher: () => ipcRenderer.invoke(IPC.resetLauncher),

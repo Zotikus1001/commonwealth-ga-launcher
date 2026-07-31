@@ -282,6 +282,22 @@ export function registerIpc(
       : { ok: true, message: 'Logs folder opened.' };
   });
 
+  ipcMain.handle(IPC.copyChatCommand, (_event, command: unknown) => {
+    if (
+      typeof command !== 'string' ||
+      command.length > 128 ||
+      !/^-[a-z][a-z0-9]*(?: [a-z0-9][a-z0-9-]*)?$/.test(command)
+    ) {
+      return { ok: false, message: 'Invalid chat command.' };
+    }
+    try {
+      clipboard.writeText(command);
+      return { ok: true, message: 'Command copied to clipboard.' };
+    } catch (error) {
+      return { ok: false, message: `Could not copy command: ${(error as Error).message}` };
+    }
+  });
+
   ipcMain.handle(IPC.copyDiagnostics, () => {
     const report = buildDiagnosticsReport(orchestrator.getState(), config.get(), log.tail());
     clipboard.writeText(report);

@@ -2413,14 +2413,90 @@ export function DlcEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element 
   );
 }
 
+type ChatCommandCopyState = 'idle' | 'copying' | 'copied' | 'failed';
+
+export function ChatCommandCopy({
+  command,
+  detail
+}: {
+  command: string;
+  detail?: string;
+}): JSX.Element {
+  const [copyState, setCopyState] = useState<ChatCommandCopyState>('idle');
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    },
+    []
+  );
+
+  const copyCommand = async (): Promise<void> => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    setCopyState('copying');
+    try {
+      const result = await window.api.copyChatCommand(command);
+      setCopyState(result.ok ? 'copied' : 'failed');
+    } catch {
+      setCopyState('failed');
+    }
+    resetTimer.current = window.setTimeout(() => {
+      resetTimer.current = null;
+      setCopyState('idle');
+    }, 1_600);
+  };
+
+  const feedback =
+    copyState === 'copying'
+      ? 'COPYING'
+      : copyState === 'copied'
+        ? 'COPIED'
+        : copyState === 'failed'
+          ? 'FAILED'
+          : 'COPY';
+
+  return (
+    <button
+      type="button"
+      className={`${styles.chatCommandCopy} ${
+        copyState === 'copied'
+          ? styles.chatCommandCopied
+          : copyState === 'failed'
+            ? styles.chatCommandFailed
+            : ''
+      }`}
+      data-copy-state={copyState}
+      aria-busy={copyState === 'copying'}
+      aria-label={`Copy ${command} to clipboard`}
+      title={
+        copyState === 'copied'
+          ? 'Copied to clipboard'
+          : copyState === 'failed'
+            ? 'Could not copy command'
+            : 'Copy command to clipboard'
+      }
+      onClick={() => void copyCommand()}
+    >
+      <span className={styles.chatCommandText}>
+        <code>{command}</code>
+        {detail && <small>{detail}</small>}
+      </span>
+      <span className={styles.chatCommandCopyState} aria-live="polite">
+        {feedback}
+      </span>
+    </button>
+  );
+}
+
 export function DlcActivationTip({ id }: { id: DlcId }): JSX.Element {
   return (
     <div className={styles.dlcActivationTip}>
       <div>
         <span>In-game activation</span>
-        <p>Use this command in the in-game chat to activate the pack.</p>
+        <p>Select this command to copy it, then paste it in chat to activate the pack.</p>
       </div>
-      <code>{`-enabledlc ${id}`}</code>
+      <ChatCommandCopy command={`-enabledlc ${id}`} />
     </div>
   );
 }
@@ -2658,41 +2734,31 @@ export function InfoTab(): JSX.Element {
           </div>
           <h2>Which commands can I use in chat?</h2>
           <p>
-            Enter these commands exactly as shown in the in-game chat. A value of 1 explicitly
-            enables an option; 0 explicitly disables it.
+            Select any command to copy it, then paste it into the in-game chat. A value of 1
+            explicitly enables an option; 0 explicitly disables it.
           </p>
 
           <div className={styles.infoCommandList}>
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>
-                <code>-togglesolomode</code>
+                <ChatCommandCopy command="-togglesolomode" />
                 <span>Mission queue</span>
               </div>
               <div className={styles.infoCommandBody}>
                 <p>
-                  Run this before queueing to guarantee a solo mission. Run it again to disable
-                  solo mode, or use an explicit value.
+                  Run this before queueing to guarantee a solo mission. Without a number it toggles
+                  the current mode; use an explicit value when you do not want to toggle.
                 </p>
                 <div className={styles.infoCommandVariants}>
-                  <span>
-                    <code>-togglesolomode</code>
-                    <small>Toggle solo mode</small>
-                  </span>
-                  <span>
-                    <code>-togglesolomode 1</code>
-                    <small>Enable</small>
-                  </span>
-                  <span>
-                    <code>-togglesolomode 0</code>
-                    <small>Disable</small>
-                  </span>
+                  <ChatCommandCopy command="-togglesolomode 1" detail="Enable solo mode" />
+                  <ChatCommandCopy command="-togglesolomode 0" detail="Disable solo mode" />
                 </div>
               </div>
             </div>
 
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>
-                <code>-classes</code>
+                <ChatCommandCopy command="-classes" />
                 <span>Team readout</span>
               </div>
               <div className={styles.infoCommandBody}>
@@ -2702,41 +2768,47 @@ export function InfoTab(): JSX.Element {
 
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>
-                <code>-togglebrokensuits</code>
+                <ChatCommandCopy command="-togglebrokensuits" />
                 <span>Saved per player</span>
               </div>
               <div className={styles.infoCommandBody}>
                 <p>
                   Controls whether Commonwealth suits appear in Mercenary matches. If those suits
                   cause stutters, disable them to see alternate suits instead. Your choice is saved,
-                  so you only need to set it once.
+                  so you only need to set it once. Without a number, the command toggles that choice.
                 </p>
                 <div className={styles.infoCommandVariants}>
-                  <span>
-                    <code>-togglebrokensuits</code>
-                    <small>Toggle saved choice</small>
-                  </span>
-                  <span>
-                    <code>-togglebrokensuits 1</code>
-                    <small>Enable Commonwealth suits</small>
-                  </span>
-                  <span>
-                    <code>-togglebrokensuits 0</code>
-                    <small>Use alternate suits</small>
-                  </span>
+                  <ChatCommandCopy
+                    command="-togglebrokensuits 1"
+                    detail="Enable Commonwealth suits"
+                  />
+                  <ChatCommandCopy
+                    command="-togglebrokensuits 0"
+                    detail="Use alternate suits"
+                  />
                 </div>
               </div>
             </div>
 
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>
-                <code>-spawnhenchman</code>
+                <ChatCommandCopy command="-spawnfriend" />
+                <span>Friendly AI</span>
+              </div>
+              <div className={styles.infoCommandBody}>
+                <p>Spawns a friendly AI bot that attacks enemies.</p>
+              </div>
+            </div>
+
+            <div className={styles.infoCommand}>
+              <div className={styles.infoCommandIdentity}>
+                <ChatCommandCopy command="-spawnhenchman" />
                 <span>PvE only</span>
               </div>
               <div className={styles.infoCommandBody}>
                 <p>
-                  Spawns a bot like <code>-spawnfriend</code>, but the bot treats you as its leader
-                  and tries to follow you.
+                  Spawns a friendly AI bot that attacks enemies, treats you as its leader, and
+                  tries to follow you.
                 </p>
               </div>
             </div>

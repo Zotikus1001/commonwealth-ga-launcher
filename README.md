@@ -44,8 +44,8 @@ The launcher updates itself automatically.
 - Optional Surfside-Atoll and Carbon Capture PvP map DLCs with one-click install, repair,
   removal, and per-pack activation guidance
 - Useful game options
-- An Info and FAQ guide for performance, graphics stability, account setup, and in-game chat
-  commands
+- An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
+  in-game chat commands
 - Agenda Stats and Discord access
 - Diagnostics and a one-click recovery reset
 - Windows support and flexible Linux compatibility options, including custom command wrappers

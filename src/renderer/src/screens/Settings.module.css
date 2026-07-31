@@ -1290,6 +1290,118 @@
   color: #e69999;
 }
 
+.chatCommandCopy {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(69, 200, 218, 0.24);
+  background: rgba(69, 200, 218, 0.045);
+  color: inherit;
+  font: inherit;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.chatCommandCopy:not(:disabled):hover,
+.chatCommandCopy:focus-visible {
+  border-color: rgba(69, 200, 218, 0.72);
+  outline: none;
+  background:
+    linear-gradient(90deg, rgba(69, 200, 218, 0.15), transparent 82%),
+    rgba(69, 200, 218, 0.075);
+  box-shadow:
+    inset 3px 0 0 var(--cyan),
+    0 0 12px rgba(69, 200, 218, 0.11);
+  transform: translateY(-1px);
+}
+
+.chatCommandCopy:not(:disabled):active {
+  background: rgba(69, 200, 218, 0.14);
+  transform: translateY(0);
+}
+
+.chatCommandCopy[data-copy-state='copying'] {
+  cursor: progress;
+  opacity: 0.78;
+}
+
+.chatCommandText {
+  min-width: 0;
+}
+
+.chatCommandText code,
+.chatCommandText small {
+  display: block;
+}
+
+.chatCommandText code {
+  color: #8bdae5;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.chatCommandText small {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.chatCommandCopyState {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chatCommandCopy:hover .chatCommandCopyState,
+.chatCommandCopy:focus-visible .chatCommandCopyState {
+  color: var(--cyan);
+}
+
+.chatCommandCopied,
+.chatCommandCopied:not(:disabled):hover,
+.chatCommandCopied:focus-visible {
+  border-color: rgba(70, 192, 109, 0.72);
+  background: rgba(70, 192, 109, 0.1);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.chatCommandCopied .chatCommandText code,
+.chatCommandCopied .chatCommandCopyState {
+  color: var(--green);
+}
+
+.chatCommandFailed,
+.chatCommandFailed:not(:disabled):hover,
+.chatCommandFailed:focus-visible {
+  border-color: rgba(219, 101, 101, 0.72);
+  background: rgba(219, 101, 101, 0.09);
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
+.chatCommandFailed .chatCommandCopyState {
+  color: #e69999;
+}
+
 .dlcActivationTip {
   display: flex;
   align-items: center;
@@ -1307,7 +1419,7 @@
   min-width: 0;
 }
 
-.dlcActivationTip span {
+.dlcActivationTip > div > span {
   display: block;
   color: var(--cyan);
   font-family: var(--font-mono);
@@ -1325,18 +1437,10 @@
   line-height: 1.45;
 }
 
-.dlcActivationTip code {
+.dlcActivationTip .chatCommandCopy {
   flex: 0 1 auto;
+  min-width: 210px;
   max-width: 100%;
-  padding: 6px 8px;
-  border: 1px solid rgba(69, 200, 218, 0.34);
-  background: rgba(69, 200, 218, 0.07);
-  color: #8bdae5;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 
 .dlcMetaStrip {
@@ -1673,17 +1777,15 @@
   border-right: 1px solid rgba(69, 200, 218, 0.17);
 }
 
-.infoCommandIdentity code {
-  color: #8bdae5;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  user-select: text;
+.infoCommandIdentity .chatCommandCopy {
+  width: 100%;
 }
 
-.infoCommandIdentity span {
+.infoCommandIdentity .chatCommandText code {
+  font-size: 10px;
+}
+
+.infoCommandIdentity > span {
   color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 8px;
@@ -1703,13 +1805,6 @@
   line-height: 1.55;
 }
 
-.infoCommandBody > p code {
-  color: #8bdae5;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  user-select: text;
-}
-
 .infoCommandVariants {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
@@ -1717,32 +1812,16 @@
   margin-top: 8px;
 }
 
-.infoCommandVariants > span {
-  min-width: 0;
-  padding: 6px 7px;
+.infoCommandVariants .chatCommandCopy {
+  width: 100%;
+  height: 100%;
   border: 1px solid rgba(69, 200, 218, 0.15);
   background: rgba(69, 200, 218, 0.035);
 }
 
-.infoCommandVariants code,
-.infoCommandVariants small {
-  display: block;
-}
-
-.infoCommandVariants code {
+.infoCommandVariants .chatCommandText code {
   color: var(--text);
-  font-family: var(--font-mono);
   font-size: 8px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.infoCommandVariants small {
-  margin-top: 3px;
-  color: var(--text-faint);
-  font-size: 8px;
-  line-height: 1.35;
 }
 
 .aboutHero {
@@ -2032,8 +2111,9 @@
     flex-direction: column;
   }
 
-  .dlcActivationTip code {
+  .dlcActivationTip .chatCommandCopy {
     width: 100%;
+    min-width: 0;
   }
 
   .dlcStatusPanel {

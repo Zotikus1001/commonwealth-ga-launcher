@@ -314,6 +314,7 @@ export interface LauncherApi {
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;
   openLauncherLogs(): Promise<ActionResult>;
+  copyChatCommand(command: string): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;
   getLogTail(): Promise<string[]>;
   resetLauncher(): Promise<ActionResult>;

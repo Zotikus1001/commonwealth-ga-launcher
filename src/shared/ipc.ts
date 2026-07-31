@@ -27,6 +27,7 @@ export const IPC = {
   openSteamStore: 'launcher:open-steam-store',
   openSteamInstall: 'launcher:open-steam-install',
   openLauncherLogs: 'launcher:open-launcher-logs',
+  copyChatCommand: 'launcher:copy-chat-command',
   copyDiagnostics: 'launcher:copy-diagnostics',
   getLogTail: 'launcher:get-log-tail',
   resetLauncher: 'launcher:reset-launcher',

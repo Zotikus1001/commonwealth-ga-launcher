@@ -1459,9 +1459,9 @@
 }
 
 .dlcActivationTip {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(260px, 1.2fr);
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
   margin-top: 8px;
   padding: 9px 10px;
@@ -1475,7 +1475,7 @@
   min-width: 0;
 }
 
-.dlcActivationTip > div > span {
+.dlcActivationIntro > span {
   display: block;
   color: var(--cyan);
   font-family: var(--font-mono);
@@ -1493,10 +1493,14 @@
   line-height: 1.45;
 }
 
-.dlcActivationTip .chatCommandCopy {
-  flex: 0 1 auto;
-  min-width: 210px;
-  max-width: 100%;
+.dlcActivationCommands {
+  display: grid;
+  gap: 6px;
+}
+
+.dlcActivationCommands .chatCommandCopy {
+  width: 100%;
+  min-width: 0;
 }
 
 .dlcMetaStrip {
@@ -2161,15 +2165,13 @@
   }
 
   .dlcHeading,
-  .dlcActivationTip,
   .dlcMetaStrip {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .dlcActivationTip .chatCommandCopy {
-    width: 100%;
-    min-width: 0;
+  .dlcActivationTip {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dlcStatusPanel {

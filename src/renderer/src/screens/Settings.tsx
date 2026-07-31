@@ -2538,11 +2538,20 @@ export function ChatCommandCopy({
 export function DlcActivationTip({ id }: { id: DlcId }): JSX.Element {
   return (
     <div className={styles.dlcActivationTip}>
-      <div>
-        <span>In-game activation</span>
-        <p>Select this command to copy it, then paste it in chat to activate the pack.</p>
+      <div className={styles.dlcActivationIntro}>
+        <span>In-game map access</span>
+        <p>
+          Install controls the files. Use these chat commands to allow or exclude this pack's maps
+          in your games.
+        </p>
       </div>
-      <ChatCommandCopy command={`-enabledlc ${id}`} />
+      <div className={styles.dlcActivationCommands}>
+        <ChatCommandCopy command={`-enabledlc ${id}`} detail="Include these maps in your games" />
+        <ChatCommandCopy
+          command={`-disabledlc ${id}`}
+          detail="Exclude these maps from your games"
+        />
+      </div>
     </div>
   );
 }
@@ -2566,8 +2575,9 @@ function DlcsTab({
       <div className="panel-title">Optional Game Content</div>
       <p className={styles.hint}>
         DLC downloads are enabled by default. The launcher verifies their exact files at startup
-        and before every Play, while your Remove choice prevents automatic reinstallation. After
-        installation, activate each pack in-game with the chat command shown on its card.
+        and before every Play, while your Remove choice prevents automatic reinstallation. Install
+        and Remove manage local files; the chat commands on each card control whether its maps can
+        be selected in-game.
       </p>
 
       <div className={styles.patchList}>

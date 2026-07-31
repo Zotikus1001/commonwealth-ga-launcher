@@ -221,7 +221,6 @@ export class Orchestrator {
   }
 
   private async ensureDlcInstalled(install: GameInstall, id: DlcId): Promise<DlcStatus> {
-    this.showDlcProgress(id, 'installing', 'Checking verified DLC files…');
     return this.dlcManager.ensureInstalled(install, id, ({ phase, completed, total }) => {
       const progressPercent = dlcPhasePercent(completed, total);
       const progressPhase = phase === 'download' ? 'download' : 'install';
@@ -317,13 +316,14 @@ export class Orchestrator {
   }
 
   async start(startupUpdateChecked = false): Promise<void> {
+    this.applyServerSelection(this.config.get());
+    void this.refreshServerCommits();
+    void this.refreshAgendaStats(true);
     if (startupUpdateChecked) {
       await this.refreshRuntimeState();
     } else {
       await this.refresh();
     }
-    void this.refreshServerCommits();
-    void this.refreshAgendaStats(true);
     if (!this.probeTimer) {
       this.probeTimer = setInterval(
         () => void this.refreshWhileServerOffline(),
@@ -525,21 +525,56 @@ export class Orchestrator {
     ]);
     this.install = install;
     this.linuxRuntime = linuxRuntime;
-    const dlcPreparationErrors = new Map<DlcId, string>();
     if (linuxRuntime?.suggestedPrefixPath) {
       settings = await this.config.update({
         linux: { winePrefix: linuxRuntime.suggestedPrefixPath }
       });
     }
+    const profileSnapshot = this.gameProfileManager.getSnapshot();
+    this.patch({
+      gamePathValid: install !== null,
+      validatedGameExePath: settings.gameExePath,
+      linuxRuntimeStatus: linuxRuntime?.status ?? null,
+      resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
+      gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
+      gameProfiles: profileSnapshot.profiles,
+      selectedGameProfileId: profileSnapshot.selectedProfileId
+    });
+    const selection = this.applyServerSelection(settings);
     if (!install) {
       this.patchesPreparedGameExePath = '';
-    } else if (
+      this.log.info('game install validation: invalid or unset');
+      this.patch({
+        gameClientDll: unavailableGameClientDllState(),
+        clientPatches: unavailableClientPatches(),
+        dlcs: unavailableDlcStatuses(),
+        dxvk: unavailableDxvkState(PLATFORM)
+      });
+      if (!selection.host) {
+        this.patch({
+          phase: 'error',
+          serverStatus: 'invalid',
+          statusLine: 'Server address unavailable. Retry after updating the launcher.',
+          errorDetails: 'No default server address is configured for this build.'
+        });
+      } else {
+        this.patch({
+          phase: 'ready',
+          statusLine: settings.gameExePath
+            ? 'Game path is not a valid Global Agenda install — fix it in Settings.'
+            : 'Set your Global Agenda install path in Settings.'
+        });
+      }
+      return;
+    }
+
+    const dlcPreparationErrors = new Map<DlcId, string>();
+    if (
       !this.patchesPreparedGameExePath ||
       !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
     ) {
       await this.applyEnabledIniPatchesForInstall(install, settings);
       for (const definition of enabledDlcDefinitions(settings)) {
-        this.patch({ statusLine: `Checking ${definition.name}…` });
         try {
           this.patchDlcStatus(await this.ensureDlcInstalled(install, definition.id));
         } catch (error) {
@@ -550,48 +585,30 @@ export class Orchestrator {
       }
       this.patchesPreparedGameExePath = install.exePath;
     }
-    let clientPatches = unavailableClientPatches();
-    let gameClientDll = unavailableGameClientDllState();
-    let dxvk = unavailableDxvkState(PLATFORM);
-    let dlcs = unavailableDlcStatuses();
-    if (install) {
-      const [patches, gameIniSettings, inspectedGameClientDll, inspectedDxvk, inspectedDlcs] = await Promise.all([
-        inspectClientPatches(install),
-        inspectGameIniSettings(install),
-        this.inspectGameClientDll(install),
-        PLATFORM === 'win32'
-          ? this.dxvkManager.inspect(install)
-          : Promise.resolve(unavailableDxvkState(PLATFORM)),
-        this.dlcManager.inspectAll(install)
-      ]);
-      clientPatches = patches;
-      gameClientDll = inspectedGameClientDll;
-      dxvk = inspectedDxvk;
-      dlcs = inspectedDlcs;
-      if (dlcPreparationErrors.size > 0) {
-        dlcs = dlcs.map((dlc) =>
-          dlcPreparationErrors.has(dlc.id)
-            ? failedDlcStatus(dlc.id, dlcPreparationErrors.get(dlc.id)!)
-            : dlc
-        );
-      }
-      settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
+    const [clientPatches, gameIniSettings, gameClientDll, dxvk, inspectedDlcs] = await Promise.all([
+      inspectClientPatches(install),
+      inspectGameIniSettings(install),
+      this.inspectGameClientDll(install),
+      PLATFORM === 'win32'
+        ? this.dxvkManager.inspect(install)
+        : Promise.resolve(unavailableDxvkState(PLATFORM)),
+      this.dlcManager.inspectAll(install)
+    ]);
+    let dlcs = inspectedDlcs;
+    if (dlcPreparationErrors.size > 0) {
+      dlcs = dlcs.map((dlc) =>
+        dlcPreparationErrors.has(dlc.id)
+          ? failedDlcStatus(dlc.id, dlcPreparationErrors.get(dlc.id)!)
+          : dlc
+      );
     }
-    this.log.info(`game install validation: ${install ? 'valid' : 'invalid or unset'}`);
-    const selection = this.applyServerSelection(settings);
-    const profileSnapshot = this.gameProfileManager.getSnapshot();
+    settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
+    this.log.info('game install validation: valid');
     this.patch({
-      gamePathValid: install !== null,
-      validatedGameExePath: settings.gameExePath,
-      linuxRuntimeStatus: linuxRuntime?.status ?? null,
-      resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
-      gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
       gameClientDll,
       clientPatches,
       dlcs,
-      dxvk,
-      gameProfiles: profileSnapshot.profiles,
-      selectedGameProfileId: profileSnapshot.selectedProfileId
+      dxvk
     });
 
     if (!selection.host) {
@@ -600,15 +617,6 @@ export class Orchestrator {
         serverStatus: 'invalid',
         statusLine: 'Server address unavailable. Retry after updating the launcher.',
         errorDetails: 'No default server address is configured for this build.'
-      });
-      return;
-    }
-    if (!install) {
-      this.patch({
-        phase: 'ready',
-        statusLine: settings.gameExePath
-          ? 'Game path is not a valid Global Agenda install — fix it in Settings.'
-          : 'Set your Global Agenda install path in Settings.'
       });
       return;
     }
@@ -819,12 +827,8 @@ export class Orchestrator {
           (candidate) => candidate.toLowerCase() === this.state.resolvedHost.toLowerCase()
         ) ?? selection.host;
 
+      this.patch({ phase: 'checking', statusLine: 'Preparing launch…', errorDetails: null });
       for (const definition of enabledDlcDefinitions(settings)) {
-        this.patch({
-          phase: 'checking',
-          statusLine: `Checking ${definition.name}…`,
-          errorDetails: null
-        });
         try {
           this.patchDlcStatus(await this.ensureDlcInstalled(this.install, definition.id));
         } catch (error) {

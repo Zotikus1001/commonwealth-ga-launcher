@@ -913,6 +913,7 @@ export class DlcManager {
 
     const announcedFileWorkTotal =
       initial.files.filter((candidate) => candidate.state !== 'exact').length * 2 + 1;
+    onProgress({ phase: 'download', completed: 0, total: definition.archiveSize });
     const archive = await this.downloadVerifiedArchive(
       definition,
       ({ transferred, total }) => {
@@ -1047,6 +1048,7 @@ export class DlcManager {
       definition.files.length +
       1;
     if (archiveRequired) {
+      onProgress({ phase: 'download', completed: 0, total: definition.archiveSize });
       archive = await this.downloadVerifiedArchive(
         definition,
         ({ transferred, total }) => {

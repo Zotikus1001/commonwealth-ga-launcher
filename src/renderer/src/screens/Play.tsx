@@ -142,6 +142,10 @@ export default function Play({
   const activeDlcOperation = state.dlcs.find(
     (dlc) => dlc.status === 'installing' || dlc.status === 'removing'
   );
+  const launchCheckPending =
+    state.phase === 'init' ||
+    state.phase === 'checking' ||
+    button.label === 'CHECKING SERVER';
   const [discordOpening, setDiscordOpening] = useState(false);
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
   const [agendaStatsOpening, setAgendaStatsOpening] = useState(false);
@@ -419,29 +423,48 @@ export default function Play({
               </select>
             </label>
           )}
-          <button
-            className={styles.playButton}
-            disabled={button.disabled}
-            aria-busy={button.loading || undefined}
-            onClick={button.action}
+          <div
+            className={`${styles.launchActionSlot} ${
+              state.developerMode ? styles.launchActionSlotDeveloper : ''
+            }`}
           >
-            {button.loading && <span className={styles.serverSpinner} aria-hidden="true" />}
-            <span>{button.label}</span>
-          </button>
-          {state.developerMode && (
-            <button
-              className={styles.devPlayButton}
-              disabled={!canDevLaunch}
-              onClick={() => void window.api.playDeveloper()}
-            >
-              DEV LAUNCH
-            </button>
-          )}
+            {activeDlcOperation ? (
+              <DlcActivityProgress dlc={activeDlcOperation} />
+            ) : launchCheckPending ? (
+              <div
+                className={styles.launchChecking}
+                role="status"
+                aria-label="Checking launcher readiness"
+              >
+                <span className={styles.serverSpinner} aria-hidden="true" />
+              </div>
+            ) : (
+              <>
+                <button
+                  className={styles.playButton}
+                  disabled={button.disabled}
+                  aria-busy={button.loading || undefined}
+                  onClick={button.action}
+                >
+                  {button.loading && <span className={styles.serverSpinner} aria-hidden="true" />}
+                  <span>{button.label}</span>
+                </button>
+                {state.developerMode && (
+                  <button
+                    className={styles.devPlayButton}
+                    disabled={!canDevLaunch}
+                    onClick={() => void window.api.playDeveloper()}
+                  >
+                    DEV LAUNCH
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
         {profileSelectionError && <p className={styles.errorDetails}>{profileSelectionError}</p>}
         {serverSelectionError && <p className={styles.errorDetails}>{serverSelectionError}</p>}
-        {activeDlcOperation && <DlcActivityProgress dlc={activeDlcOperation} />}
-        {!activeDlcOperation && state.statusLine !== 'Ready.' && (
+        {!activeDlcOperation && !launchCheckPending && state.statusLine !== 'Ready.' && (
           <p className={styles.statusLine}>{state.statusLine}</p>
         )}
         {state.phase === 'error' && state.errorDetails && (

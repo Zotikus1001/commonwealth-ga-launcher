@@ -2793,7 +2793,7 @@ export function InfoTab(): JSX.Element {
             <div className={styles.infoCommand}>
               <div className={styles.infoCommandIdentity}>
                 <ChatCommandCopy command="-spawnfriend" />
-                <span>Friendly AI</span>
+                <span>PvE only</span>
               </div>
               <div className={styles.infoCommandBody}>
                 <p>Spawns a friendly AI bot that attacks enemies.</p>

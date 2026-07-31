@@ -233,7 +233,7 @@ export default function Play({
           </span>
           <span className={styles.infoBannerCopy}>
             <strong>FAQ</strong>
-            <small>Performance · chat commands</small>
+            <small>Performance · Commands · Etc</small>
           </span>
           <span className={styles.infoOpen}>OPEN →</span>
         </button>

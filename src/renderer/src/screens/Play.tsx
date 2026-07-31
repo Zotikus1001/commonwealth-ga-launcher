@@ -233,7 +233,7 @@ export default function Play({
           </span>
           <span className={styles.infoBannerCopy}>
             <strong>FAQ</strong>
-            <small>Stutter fixes · DX9 · account FAQ</small>
+            <small>Performance · account FAQ · chat commands</small>
           </span>
           <span className={styles.infoOpen}>OPEN →</span>
         </button>

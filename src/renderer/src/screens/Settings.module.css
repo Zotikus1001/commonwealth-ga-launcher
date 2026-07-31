@@ -1290,6 +1290,55 @@
   color: #e69999;
 }
 
+.dlcActivationTip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(69, 200, 218, 0.2);
+  background:
+    linear-gradient(90deg, rgba(69, 200, 218, 0.065), transparent 62%),
+    rgba(7, 10, 16, 0.48);
+}
+
+.dlcActivationTip > div {
+  min-width: 0;
+}
+
+.dlcActivationTip span {
+  display: block;
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.dlcActivationTip p {
+  margin: 3px 0 0;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.dlcActivationTip code {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(69, 200, 218, 0.34);
+  background: rgba(69, 200, 218, 0.07);
+  color: #8bdae5;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .dlcMetaStrip {
   display: flex;
   align-items: center;
@@ -1451,6 +1500,12 @@
   color: var(--green);
 }
 
+.infoCommands {
+  grid-column: 1 / -1;
+  border-left-color: var(--cyan);
+  color: var(--cyan);
+}
+
 .infoCardHead {
   display: flex;
   align-items: center;
@@ -1590,6 +1645,104 @@
   color: var(--text-faint);
   font-size: 9px;
   line-height: 1.5;
+}
+
+.infoCommandList {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.infoCommand {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+  gap: 13px;
+  padding: 11px 12px;
+  border: 1px solid rgba(69, 200, 218, 0.18);
+  background:
+    linear-gradient(100deg, rgba(69, 200, 218, 0.05), transparent 45%),
+    rgba(7, 10, 16, 0.5);
+}
+
+.infoCommandIdentity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(69, 200, 218, 0.17);
+}
+
+.infoCommandIdentity code {
+  color: #8bdae5;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.infoCommandIdentity span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.infoCommandBody {
+  min-width: 0;
+}
+
+.infoCommandBody > p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.infoCommandBody > p code {
+  color: #8bdae5;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  user-select: text;
+}
+
+.infoCommandVariants {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.infoCommandVariants > span {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid rgba(69, 200, 218, 0.15);
+  background: rgba(69, 200, 218, 0.035);
+}
+
+.infoCommandVariants code,
+.infoCommandVariants small {
+  display: block;
+}
+
+.infoCommandVariants code {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.infoCommandVariants small {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1.35;
 }
 
 .aboutHero {
@@ -1873,9 +2026,14 @@
   }
 
   .dlcHeading,
+  .dlcActivationTip,
   .dlcMetaStrip {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .dlcActivationTip code {
+    width: 100%;
   }
 
   .dlcStatusPanel {
@@ -1912,6 +2070,18 @@
   .infoFaqGrid,
   .infoSteps {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .infoCommand {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .infoCommandIdentity {
+    padding-right: 0;
+    padding-bottom: 8px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(69, 200, 218, 0.17);
   }
 
   .infoAccount {

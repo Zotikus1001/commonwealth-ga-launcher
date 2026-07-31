@@ -2413,6 +2413,18 @@ export function DlcEnabledCheck({ enabled }: { enabled: boolean }): JSX.Element 
   );
 }
 
+export function DlcActivationTip({ id }: { id: DlcId }): JSX.Element {
+  return (
+    <div className={styles.dlcActivationTip}>
+      <div>
+        <span>In-game activation</span>
+        <p>Use this command in the in-game chat to activate the pack.</p>
+      </div>
+      <code>{`-enabledlc ${id}`}</code>
+    </div>
+  );
+}
+
 function DlcsTab({
   state,
   settings,
@@ -2431,9 +2443,10 @@ function DlcsTab({
     <section className={`${styles.section} ${styles.dlcSection}`}>
       <div className="panel-title">Optional Game Content</div>
       <p className={styles.hint}>
-        DLCs are enabled by default and kept separate under the game&apos;s DLC folder. The
+        DLC downloads are enabled by default and kept separate under the game&apos;s DLC folder. The
         launcher verifies their exact files at startup and before every Play, while your Remove
-        choice prevents automatic reinstallation.
+        choice prevents automatic reinstallation. After installation, activate each pack in-game
+        with the chat command shown on its card.
       </p>
 
       <div className={styles.patchList}>
@@ -2524,6 +2537,8 @@ function DlcsTab({
                   <p>{dlc.detail}</p>
                 </div>
 
+                <DlcActivationTip id={dlc.id} />
+
                 <div className={styles.dlcMetaStrip}>
                   <span>{downloadSize}</span>
                   <code>TgGame / CookedPC / DLC / Maps</code>
@@ -2542,7 +2557,7 @@ function DlcsTab({
   );
 }
 
-function InfoTab(): JSX.Element {
+export function InfoTab(): JSX.Element {
   return (
     <section
       className={`${styles.section} ${styles.infoSection}`}
@@ -2552,10 +2567,10 @@ function InfoTab(): JSX.Element {
         <div className={styles.infoHeroCopy}>
           <span className={styles.infoEyebrow}>Player field guide // quick reference</span>
           <h1 id="player-info-title">Useful info before you play</h1>
-          <p>Fast answers for common performance, graphics, and first-login questions.</p>
+          <p>Fast answers for performance, graphics, first login, and useful in-game commands.</p>
         </div>
-        <div className={styles.infoReadout} aria-label="Three guide entries">
-          <strong>03</strong>
+        <div className={styles.infoReadout} aria-label="Four guide entries">
+          <strong>04</strong>
           <span>Guide entries</span>
         </div>
       </header>
@@ -2634,6 +2649,98 @@ function InfoTab(): JSX.Element {
               </div>
             </li>
           </ol>
+        </article>
+
+        <article className={`${styles.infoCard} ${styles.infoCommands}`}>
+          <div className={styles.infoCardHead}>
+            <span className={styles.infoIndex}>Q04</span>
+            <span className={styles.infoTopic}>In-game chat</span>
+          </div>
+          <h2>Which commands can I use in chat?</h2>
+          <p>
+            Enter these commands exactly as shown in the in-game chat. A value of 1 explicitly
+            enables an option; 0 explicitly disables it.
+          </p>
+
+          <div className={styles.infoCommandList}>
+            <div className={styles.infoCommand}>
+              <div className={styles.infoCommandIdentity}>
+                <code>-togglesolomode</code>
+                <span>Mission queue</span>
+              </div>
+              <div className={styles.infoCommandBody}>
+                <p>
+                  Run this before queueing to guarantee a solo mission. Run it again to disable
+                  solo mode, or use an explicit value.
+                </p>
+                <div className={styles.infoCommandVariants}>
+                  <span>
+                    <code>-togglesolomode</code>
+                    <small>Toggle solo mode</small>
+                  </span>
+                  <span>
+                    <code>-togglesolomode 1</code>
+                    <small>Enable</small>
+                  </span>
+                  <span>
+                    <code>-togglesolomode 0</code>
+                    <small>Disable</small>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.infoCommand}>
+              <div className={styles.infoCommandIdentity}>
+                <code>-classes</code>
+                <span>Team readout</span>
+              </div>
+              <div className={styles.infoCommandBody}>
+                <p>Shows how many players of each class are currently on each side.</p>
+              </div>
+            </div>
+
+            <div className={styles.infoCommand}>
+              <div className={styles.infoCommandIdentity}>
+                <code>-togglebrokensuits</code>
+                <span>Saved per player</span>
+              </div>
+              <div className={styles.infoCommandBody}>
+                <p>
+                  Controls whether Commonwealth suits appear in Mercenary matches. If those suits
+                  cause stutters, disable them to see alternate suits instead. Your choice is saved,
+                  so you only need to set it once.
+                </p>
+                <div className={styles.infoCommandVariants}>
+                  <span>
+                    <code>-togglebrokensuits</code>
+                    <small>Toggle saved choice</small>
+                  </span>
+                  <span>
+                    <code>-togglebrokensuits 1</code>
+                    <small>Enable Commonwealth suits</small>
+                  </span>
+                  <span>
+                    <code>-togglebrokensuits 0</code>
+                    <small>Use alternate suits</small>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.infoCommand}>
+              <div className={styles.infoCommandIdentity}>
+                <code>-spawnhenchman</code>
+                <span>PvE only</span>
+              </div>
+              <div className={styles.infoCommandBody}>
+                <p>
+                  Spawns a bot like <code>-spawnfriend</code>, but the bot treats you as its leader
+                  and tries to follow you.
+                </p>
+              </div>
+            </div>
+          </div>
         </article>
       </div>
     </section>

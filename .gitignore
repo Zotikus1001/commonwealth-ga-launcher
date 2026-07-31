@@ -1,6 +1,7 @@
 Memory/
 AGENTS.md
 node_modules/
+tests/
 out/
 dist/
 windows-launcher-menu.bat

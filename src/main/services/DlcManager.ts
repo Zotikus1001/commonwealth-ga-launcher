@@ -748,6 +748,10 @@ export class DlcManager {
     );
   }
 
+  private async clearArchiveDownloads(): Promise<void> {
+    await rm(join(this.userDataDir, 'dlcs'), { recursive: true, force: true });
+  }
+
   private async writeMarker(install: GameInstall, definition: DlcDefinition): Promise<void> {
     const marker: DlcMarker = {
       schema: MARKER_SCHEMA,
@@ -771,20 +775,15 @@ export class DlcManager {
     }
   }
 
-  private async verifiedArchive(
+  private async downloadVerifiedArchive(
     definition: DlcDefinition,
-    onProgress: (progress: DownloadProgress) => void
-  ): Promise<string> {
-    const cacheDir = join(this.userDataDir, 'dlcs', definition.id);
-    const archivePath = join(cacheDir, `${definition.archiveSha256}.zip`);
-    await mkdir(cacheDir, { recursive: true });
-    if (await exactFile(archivePath, definition.archiveSize, definition.archiveSha256)) {
-      return archivePath;
-    }
-    await rm(archivePath, { force: true });
-
-    const temporary = join(cacheDir, `${randomUUID()}.download`);
+    onProgress: (progress: DownloadProgress) => void,
+    onVerified: () => void
+  ): Promise<Buffer> {
+    const downloadDir = join(this.userDataDir, 'dlcs', definition.id);
     try {
+      await mkdir(downloadDir, { recursive: true });
+      const temporary = join(downloadDir, `${randomUUID()}.download`);
       this.log.info(`${definition.name}: downloading verified DLC archive`);
       await this.downloader(definition.url, temporary, onProgress, {
         idleTimeoutMs: 30_000,
@@ -793,15 +792,16 @@ export class DlcManager {
       if (!(await exactFile(temporary, definition.archiveSize, definition.archiveSha256))) {
         throw new Error('The downloaded DLC archive failed size or SHA-256 verification.');
       }
-      await rename(temporary, archivePath);
-      this.log.info(`${definition.name}: verified DLC archive cached`);
-      return archivePath;
+      this.log.info(`${definition.name}: verified DLC archive ready for this operation`);
+      onVerified();
+      return await readFile(temporary);
     } finally {
-      await rm(temporary, { force: true }).catch(() => {});
+      await this.clearArchiveDownloads();
     }
   }
 
   async inspectAll(install: GameInstall): Promise<DlcStatus[]> {
+    await this.clearArchiveDownloads();
     const statuses: DlcStatus[] = [];
     for (const definition of this.definitions) {
       try {
@@ -901,6 +901,7 @@ export class DlcManager {
     id: DlcId,
     onProgress: (progress: DlcOperationProgress) => void = () => {}
   ): Promise<DlcStatus> {
+    await this.clearArchiveDownloads();
     const definition = this.definition(id);
     const initial = await inspectPayload(install, definition);
     const conflict = initial.files.find((file) => file.state === 'conflict');
@@ -910,17 +911,19 @@ export class DlcManager {
       return statusFromInspection(definition, initial);
     }
 
-    const archivePath = await this.verifiedArchive(definition, ({ transferred, total }) => {
-      onProgress({
-        phase: 'download',
-        completed: transferred,
-        total: total || definition.archiveSize
-      });
-    });
     const announcedFileWorkTotal =
       initial.files.filter((candidate) => candidate.state !== 'exact').length * 2 + 1;
-    onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
-    const archive = await readFile(archivePath);
+    const archive = await this.downloadVerifiedArchive(
+      definition,
+      ({ transferred, total }) => {
+        onProgress({
+          phase: 'download',
+          completed: transferred,
+          total: total || definition.archiveSize
+        });
+      },
+      () => onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal })
+    );
     const entries = parseZipManifest(archive, definition);
     const writable = await inspectPayload(install, definition);
     const writableConflict = writable.files.find((file) => file.state === 'conflict');
@@ -1020,6 +1023,7 @@ export class DlcManager {
     id: DlcId,
     onProgress: (progress: DlcOperationProgress) => void = () => {}
   ): Promise<DlcStatus> {
+    await this.clearArchiveDownloads();
     const definition = this.definition(id);
     const inspection = await inspectPayload(install, definition);
     const conflict = inspection.files.find((file) => file.state === 'conflict');
@@ -1030,21 +1034,11 @@ export class DlcManager {
     }
 
     let archive: Buffer | null = null;
-    let archivePath: string | null = null;
     let entries = new Map<string, ZipEntry>();
-    if (
+    const archiveRequired =
       inspection.files.some(
         (file) => file.definition.restore && file.state !== 'restored'
-      )
-    ) {
-      archivePath = await this.verifiedArchive(definition, ({ transferred, total }) => {
-        onProgress({
-          phase: 'download',
-          completed: transferred,
-          total: total || definition.archiveSize
-        });
-      });
-    }
+      );
 
     const announcedFileWorkTotal =
       inspection.files.filter(
@@ -1052,10 +1046,21 @@ export class DlcManager {
       ).length +
       definition.files.length +
       1;
-    onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
-    if (archivePath) {
-      archive = await readFile(archivePath);
+    if (archiveRequired) {
+      archive = await this.downloadVerifiedArchive(
+        definition,
+        ({ transferred, total }) => {
+          onProgress({
+            phase: 'download',
+            completed: transferred,
+            total: total || definition.archiveSize
+          });
+        },
+        () => onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal })
+      );
       entries = parseZipManifest(archive, definition);
+    } else {
+      onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
     }
 
     const writable = await inspectPayload(install, definition);

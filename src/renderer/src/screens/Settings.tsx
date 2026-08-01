@@ -978,8 +978,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 <span className={styles.featureName}>FPS Limit</span>
                 <span className={styles.featureDetail}>
                   Uses the game&apos;s frame smoothing limiter. Set it to your monitor refresh
-                  rate to reduce avoidable movement and timing issues. Applied when you press
-                  Play.
+                  rate to reduce avoidable movement and timing issues.
                 </span>
               </label>
               <label className={styles.fpsLimitValue}>

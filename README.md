@@ -41,7 +41,7 @@ The launcher updates itself automatically.
 - Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
   UI preferences
 - Game patches enabled by default, with one-click Apply and Remove controls
-- A Game Client Patch that fixes scope-transition stutters
+- A Game Client Patch that fixes scope-transition stutters and adds an in-game FOV slider
 - Optional Surfside-Atoll and Carbon Capture PvP maps plus Central Industrial Complex and
   Recycling Plant 37 PvE maps, with one-click install and repair that replaces mismatched files at
   that pack's declared locations, pre-install backups that restore saved copies and are then

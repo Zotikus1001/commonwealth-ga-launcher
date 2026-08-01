@@ -2306,6 +2306,23 @@ function PatchesTab({
                 </li>
               </ul>
             </div>
+            <div className={styles.patchFixDetails}>
+              <div className={styles.patchFixHeader}>
+                <span>Features</span>
+                <span>1 shipped feature</span>
+              </div>
+              <ul className={styles.patchFixList}>
+                <li>
+                  <span className={styles.patchFixIndex} aria-hidden="true">
+                    01
+                  </span>
+                  <span className={styles.patchFixCopy}>
+                    <strong>In-game FOV slider</strong>
+                    <small>Adds an FOV slider to the in-game Video settings.</small>
+                  </span>
+                </li>
+              </ul>
+            </div>
             {gameClientPatchError && (
               <p className={styles.patchResultError}>
                 {`Could not change Game Client Patch: ${gameClientPatchError}`}

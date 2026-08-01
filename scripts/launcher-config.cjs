@@ -685,7 +685,7 @@ function loadLauncherConfig(options = {}) {
         mode: 'PvE',
         mapCount: 2,
         description:
-          'Adds Central Industrial Complex and Recycling Plant 37 as two PvE maps, including their required support files. Remove restores the verified base-game files.',
+          'Adds Central Industrial Complex and Recycling Plant 37 as two PvE maps, including their required support files. Remove restores saved pre-install copies, falling back to verified base-game files when needed.',
         url: pveFactoryDlcUrl.toString(),
         archiveSize: pveFactoryArchiveSize,
         archiveSha256: raw.pve_factory_3_4_dlc_archive_sha256,

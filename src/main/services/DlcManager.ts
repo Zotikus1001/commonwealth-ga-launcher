@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { createReadStream } from 'fs';
 import {
+  copyFile,
   link,
   lstat,
   mkdir,
@@ -20,10 +21,13 @@ import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { downloadToFile, type DownloadProgress } from './Download';
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
-import { managedInstallStatePath } from './ManagedInstallState';
+import {
+  managedInstallStateDirectory,
+  managedInstallStatePath
+} from './ManagedInstallState';
 
 const inflateRawAsync = promisify(inflateRaw);
-const MARKER_SCHEMA = 2;
+const MARKER_SCHEMA = 3;
 const ZIP_END_SIGNATURE = 0x06054b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_LOCAL_SIGNATURE = 0x04034b50;
@@ -93,9 +97,15 @@ interface PayloadInspection {
   files: InspectedFile[];
 }
 
+interface FileFingerprint {
+  size: number;
+  sha256: string;
+}
+
 interface StagedFile {
   definition: DlcFileDefinition;
   tempPath: string;
+  expected: FileFingerprint;
 }
 
 interface InstallMutation {
@@ -110,7 +120,20 @@ interface RemovalMutation {
   definition: DlcFileDefinition;
   path: string;
   rollbackPath?: string;
-  publishedRestore: boolean;
+  rollbackSize?: number;
+  rollbackSha256?: string;
+  published?: FileFingerprint;
+}
+
+interface PreparedBackups {
+  backups: Map<string, FileFingerprint>;
+  currentFiles: Map<string, FileFingerprint>;
+}
+
+interface RemovalRestorePlan {
+  file: InspectedFile;
+  expected: FileFingerprint;
+  source: 'backup' | 'archive';
 }
 
 interface DlcMarker {
@@ -122,6 +145,7 @@ interface DlcMarker {
     path: string;
     sha256: string;
     restoreSha256?: string;
+    backup?: FileFingerprint;
   }>;
 }
 
@@ -129,11 +153,15 @@ function targetRootOf(definition: DlcFileDefinition): DlcTargetRoot {
   return definition.targetRoot ?? 'dlc-maps';
 }
 
-function targetKey(definition: DlcFileDefinition): string {
-  const path = definition.targetPath.toLowerCase();
-  return targetRootOf(definition) === 'dlc-maps'
+function targetKeyFrom(root: DlcTargetRoot, targetPath: string): string {
+  const path = targetPath.toLowerCase();
+  return root === 'dlc-maps'
     ? `cooked-pc:dlc/maps/${path}`
-    : `${targetRootOf(definition)}:${path}`;
+    : `${root}:${path}`;
+}
+
+function targetKey(definition: DlcFileDefinition): string {
+  return targetKeyFrom(targetRootOf(definition), definition.targetPath);
 }
 
 function normalizeRelativePath(value: string, label: string): string[] {
@@ -151,6 +179,21 @@ function normalizeRelativePath(value: string, label: string): string[] {
     throw new Error(`${label} is not a safe relative path: ${value}`);
   }
   return parts;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFileFingerprint(value: unknown): value is FileFingerprint {
+  return (
+    isPlainObject(value) &&
+    typeof value.size === 'number' &&
+    Number.isSafeInteger(value.size) &&
+    value.size >= 0 &&
+    typeof value.sha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(value.sha256)
+  );
 }
 
 function validateDefinition(definition: DlcDefinition): void {
@@ -475,6 +518,16 @@ function statusFromInspection(
   };
 }
 
+function installFileWorkTotal(files: readonly InspectedFile[]): number {
+  return files.reduce(
+    (total, file) =>
+      file.state === 'exact'
+        ? total
+        : total + 2 + (file.state === 'restored' || file.state === 'replaceable' ? 1 : 0),
+    1
+  );
+}
+
 function locateZipEnd(archive: Buffer): number {
   const firstPossible = Math.max(0, archive.length - 22 - ZIP_MAX_COMMENT_LENGTH);
   for (let offset = archive.length - 22; offset >= firstPossible; offset -= 1) {
@@ -679,7 +732,7 @@ async function pathExists(path: string): Promise<boolean> {
 
 async function removeExactOrMissing(
   path: string,
-  expected: DlcArchiveFileDefinition
+  expected: FileFingerprint
 ): Promise<void> {
   if (!(await pathExists(path))) return;
   if (!(await exactFile(path, expected.size, expected.sha256))) {
@@ -759,21 +812,111 @@ export class DlcManager {
     );
   }
 
+  private backupDirectory(install: GameInstall, id: DlcId): string {
+    return join(
+      managedInstallStateDirectory(this.userDataDir, install),
+      'dlc-backups',
+      id
+    );
+  }
+
+  private backupPath(
+    install: GameInstall,
+    definition: DlcDefinition,
+    fingerprint: FileFingerprint
+  ): string {
+    return join(
+      this.backupDirectory(install, definition.id),
+      `${fingerprint.sha256}-${fingerprint.size}.backup`
+    );
+  }
+
   private async clearArchiveDownloads(): Promise<void> {
     await rm(join(this.userDataDir, 'dlcs'), { recursive: true, force: true });
   }
 
-  private async writeMarker(install: GameInstall, definition: DlcDefinition): Promise<void> {
+  private async readBackups(
+    install: GameInstall,
+    definition: DlcDefinition
+  ): Promise<Map<string, FileFingerprint>> {
+    let contents: string;
+    try {
+      contents = await readFile(this.markerPath(install, definition.id), { encoding: 'utf-8' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
+      throw error;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contents);
+    } catch {
+      throw new Error(`${definition.name} backup metadata is not valid JSON.`);
+    }
+    if (
+      !isPlainObject(parsed) ||
+      typeof parsed.schema !== 'number' ||
+      !Number.isSafeInteger(parsed.schema) ||
+      parsed.schema < 1 ||
+      parsed.schema > MARKER_SCHEMA ||
+      parsed.id !== definition.id ||
+      !Array.isArray(parsed.files)
+    ) {
+      throw new Error(`${definition.name} backup metadata is invalid.`);
+    }
+    if (parsed.schema < MARKER_SCHEMA) return new Map();
+
+    const configuredFiles = new Map(
+      definition.files.map((file) => [targetKey(file), file] as const)
+    );
+    const backups = new Map<string, FileFingerprint>();
+    for (const storedFile of parsed.files) {
+      if (!isPlainObject(storedFile) || storedFile.backup === undefined) continue;
+      if (
+        !['dlc-maps', 'cooked-pc', 'binaries'].includes(String(storedFile.root)) ||
+        typeof storedFile.path !== 'string' ||
+        !isFileFingerprint(storedFile.backup)
+      ) {
+        throw new Error(`${definition.name} contains invalid DLC backup metadata.`);
+      }
+      normalizeRelativePath(storedFile.path, 'DLC backup target path');
+      const key = targetKeyFrom(storedFile.root as DlcTargetRoot, storedFile.path);
+      if (!configuredFiles.has(key)) continue;
+      if (backups.has(key)) {
+        throw new Error(`${definition.name} contains duplicate DLC backup metadata.`);
+      }
+      const fingerprint = {
+        size: storedFile.backup.size,
+        sha256: storedFile.backup.sha256
+      };
+      const path = this.backupPath(install, definition, fingerprint);
+      if (!(await exactFile(path, fingerprint.size, fingerprint.sha256))) {
+        throw new Error(`The saved pre-install backup for ${storedFile.path} is missing or modified.`);
+      }
+      backups.set(key, fingerprint);
+    }
+    return backups;
+  }
+
+  private async writeMarker(
+    install: GameInstall,
+    definition: DlcDefinition,
+    backups: ReadonlyMap<string, FileFingerprint>
+  ): Promise<void> {
     const marker: DlcMarker = {
       schema: MARKER_SCHEMA,
       id: definition.id,
       archiveSha256: definition.archiveSha256,
-      files: definition.files.map((file) => ({
-        root: targetRootOf(file),
-        path: file.targetPath,
-        sha256: file.sha256,
-        ...(file.restore ? { restoreSha256: file.restore.sha256 } : {})
-      }))
+      files: definition.files.map((file) => {
+        const backup = backups.get(targetKey(file));
+        return {
+          root: targetRootOf(file),
+          path: file.targetPath,
+          sha256: file.sha256,
+          ...(file.restore ? { restoreSha256: file.restore.sha256 } : {}),
+          ...(backup ? { backup } : {})
+        };
+      })
     };
     const path = this.markerPath(install, definition.id);
     await mkdir(dirname(path), { recursive: true });
@@ -784,6 +927,67 @@ export class DlcManager {
     } finally {
       await rm(temporary, { force: true }).catch(() => {});
     }
+  }
+
+  private async inspectWithBackups(
+    install: GameInstall,
+    definition: DlcDefinition,
+    backups: ReadonlyMap<string, FileFingerprint>
+  ): Promise<PayloadInspection> {
+    const inspection = await inspectPayload(install, definition);
+    for (const file of inspection.files) {
+      if (file.state !== 'replaceable') continue;
+      const backup = backups.get(targetKey(file.definition));
+      if (!backup || !(await exactFile(file.path, backup.size, backup.sha256))) continue;
+      file.state = 'restored';
+      file.detail = 'The saved pre-install file is restored.';
+    }
+    return inspection;
+  }
+
+  private async preparePersistentBackups(
+    install: GameInstall,
+    definition: DlcDefinition,
+    files: readonly InspectedFile[],
+    existing: ReadonlyMap<string, FileFingerprint>,
+    onPrepared: () => void
+  ): Promise<PreparedBackups> {
+    const backups = new Map(existing);
+    const currentFiles = new Map<string, FileFingerprint>();
+    for (const file of files) {
+      if (file.state !== 'restored' && file.state !== 'replaceable') continue;
+      const info = await lstat(file.path);
+      if (!info.isFile()) throw new Error(`${file.path} is not a regular file.`);
+      const fingerprint = { size: info.size, sha256: await sha256File(file.path) };
+      const key = targetKey(file.definition);
+      currentFiles.set(key, fingerprint);
+      if (!backups.has(key)) {
+        const backupPath = this.backupPath(install, definition, fingerprint);
+        await mkdir(dirname(backupPath), { recursive: true });
+        const temporary = `${backupPath}.${randomUUID()}.tmp`;
+        try {
+          await copyFile(file.path, temporary);
+          if (!(await exactFile(temporary, fingerprint.size, fingerprint.sha256))) {
+            throw new Error(`Could not verify the pre-install backup for ${file.path}.`);
+          }
+          try {
+            await link(temporary, backupPath);
+          } catch (error) {
+            if (
+              !isAlreadyExists(error) ||
+              !(await exactFile(backupPath, fingerprint.size, fingerprint.sha256))
+            ) {
+              throw error;
+            }
+          }
+        } finally {
+          await rm(temporary, { force: true }).catch(() => {});
+        }
+        backups.set(key, fingerprint);
+      }
+      onPrepared();
+    }
+    return { backups, currentFiles };
   }
 
   private async downloadVerifiedArchive(
@@ -816,7 +1020,13 @@ export class DlcManager {
     const statuses: DlcStatus[] = [];
     for (const definition of this.definitions) {
       try {
-        statuses.push(statusFromInspection(definition, await inspectPayload(install, definition)));
+        const backups = await this.readBackups(install, definition);
+        statuses.push(
+          statusFromInspection(
+            definition,
+            await this.inspectWithBackups(install, definition, backups)
+          )
+        );
       } catch (error) {
         statuses.push(failedDlcStatus(definition.id, (error as Error).message, this.definitions));
       }
@@ -844,7 +1054,60 @@ export class DlcManager {
       `.commonwealth-dlc-${definition.id}-${randomUUID()}.tmp`
     );
     await writeFile(temporary, payload, { flag: 'wx' });
-    return { definition: file, tempPath: temporary };
+    return {
+      definition: file,
+      tempPath: temporary,
+      expected: { size: archiveFile.size, sha256: archiveFile.sha256 }
+    };
+  }
+
+  private async stagePersistentBackup(
+    install: GameInstall,
+    definition: DlcDefinition,
+    location: DlcLocation,
+    file: DlcFileDefinition,
+    fingerprint: FileFingerprint
+  ): Promise<StagedFile> {
+    const targetParent = await ensureTargetParent(location, file);
+    const temporary = join(
+      targetParent,
+      `.commonwealth-dlc-${definition.id}-${randomUUID()}.tmp`
+    );
+    try {
+      await copyFile(this.backupPath(install, definition, fingerprint), temporary);
+      if (!(await exactFile(temporary, fingerprint.size, fingerprint.sha256))) {
+        throw new Error(`Could not verify the saved pre-install backup for ${file.targetPath}.`);
+      }
+      return { definition: file, tempPath: temporary, expected: fingerprint };
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  private async removalRestorePlans(
+    inspection: PayloadInspection,
+    backups: ReadonlyMap<string, FileFingerprint>
+  ): Promise<RemovalRestorePlan[]> {
+    const plans: RemovalRestorePlan[] = [];
+    for (const file of inspection.files) {
+      const backup = backups.get(targetKey(file.definition));
+      if (backup) {
+        if (!(await exactFile(file.path, backup.size, backup.sha256))) {
+          plans.push({ file, expected: backup, source: 'backup' });
+        }
+      } else if (file.definition.restore && file.state !== 'restored') {
+        plans.push({
+          file,
+          expected: {
+            size: file.definition.restore.size,
+            sha256: file.definition.restore.sha256
+          },
+          source: 'archive'
+        });
+      }
+    }
+    return plans;
   }
 
   private async rollbackInstall(mutations: readonly InstallMutation[]): Promise<string[]> {
@@ -879,21 +1142,25 @@ export class DlcManager {
     const failures: string[] = [];
     for (const mutation of [...mutations].reverse()) {
       try {
-        if (mutation.publishedRestore) {
-          await removeExactOrMissing(mutation.path, mutation.definition.restore!);
-        } else if (await pathExists(mutation.path)) {
-          throw new Error(`Rollback stopped because ${mutation.path} changed during removal.`);
-        }
         if (mutation.rollbackPath) {
           if (
+            mutation.rollbackSize === undefined ||
+            !mutation.rollbackSha256 ||
             !(await exactFile(
               mutation.rollbackPath,
-              mutation.definition.size,
-              mutation.definition.sha256
+              mutation.rollbackSize,
+              mutation.rollbackSha256
             ))
           ) {
             throw new Error(`The rollback copy for ${mutation.path} is missing or modified.`);
           }
+        }
+        if (mutation.published) {
+          await removeExactOrMissing(mutation.path, mutation.published);
+        } else if (await pathExists(mutation.path)) {
+          throw new Error(`Rollback stopped because ${mutation.path} changed during removal.`);
+        }
+        if (mutation.rollbackPath) {
           await rename(mutation.rollbackPath, mutation.path);
         }
       } catch (error) {
@@ -923,16 +1190,16 @@ export class DlcManager {
   ): Promise<DlcStatus> {
     await this.clearArchiveDownloads();
     const definition = this.definition(id);
-    const initial = await inspectPayload(install, definition);
+    const backups = await this.readBackups(install, definition);
+    const initial = await this.inspectWithBackups(install, definition, backups);
     const conflict = initial.files.find((file) => file.state === 'conflict');
     if (conflict) throw new Error(conflict.detail);
     if (initial.files.every((file) => file.state === 'exact')) {
-      await this.writeMarker(install, definition);
+      await this.writeMarker(install, definition, backups);
       return statusFromInspection(definition, initial);
     }
 
-    const announcedFileWorkTotal =
-      initial.files.filter((candidate) => candidate.state !== 'exact').length * 2 + 1;
+    const announcedFileWorkTotal = installFileWorkTotal(initial.files);
     onProgress({ phase: 'download', completed: 0, total: definition.archiveSize });
     const archive = await this.downloadVerifiedArchive(
       definition,
@@ -946,13 +1213,13 @@ export class DlcManager {
       () => onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal })
     );
     const entries = parseZipManifest(archive, definition);
-    const writable = await inspectPayload(install, definition);
+    const writable = await this.inspectWithBackups(install, definition, backups);
     const writableConflict = writable.files.find((file) => file.state === 'conflict');
     if (writableConflict) throw new Error(writableConflict.detail);
 
     const filesToInstall = writable.files.filter((candidate) => candidate.state !== 'exact');
     let completedFileWork = 0;
-    const totalFileWork = filesToInstall.length * 2 + 1;
+    let totalFileWork = installFileWorkTotal(writable.files);
     const reportFileProgress = (): void => {
       onProgress({ phase: 'files', completed: completedFileWork, total: totalFileWork });
     };
@@ -976,9 +1243,35 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const beforePublish = await inspectPayload(install, definition);
+      const beforePublish = await this.inspectWithBackups(install, definition, backups);
       const publishConflict = beforePublish.files.find((file) => file.state === 'conflict');
       if (publishConflict) throw new Error(publishConflict.detail);
+      const publishFiles = beforePublish.files.filter((candidate) =>
+        staged.some(
+          (stagedFile) => targetKey(stagedFile.definition) === targetKey(candidate.definition)
+        )
+      );
+      const publishFileWorkTotal =
+        staged.length * 2 +
+        publishFiles.filter(
+          (file) => file.state === 'restored' || file.state === 'replaceable'
+        ).length +
+        1;
+      if (totalFileWork !== publishFileWorkTotal) {
+        totalFileWork = publishFileWorkTotal;
+        reportFileProgress();
+      }
+      const prepared = await this.preparePersistentBackups(
+        install,
+        definition,
+        publishFiles,
+        backups,
+        () => {
+          completedFileWork += 1;
+          reportFileProgress();
+        }
+      );
+      await this.writeMarker(install, definition, prepared.backups);
       for (const stagedFile of staged) {
         const current = beforePublish.files.find(
           (file) => targetKey(file.definition) === targetKey(stagedFile.definition)
@@ -986,19 +1279,29 @@ export class DlcManager {
         if (current.state !== 'exact') {
           let mutation: InstallMutation | null = null;
           if (current.state === 'restored' || current.state === 'replaceable') {
-            const currentInfo = await lstat(current.path);
-            if (!currentInfo.isFile()) {
-              throw new Error(`${current.path} is not a regular file.`);
+            const currentFingerprint = prepared.currentFiles.get(
+              targetKey(current.definition)
+            );
+            if (!currentFingerprint) {
+              throw new Error(`Could not prepare the pre-install backup for ${current.path}.`);
             }
-            const rollbackSha256 = await sha256File(current.path);
+            if (
+              !(await exactFile(
+                current.path,
+                currentFingerprint.size,
+                currentFingerprint.sha256
+              ))
+            ) {
+              throw new Error(`${current.path} changed after its pre-install backup was prepared.`);
+            }
             const rollbackPath = rollbackFilePath(current.path, definition.id);
             await rename(current.path, rollbackPath);
             mutation = {
               definition: current.definition,
               path: current.path,
               rollbackPath,
-              rollbackSize: currentInfo.size,
-              rollbackSha256
+              rollbackSize: currentFingerprint.size,
+              rollbackSha256: currentFingerprint.sha256
             };
             mutations.push(mutation);
           }
@@ -1012,8 +1315,8 @@ export class DlcManager {
               !isAlreadyExists(error) ||
               !(await exactFile(
                 current.path,
-                stagedFile.definition.size,
-                stagedFile.definition.sha256
+                stagedFile.expected.size,
+                stagedFile.expected.sha256
               ))
             ) {
               throw error;
@@ -1024,11 +1327,11 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const installed = await inspectPayload(install, definition);
+      const installed = await this.inspectWithBackups(install, definition, prepared.backups);
       if (!installed.files.every((file) => file.state === 'exact')) {
         throw new Error('The DLC could not be verified after installation.');
       }
-      await this.writeMarker(install, definition);
+      await this.writeMarker(install, definition, prepared.backups);
       this.log.info(
         `${definition.name}: installed ${definition.files.length} verified DLC ` +
           `file${definition.files.length === 1 ? '' : 's'}`
@@ -1057,7 +1360,8 @@ export class DlcManager {
   ): Promise<DlcStatus> {
     await this.clearArchiveDownloads();
     const definition = this.definition(id);
-    const inspection = await inspectPayload(install, definition);
+    const backups = await this.readBackups(install, definition);
+    const inspection = await this.inspectWithBackups(install, definition, backups);
     const conflict = inspection.files.find(
       (file) => file.state === 'conflict' || file.state === 'replaceable'
     );
@@ -1069,17 +1373,9 @@ export class DlcManager {
 
     let archive: Buffer | null = null;
     let entries = new Map<string, ZipEntry>();
-    const archiveRequired =
-      inspection.files.some(
-        (file) => file.definition.restore && file.state !== 'restored'
-      );
-
-    const announcedFileWorkTotal =
-      inspection.files.filter(
-        (candidate) => candidate.definition.restore && candidate.state !== 'restored'
-      ).length +
-      definition.files.length +
-      1;
+    const announcedRestorePlans = await this.removalRestorePlans(inspection, backups);
+    const archiveRequired = announcedRestorePlans.some((plan) => plan.source === 'archive');
+    const announcedFileWorkTotal = announcedRestorePlans.length + definition.files.length + 1;
     if (archiveRequired) {
       onProgress({ phase: 'download', completed: 0, total: definition.archiveSize });
       archive = await this.downloadVerifiedArchive(
@@ -1098,7 +1394,7 @@ export class DlcManager {
       onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
     }
 
-    const writable = await inspectPayload(install, definition);
+    const writable = await this.inspectWithBackups(install, definition, backups);
     const writableConflict = writable.files.find(
       (file) => file.state === 'conflict' || file.state === 'replaceable'
     );
@@ -1108,11 +1404,9 @@ export class DlcManager {
       );
     }
 
-    const filesToRestore = writable.files.filter(
-      (candidate) => candidate.definition.restore && candidate.state !== 'restored'
-    );
+    const restorePlans = await this.removalRestorePlans(writable, backups);
     let completedFileWork = 0;
-    const totalFileWork = filesToRestore.length + definition.files.length + 1;
+    const totalFileWork = restorePlans.length + definition.files.length + 1;
     const reportFileProgress = (): void => {
       onProgress({ phase: 'files', completed: completedFileWork, total: totalFileWork });
     };
@@ -1121,24 +1415,39 @@ export class DlcManager {
     const staged: StagedFile[] = [];
     const mutations: RemovalMutation[] = [];
     try {
-      if (archive) {
-        for (const file of filesToRestore) {
+      for (const plan of restorePlans) {
+        if (plan.source === 'backup') {
+          staged.push(
+            await this.stagePersistentBackup(
+              install,
+              definition,
+              writable.location,
+              plan.file.definition,
+              plan.expected
+            )
+          );
+        } else {
+          if (!archive) {
+            throw new Error(
+              `${plan.file.path} changed while the DLC removal was being prepared.`
+            );
+          }
           staged.push(
             await this.stageArchiveFile(
               archive,
               entries,
               writable.location,
               definition,
-              file.definition,
-              file.definition.restore!
+              plan.file.definition,
+              plan.file.definition.restore!
             )
           );
-          completedFileWork += 1;
-          reportFileProgress();
         }
+        completedFileWork += 1;
+        reportFileProgress();
       }
 
-      const beforeRemoval = await inspectPayload(install, definition);
+      const beforeRemoval = await this.inspectWithBackups(install, definition, backups);
       const removalConflict = beforeRemoval.files.find(
         (file) => file.state === 'conflict' || file.state === 'replaceable'
       );
@@ -1149,10 +1458,18 @@ export class DlcManager {
       }
 
       for (const current of beforeRemoval.files) {
-        if (
-          current.state === 'restored' ||
-          (!current.definition.restore && current.state === 'missing')
-        ) {
+        const backup = backups.get(targetKey(current.definition));
+        const desired = backup
+          ?? (current.definition.restore
+            ? {
+                size: current.definition.restore.size,
+                sha256: current.definition.restore.sha256
+              }
+            : null);
+        const desiredAlready = desired
+          ? await exactFile(current.path, desired.size, desired.sha256)
+          : current.state === 'missing';
+        if (desiredAlready) {
           completedFileWork += 1;
           reportFileProgress();
           continue;
@@ -1160,22 +1477,35 @@ export class DlcManager {
         const stagedRestore = staged.find(
           (file) => targetKey(file.definition) === targetKey(current.definition)
         );
-        if (current.definition.restore && !stagedRestore) {
+        if (
+          desired &&
+          (!stagedRestore ||
+            stagedRestore.expected.size !== desired.size ||
+            stagedRestore.expected.sha256 !== desired.sha256)
+        ) {
           throw new Error(`${current.path} changed while the DLC removal was being prepared.`);
         }
 
-        let rollbackPath: string | undefined;
-        if (current.state === 'exact') {
-          rollbackPath = rollbackFilePath(current.path, definition.id);
+        let mutation: RemovalMutation | null = null;
+        if (current.state !== 'missing') {
+          const currentInfo = await lstat(current.path);
+          if (!currentInfo.isFile()) throw new Error(`${current.path} is not a regular file.`);
+          const rollbackSha256 = await sha256File(current.path);
+          if (!(await exactFile(current.path, currentInfo.size, rollbackSha256))) {
+            throw new Error(`${current.path} changed while the DLC removal was being prepared.`);
+          }
+          const rollbackPath = rollbackFilePath(current.path, definition.id);
           await rename(current.path, rollbackPath);
-          mutations.push({
+          mutation = {
             definition: current.definition,
             path: current.path,
             rollbackPath,
-            publishedRestore: Boolean(current.definition.restore)
-          });
+            rollbackSize: currentInfo.size,
+            rollbackSha256
+          };
+          mutations.push(mutation);
         }
-        if (!current.definition.restore) {
+        if (!desired) {
           completedFileWork += 1;
           reportFileProgress();
           continue;
@@ -1183,46 +1513,52 @@ export class DlcManager {
 
         try {
           await link(stagedRestore!.tempPath, current.path);
-          if (!rollbackPath) {
-            mutations.push({
-              definition: current.definition,
-              path: current.path,
-              publishedRestore: true
-            });
-          }
         } catch (error) {
           if (
             !isAlreadyExists(error) ||
-            !(await exactFile(
-              current.path,
-              current.definition.restore.size,
-              current.definition.restore.sha256
-            ))
+            !(await exactFile(current.path, desired.size, desired.sha256))
           ) {
             throw error;
           }
+        }
+        if (mutation) {
+          mutation.published = desired;
+        } else {
+          mutations.push({
+            definition: current.definition,
+            path: current.path,
+            published: desired
+          });
         }
         completedFileWork += 1;
         reportFileProgress();
       }
 
-      const removed = await inspectPayload(install, definition);
-      if (
-        !removed.files.every((file) =>
-          file.definition.restore ? file.state === 'restored' : file.state === 'missing'
-        )
-      ) {
-        throw new Error('The DLC could not be verified after removal.');
+      const removed = await this.inspectWithBackups(install, definition, backups);
+      for (const file of removed.files) {
+        const backup = backups.get(targetKey(file.definition));
+        const verified = backup
+          ? await exactFile(file.path, backup.size, backup.sha256)
+          : file.definition.restore
+            ? file.state === 'restored'
+            : file.state === 'missing';
+        if (!verified) throw new Error('The DLC could not be verified after removal.');
       }
-      await rm(this.markerPath(install, definition.id), { force: true });
+      if (backups.size) {
+        await this.writeMarker(install, definition, backups);
+      } else {
+        await rm(this.markerPath(install, definition.id), { force: true });
+      }
       await this.discardRollbackFiles(mutations);
       await this.removeEmptyDirectories(removed.location, definition);
       completedFileWork += 1;
       reportFileProgress();
       this.log.info(
-        definition.files.some((file) => file.restore)
-          ? `${definition.name}: removed verified DLC files and restored base-game files`
-          : `${definition.name}: removed verified DLC files`
+        backups.size
+          ? `${definition.name}: removed verified DLC files and restored saved pre-install files`
+          : definition.files.some((file) => file.restore)
+            ? `${definition.name}: removed verified DLC files and restored base-game files`
+            : `${definition.name}: removed verified DLC files`
       );
       return statusFromInspection(definition, removed);
     } catch (error) {

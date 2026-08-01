@@ -84,7 +84,7 @@ interface DlcLocation {
 interface InspectedFile {
   definition: DlcFileDefinition;
   path: string;
-  state: 'missing' | 'exact' | 'restored' | 'conflict';
+  state: 'missing' | 'exact' | 'restored' | 'replaceable' | 'conflict';
   detail: string;
 }
 
@@ -102,6 +102,8 @@ interface InstallMutation {
   definition: DlcFileDefinition;
   path: string;
   rollbackPath?: string;
+  rollbackSize?: number;
+  rollbackSha256?: string;
 }
 
 interface RemovalMutation {
@@ -391,14 +393,12 @@ async function resolveTargetFile(
   return {
     definition,
     path: file.path,
-    state: payloadMatches ? 'exact' : restoreMatches ? 'restored' : 'conflict',
+    state: payloadMatches ? 'exact' : restoreMatches ? 'restored' : 'replaceable',
     detail: payloadMatches
       ? 'Verified file is installed.'
       : restoreMatches
         ? 'Verified base-game file is restored.'
-        : definition.restore
-          ? `${file.path} differs from both the verified DLC payload and its base-game backup.`
-          : `${file.path} differs from the verified DLC payload.`
+        : `${file.path} differs from this DLC's verified file and will be replaced during installation.`
   };
 }
 
@@ -420,6 +420,7 @@ function statusFromInspection(
 ): DlcStatus {
   const exact = inspection.files.filter((file) => file.state === 'exact').length;
   const conflict = inspection.files.find((file) => file.state === 'conflict');
+  const replaceable = inspection.files.find((file) => file.state === 'replaceable');
   const total = definition.files.length;
   if (conflict) {
     return {
@@ -440,6 +441,16 @@ function statusFromInspection(
         total === 1
           ? 'The verified DLC file is installed.'
           : `All ${total} verified DLC files are installed.`,
+      installedFiles: exact,
+      totalFiles: total
+    };
+  }
+  if (replaceable) {
+    return {
+      id: definition.id,
+      name: definition.name,
+      status: 'partial',
+      detail: replaceable.detail,
       installedFiles: exact,
       totalFiles: total
     };
@@ -840,12 +851,21 @@ export class DlcManager {
     const failures: string[] = [];
     for (const mutation of [...mutations].reverse()) {
       try {
-        await removeExactOrMissing(mutation.path, mutation.definition);
         if (mutation.rollbackPath) {
-          const restore = mutation.definition.restore!;
-          if (!(await exactFile(mutation.rollbackPath, restore.size, restore.sha256))) {
+          if (
+            mutation.rollbackSize === undefined ||
+            !mutation.rollbackSha256 ||
+            !(await exactFile(
+              mutation.rollbackPath,
+              mutation.rollbackSize,
+              mutation.rollbackSha256
+            ))
+          ) {
             throw new Error(`The rollback copy for ${mutation.path} is missing or modified.`);
           }
+        }
+        await removeExactOrMissing(mutation.path, mutation.definition);
+        if (mutation.rollbackPath) {
           await rename(mutation.rollbackPath, mutation.path);
         }
       } catch (error) {
@@ -965,10 +985,21 @@ export class DlcManager {
         )!;
         if (current.state !== 'exact') {
           let mutation: InstallMutation | null = null;
-          if (current.state === 'restored') {
+          if (current.state === 'restored' || current.state === 'replaceable') {
+            const currentInfo = await lstat(current.path);
+            if (!currentInfo.isFile()) {
+              throw new Error(`${current.path} is not a regular file.`);
+            }
+            const rollbackSha256 = await sha256File(current.path);
             const rollbackPath = rollbackFilePath(current.path, definition.id);
             await rename(current.path, rollbackPath);
-            mutation = { definition: current.definition, path: current.path, rollbackPath };
+            mutation = {
+              definition: current.definition,
+              path: current.path,
+              rollbackPath,
+              rollbackSize: currentInfo.size,
+              rollbackSha256
+            };
             mutations.push(mutation);
           }
           try {
@@ -1027,7 +1058,9 @@ export class DlcManager {
     await this.clearArchiveDownloads();
     const definition = this.definition(id);
     const inspection = await inspectPayload(install, definition);
-    const conflict = inspection.files.find((file) => file.state === 'conflict');
+    const conflict = inspection.files.find(
+      (file) => file.state === 'conflict' || file.state === 'replaceable'
+    );
     if (conflict) {
       throw new Error(
         `The DLC was not removed because ${conflict.path} is not the verified managed file.`
@@ -1066,7 +1099,9 @@ export class DlcManager {
     }
 
     const writable = await inspectPayload(install, definition);
-    const writableConflict = writable.files.find((file) => file.state === 'conflict');
+    const writableConflict = writable.files.find(
+      (file) => file.state === 'conflict' || file.state === 'replaceable'
+    );
     if (writableConflict) {
       throw new Error(
         `The DLC was not removed because ${writableConflict.path} is not a verified managed file.`
@@ -1104,7 +1139,9 @@ export class DlcManager {
       }
 
       const beforeRemoval = await inspectPayload(install, definition);
-      const removalConflict = beforeRemoval.files.find((file) => file.state === 'conflict');
+      const removalConflict = beforeRemoval.files.find(
+        (file) => file.state === 'conflict' || file.state === 'replaceable'
+      );
       if (removalConflict) {
         throw new Error(
           `The DLC was not removed because ${removalConflict.path} is not a verified managed file.`

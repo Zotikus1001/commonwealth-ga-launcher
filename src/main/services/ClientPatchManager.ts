@@ -689,7 +689,7 @@ export class ClientPatchManager {
     try {
       desired = await this.latestReleaseDefinition();
       this.log.info(
-        `client patches: newest published release is ${desired.revision} (${desired.publishedAt})`
+        `client patches: newest currently published release is ${desired.revision} (${desired.publishedAt})`
       );
     } catch (error) {
       this.log.warn(`client patch update check failed: ${(error as Error).message}`);
@@ -697,16 +697,6 @@ export class ClientPatchManager {
         await this.cleanupTransactionFiles(install);
         return this.launchEnvironment(platform);
       }
-    }
-
-    if (
-      installedBeforeCheck?.phase === 'active' &&
-      installedBeforeCheck?.publishedAt &&
-      desired.publishedAt &&
-      Date.parse(installedBeforeCheck.publishedAt) >= Date.parse(desired.publishedAt)
-    ) {
-      await this.cleanupTransactionFiles(install);
-      return this.launchEnvironment(platform);
     }
 
     if (await this.installedFileMatches(install, desired)) {

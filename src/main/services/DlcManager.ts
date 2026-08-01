@@ -27,7 +27,7 @@ import {
 } from './ManagedInstallState';
 
 const inflateRawAsync = promisify(inflateRaw);
-const MARKER_SCHEMA = 3;
+const MARKER_SCHEMA = 4;
 const ZIP_END_SIGNATURE = 0x06054b50;
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
 const ZIP_LOCAL_SIGNATURE = 0x04034b50;
@@ -130,6 +130,11 @@ interface PreparedBackups {
   currentFiles: Map<string, FileFingerprint>;
 }
 
+interface DlcStoredState {
+  backups: Map<string, FileFingerprint>;
+  restored: Map<string, FileFingerprint>;
+}
+
 interface RemovalRestorePlan {
   file: InspectedFile;
   expected: FileFingerprint;
@@ -146,6 +151,7 @@ interface DlcMarker {
     sha256: string;
     restoreSha256?: string;
     backup?: FileFingerprint;
+    restored?: FileFingerprint;
   }>;
 }
 
@@ -831,19 +837,39 @@ export class DlcManager {
     );
   }
 
+  private async clearBackupPayloads(
+    install: GameInstall,
+    definition: DlcDefinition
+  ): Promise<void> {
+    const directory = this.backupDirectory(install, definition.id);
+    try {
+      await rm(directory, { recursive: true, force: true });
+      await rmdir(dirname(directory)).catch((error) => {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'ENOTEMPTY' && code !== 'EEXIST') throw error;
+      });
+    } catch (error) {
+      this.log.warn(
+        `${definition.name}: could not delete restored DLC backup payloads; cleanup will be retried: ` +
+          (error as Error).message
+      );
+    }
+  }
+
   private async clearArchiveDownloads(): Promise<void> {
     await rm(join(this.userDataDir, 'dlcs'), { recursive: true, force: true });
   }
 
-  private async readBackups(
+  private async readStoredState(
     install: GameInstall,
     definition: DlcDefinition
-  ): Promise<Map<string, FileFingerprint>> {
+  ): Promise<DlcStoredState> {
+    const emptyState = (): DlcStoredState => ({ backups: new Map(), restored: new Map() });
     let contents: string;
     try {
       contents = await readFile(this.markerPath(install, definition.id), { encoding: 'utf-8' });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyState();
       throw error;
     }
 
@@ -864,57 +890,80 @@ export class DlcManager {
     ) {
       throw new Error(`${definition.name} backup metadata is invalid.`);
     }
-    if (parsed.schema < MARKER_SCHEMA) return new Map();
+    if (parsed.schema < 3) return emptyState();
 
     const configuredFiles = new Map(
       definition.files.map((file) => [targetKey(file), file] as const)
     );
     const backups = new Map<string, FileFingerprint>();
+    const restored = new Map<string, FileFingerprint>();
+    const seen = new Set<string>();
+    let markerContainsBackup = false;
     for (const storedFile of parsed.files) {
-      if (!isPlainObject(storedFile) || storedFile.backup === undefined) continue;
+      if (!isPlainObject(storedFile)) continue;
+      const backup = storedFile.backup;
+      const restoredFingerprint = parsed.schema >= 4 ? storedFile.restored : undefined;
+      if (backup === undefined && restoredFingerprint === undefined) continue;
       if (
+        (backup !== undefined && restoredFingerprint !== undefined) ||
         !['dlc-maps', 'cooked-pc', 'binaries'].includes(String(storedFile.root)) ||
         typeof storedFile.path !== 'string' ||
-        !isFileFingerprint(storedFile.backup)
+        (backup !== undefined && !isFileFingerprint(backup)) ||
+        (restoredFingerprint !== undefined && !isFileFingerprint(restoredFingerprint))
       ) {
         throw new Error(`${definition.name} contains invalid DLC backup metadata.`);
       }
+      if (backup !== undefined) markerContainsBackup = true;
       normalizeRelativePath(storedFile.path, 'DLC backup target path');
       const key = targetKeyFrom(storedFile.root as DlcTargetRoot, storedFile.path);
       if (!configuredFiles.has(key)) continue;
-      if (backups.has(key)) {
+      if (seen.has(key)) {
         throw new Error(`${definition.name} contains duplicate DLC backup metadata.`);
       }
-      const fingerprint = {
-        size: storedFile.backup.size,
-        sha256: storedFile.backup.sha256
-      };
-      const path = this.backupPath(install, definition, fingerprint);
-      if (!(await exactFile(path, fingerprint.size, fingerprint.sha256))) {
-        throw new Error(`The saved pre-install backup for ${storedFile.path} is missing or modified.`);
+      seen.add(key);
+      if (backup !== undefined) {
+        const fingerprint = { size: backup.size, sha256: backup.sha256 };
+        const path = this.backupPath(install, definition, fingerprint);
+        if (!(await exactFile(path, fingerprint.size, fingerprint.sha256))) {
+          throw new Error(`The saved pre-install backup for ${storedFile.path} is missing or modified.`);
+        }
+        backups.set(key, fingerprint);
+      } else {
+        restored.set(key, {
+          size: restoredFingerprint!.size,
+          sha256: restoredFingerprint!.sha256
+        });
       }
-      backups.set(key, fingerprint);
     }
-    return backups;
+    if (parsed.schema >= 4 && !markerContainsBackup) {
+      await this.clearBackupPayloads(install, definition);
+    }
+    return { backups, restored };
   }
 
   private async writeMarker(
     install: GameInstall,
     definition: DlcDefinition,
-    backups: ReadonlyMap<string, FileFingerprint>
+    state: DlcStoredState
   ): Promise<void> {
     const marker: DlcMarker = {
       schema: MARKER_SCHEMA,
       id: definition.id,
       archiveSha256: definition.archiveSha256,
       files: definition.files.map((file) => {
-        const backup = backups.get(targetKey(file));
+        const key = targetKey(file);
+        const backup = state.backups.get(key);
+        const restored = state.restored.get(key);
+        if (backup && restored) {
+          throw new Error(`${definition.name} contains overlapping DLC recovery metadata.`);
+        }
         return {
           root: targetRootOf(file),
           path: file.targetPath,
           sha256: file.sha256,
           ...(file.restore ? { restoreSha256: file.restore.sha256 } : {}),
-          ...(backup ? { backup } : {})
+          ...(backup ? { backup } : {}),
+          ...(restored ? { restored } : {})
         };
       })
     };
@@ -929,18 +978,24 @@ export class DlcManager {
     }
   }
 
-  private async inspectWithBackups(
+  private async inspectWithStoredState(
     install: GameInstall,
     definition: DlcDefinition,
-    backups: ReadonlyMap<string, FileFingerprint>
+    state: DlcStoredState
   ): Promise<PayloadInspection> {
     const inspection = await inspectPayload(install, definition);
     for (const file of inspection.files) {
       if (file.state !== 'replaceable') continue;
-      const backup = backups.get(targetKey(file.definition));
-      if (!backup || !(await exactFile(file.path, backup.size, backup.sha256))) continue;
+      const key = targetKey(file.definition);
+      const fingerprint = state.backups.get(key) ?? state.restored.get(key);
+      if (
+        !fingerprint ||
+        !(await exactFile(file.path, fingerprint.size, fingerprint.sha256))
+      ) {
+        continue;
+      }
       file.state = 'restored';
-      file.detail = 'The saved pre-install file is restored.';
+      file.detail = 'The pre-install file is restored.';
     }
     return inspection;
   }
@@ -1020,11 +1075,11 @@ export class DlcManager {
     const statuses: DlcStatus[] = [];
     for (const definition of this.definitions) {
       try {
-        const backups = await this.readBackups(install, definition);
+        const storedState = await this.readStoredState(install, definition);
         statuses.push(
           statusFromInspection(
             definition,
-            await this.inspectWithBackups(install, definition, backups)
+            await this.inspectWithStoredState(install, definition, storedState)
           )
         );
       } catch (error) {
@@ -1087,15 +1142,18 @@ export class DlcManager {
 
   private async removalRestorePlans(
     inspection: PayloadInspection,
-    backups: ReadonlyMap<string, FileFingerprint>
+    state: DlcStoredState
   ): Promise<RemovalRestorePlan[]> {
     const plans: RemovalRestorePlan[] = [];
     for (const file of inspection.files) {
-      const backup = backups.get(targetKey(file.definition));
+      const key = targetKey(file.definition);
+      const backup = state.backups.get(key);
       if (backup) {
         if (!(await exactFile(file.path, backup.size, backup.sha256))) {
           plans.push({ file, expected: backup, source: 'backup' });
         }
+      } else if (state.restored.has(key)) {
+        continue;
       } else if (file.definition.restore && file.state !== 'restored') {
         plans.push({
           file,
@@ -1190,12 +1248,15 @@ export class DlcManager {
   ): Promise<DlcStatus> {
     await this.clearArchiveDownloads();
     const definition = this.definition(id);
-    const backups = await this.readBackups(install, definition);
-    const initial = await this.inspectWithBackups(install, definition, backups);
+    const storedState = await this.readStoredState(install, definition);
+    const initial = await this.inspectWithStoredState(install, definition, storedState);
     const conflict = initial.files.find((file) => file.state === 'conflict');
     if (conflict) throw new Error(conflict.detail);
     if (initial.files.every((file) => file.state === 'exact')) {
-      await this.writeMarker(install, definition, backups);
+      await this.writeMarker(install, definition, {
+        backups: storedState.backups,
+        restored: new Map()
+      });
       return statusFromInspection(definition, initial);
     }
 
@@ -1213,7 +1274,7 @@ export class DlcManager {
       () => onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal })
     );
     const entries = parseZipManifest(archive, definition);
-    const writable = await this.inspectWithBackups(install, definition, backups);
+    const writable = await this.inspectWithStoredState(install, definition, storedState);
     const writableConflict = writable.files.find((file) => file.state === 'conflict');
     if (writableConflict) throw new Error(writableConflict.detail);
 
@@ -1243,7 +1304,11 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const beforePublish = await this.inspectWithBackups(install, definition, backups);
+      const beforePublish = await this.inspectWithStoredState(
+        install,
+        definition,
+        storedState
+      );
       const publishConflict = beforePublish.files.find((file) => file.state === 'conflict');
       if (publishConflict) throw new Error(publishConflict.detail);
       const publishFiles = beforePublish.files.filter((candidate) =>
@@ -1265,13 +1330,17 @@ export class DlcManager {
         install,
         definition,
         publishFiles,
-        backups,
+        storedState.backups,
         () => {
           completedFileWork += 1;
           reportFileProgress();
         }
       );
-      await this.writeMarker(install, definition, prepared.backups);
+      const installedState: DlcStoredState = {
+        backups: prepared.backups,
+        restored: new Map()
+      };
+      await this.writeMarker(install, definition, installedState);
       for (const stagedFile of staged) {
         const current = beforePublish.files.find(
           (file) => targetKey(file.definition) === targetKey(stagedFile.definition)
@@ -1327,11 +1396,15 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const installed = await this.inspectWithBackups(install, definition, prepared.backups);
+      const installed = await this.inspectWithStoredState(
+        install,
+        definition,
+        installedState
+      );
       if (!installed.files.every((file) => file.state === 'exact')) {
         throw new Error('The DLC could not be verified after installation.');
       }
-      await this.writeMarker(install, definition, prepared.backups);
+      await this.writeMarker(install, definition, installedState);
       this.log.info(
         `${definition.name}: installed ${definition.files.length} verified DLC ` +
           `file${definition.files.length === 1 ? '' : 's'}`
@@ -1360,8 +1433,9 @@ export class DlcManager {
   ): Promise<DlcStatus> {
     await this.clearArchiveDownloads();
     const definition = this.definition(id);
-    const backups = await this.readBackups(install, definition);
-    const inspection = await this.inspectWithBackups(install, definition, backups);
+    const storedState = await this.readStoredState(install, definition);
+    const backups = storedState.backups;
+    const inspection = await this.inspectWithStoredState(install, definition, storedState);
     const conflict = inspection.files.find(
       (file) => file.state === 'conflict' || file.state === 'replaceable'
     );
@@ -1373,7 +1447,7 @@ export class DlcManager {
 
     let archive: Buffer | null = null;
     let entries = new Map<string, ZipEntry>();
-    const announcedRestorePlans = await this.removalRestorePlans(inspection, backups);
+    const announcedRestorePlans = await this.removalRestorePlans(inspection, storedState);
     const archiveRequired = announcedRestorePlans.some((plan) => plan.source === 'archive');
     const announcedFileWorkTotal = announcedRestorePlans.length + definition.files.length + 1;
     if (archiveRequired) {
@@ -1394,7 +1468,7 @@ export class DlcManager {
       onProgress({ phase: 'files', completed: 0, total: announcedFileWorkTotal });
     }
 
-    const writable = await this.inspectWithBackups(install, definition, backups);
+    const writable = await this.inspectWithStoredState(install, definition, storedState);
     const writableConflict = writable.files.find(
       (file) => file.state === 'conflict' || file.state === 'replaceable'
     );
@@ -1404,7 +1478,7 @@ export class DlcManager {
       );
     }
 
-    const restorePlans = await this.removalRestorePlans(writable, backups);
+    const restorePlans = await this.removalRestorePlans(writable, storedState);
     let completedFileWork = 0;
     const totalFileWork = restorePlans.length + definition.files.length + 1;
     const reportFileProgress = (): void => {
@@ -1447,7 +1521,11 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const beforeRemoval = await this.inspectWithBackups(install, definition, backups);
+      const beforeRemoval = await this.inspectWithStoredState(
+        install,
+        definition,
+        storedState
+      );
       const removalConflict = beforeRemoval.files.find(
         (file) => file.state === 'conflict' || file.state === 'replaceable'
       );
@@ -1458,9 +1536,11 @@ export class DlcManager {
       }
 
       for (const current of beforeRemoval.files) {
-        const backup = backups.get(targetKey(current.definition));
+        const key = targetKey(current.definition);
+        const backup = backups.get(key);
+        const previouslyRestored = storedState.restored.get(key);
         const desired = backup
-          ?? (current.definition.restore
+          ?? (!previouslyRestored && current.definition.restore
             ? {
                 size: current.definition.restore.size,
                 sha256: current.definition.restore.sha256
@@ -1468,7 +1548,14 @@ export class DlcManager {
             : null);
         const desiredAlready = desired
           ? await exactFile(current.path, desired.size, desired.sha256)
-          : current.state === 'missing';
+          : previouslyRestored
+            ? current.state === 'missing' ||
+              await exactFile(
+                current.path,
+                previouslyRestored.size,
+                previouslyRestored.sha256
+              )
+            : current.state === 'missing';
         if (desiredAlready) {
           completedFileWork += 1;
           reportFileProgress();
@@ -1534,22 +1621,32 @@ export class DlcManager {
         reportFileProgress();
       }
 
-      const removed = await this.inspectWithBackups(install, definition, backups);
+      const removed = await this.inspectWithStoredState(install, definition, storedState);
       for (const file of removed.files) {
-        const backup = backups.get(targetKey(file.definition));
+        const key = targetKey(file.definition);
+        const backup = backups.get(key);
+        const previouslyRestored = storedState.restored.get(key);
         const verified = backup
           ? await exactFile(file.path, backup.size, backup.sha256)
-          : file.definition.restore
-            ? file.state === 'restored'
-            : file.state === 'missing';
+          : previouslyRestored
+            ? file.state === 'restored' || file.state === 'missing'
+            : file.definition.restore
+              ? file.state === 'restored'
+              : file.state === 'missing';
         if (!verified) throw new Error('The DLC could not be verified after removal.');
       }
-      if (backups.size) {
-        await this.writeMarker(install, definition, backups);
+      const restoredFingerprints = new Map(storedState.restored);
+      for (const [key, backup] of backups) restoredFingerprints.set(key, backup);
+      if (restoredFingerprints.size) {
+        await this.writeMarker(install, definition, {
+          backups: new Map(),
+          restored: restoredFingerprints
+        });
       } else {
         await rm(this.markerPath(install, definition.id), { force: true });
       }
       await this.discardRollbackFiles(mutations);
+      await this.clearBackupPayloads(install, definition);
       await this.removeEmptyDirectories(removed.location, definition);
       completedFileWork += 1;
       reportFileProgress();

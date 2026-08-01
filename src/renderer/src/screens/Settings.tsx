@@ -2577,7 +2577,8 @@ function DlcsTab({
         DLC downloads are enabled by default. The launcher verifies their exact files at startup
         and before every Play, while your Remove choice prevents automatic reinstallation. Install
         saves any replaced DLC-target files under launcher data, and Remove restores those saved
-        copies. The chat commands on each card control whether its maps can be selected in-game.
+        copies before deleting their backups. The chat commands on each card control whether its
+        maps can be selected in-game.
       </p>
 
       <div className={styles.patchList}>

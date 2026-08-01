@@ -13,6 +13,7 @@ import {
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
+import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
 import {
   GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE,
   LINUX_COMMAND_PLACEHOLDER,
@@ -178,6 +179,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     );
     if (linuxCommandTemplateError) {
       setSaveError(linuxCommandTemplateError);
+      return false;
+    }
+    const extraGameArgumentsError = validateExtraGameArguments(draft.launch.extraArgs);
+    if (extraGameArgumentsError) {
+      setSaveError(extraGameArgumentsError);
       return false;
     }
     const validationError = validateServerSettings(
@@ -558,6 +564,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const linuxCommandTemplateError = validateLinuxCommandTemplate(
     draft.linux.commandTemplate
   );
+  const extraGameArgumentsError = validateExtraGameArguments(draft.launch.extraArgs);
 
   return (
     <div className={styles.settings}>
@@ -1058,12 +1065,24 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             </div>
 
             <div className="panel-title">Advanced Game Launch</div>
-            <div className={`${styles.fieldRow} ${styles.advancedLaunch}`}>
+            <div
+              className={`${styles.fieldRow} ${styles.advancedLaunch} ${
+                extraGameArgumentsError ? styles.advancedLaunchInvalid : ''
+              }`}
+            >
               <label htmlFor="extra-game-arguments">Extra Launch Arguments</label>
               <input
                 id="extra-game-arguments"
+                className={styles.extraGameArgumentsInput}
                 type="text"
                 value={draft.launch.extraArgs}
+                spellCheck={false}
+                aria-invalid={extraGameArgumentsError !== null}
+                aria-describedby={
+                  extraGameArgumentsError
+                    ? 'extra-game-arguments-help extra-game-arguments-error'
+                    : 'extra-game-arguments-help'
+                }
                 onChange={(event) =>
                   edit((current) => ({
                     ...current,
@@ -1071,7 +1090,19 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                   }))
                 }
               />
-              <span className={styles.hint}>Space-separated arguments passed directly to the game.</span>
+              <span id="extra-game-arguments-help" className={styles.hint}>
+                Space-separated custom arguments passed directly to the game. Only known
+                launcher-managed conflicts are checked.
+              </span>
+              {extraGameArgumentsError && (
+                <span
+                  id="extra-game-arguments-error"
+                  className={styles.extraGameArgumentsError}
+                  role="alert"
+                >
+                  {extraGameArgumentsError}
+                </span>
+              )}
             </div>
           </section>
         )}

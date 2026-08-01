@@ -184,6 +184,26 @@
   background: rgba(15, 19, 28, 0.48);
 }
 
+.advancedLaunchInvalid {
+  border-color: rgba(224, 87, 79, 0.58);
+  border-left: 2px solid var(--red);
+  background:
+    linear-gradient(90deg, rgba(224, 87, 79, 0.09), transparent 58%),
+    rgba(15, 19, 28, 0.48);
+}
+
+.extraGameArgumentsInput[aria-invalid='true'],
+.extraGameArgumentsInput[aria-invalid='true']:focus {
+  border-color: var(--red);
+  box-shadow: inset 3px 0 0 rgba(224, 87, 79, 0.42);
+}
+
+.extraGameArgumentsError {
+  color: #e78d87;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .commandWrapper {
   padding: 13px 14px;
   border: 1px solid var(--line);

@@ -47,7 +47,7 @@ The launcher updates itself automatically.
   that pack's declared locations, pre-install backups that restore saved copies and are then
   deleted on removal, separate download and file-operation progress, plus per-pack matchmaking
   include and exclude commands
-- Useful game options
+- Useful game options with conflict warnings for launch arguments already managed by the launcher
 - An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
   in-game chat commands, including suit-cosmetic performance controls
 - Agenda Stats and Discord access

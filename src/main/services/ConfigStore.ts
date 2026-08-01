@@ -27,6 +27,7 @@ import {
   DEFAULT_LINUX_COMMAND_TEMPLATE,
   validateLinuxCommandTemplate
 } from '@shared/linuxCommandTemplate';
+import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
 import type { Log } from './Log';
 
 export const CURRENT_SETTINGS_SCHEMA_VERSION = 18;
@@ -798,6 +799,10 @@ export class ConfigStore {
     next.dlcs = validateUpdatedDlcs(next.dlcs);
     next.fpsLimit = validateUpdatedFpsLimit(next.fpsLimit);
     next.linux = validateUpdatedLinux(next.linux);
+    if (isPlainObject(patch.launch) && 'extraArgs' in patch.launch) {
+      const extraGameArgumentsError = validateExtraGameArguments(next.launch.extraArgs);
+      if (extraGameArgumentsError) throw new Error(extraGameArgumentsError);
+    }
     if (!isUiScale(next.uiScale)) throw new Error('Launcher UI scale is invalid.');
     if (!isLoginMap(next.loginMap)) next.loginMap = this.defaults.loginMap;
     if (typeof next.showOverhealing !== 'boolean') {

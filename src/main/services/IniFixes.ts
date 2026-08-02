@@ -910,9 +910,16 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
 /** Removes only launcher-owned INI directives before comparing saved and current profiles. */
 export function canonicalizeProfileIniForComparison(
   fileName: string,
-  contents: Buffer
+  contents: Buffer,
+  ignoreDxvkRenderer = false
 ): Buffer {
-  const targets = PROFILE_COMPARISON_TARGETS[fileName.toLowerCase()];
+  const configuredTargets = PROFILE_COMPARISON_TARGETS[fileName.toLowerCase()];
+  const targets = ignoreDxvkRenderer
+    ? configuredTargets
+    : configuredTargets?.filter(
+        (target) =>
+          target.sectionName !== 'systemsettings' || !target.keys.includes('AllowD3D10')
+      );
   if (!targets) return contents;
 
   const text = contents.toString('utf-8');

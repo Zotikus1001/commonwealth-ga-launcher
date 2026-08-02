@@ -64,7 +64,10 @@ function sha256(contents: Buffer): string {
   return createHash('sha256').update(contents).digest('hex');
 }
 
-function comparisonManifest(files: readonly StoredProfileFile[]): Array<{
+function comparisonManifest(
+  files: readonly StoredProfileFile[],
+  ignoreDxvkRenderer: boolean
+): Array<{
   name: string;
   sha256: string;
 }> {
@@ -73,7 +76,9 @@ function comparisonManifest(files: readonly StoredProfileFile[]): Array<{
       const contents = decodeBase64(file.contents)!;
       return {
         name: file.name.toLowerCase(),
-        sha256: sha256(canonicalizeProfileIniForComparison(file.name, contents))
+        sha256: sha256(
+          canonicalizeProfileIniForComparison(file.name, contents, ignoreDxvkRenderer)
+        )
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -416,19 +421,30 @@ export class GameProfileManager {
     this.log.info(`game profiles ${enabled ? 'enabled' : 'disabled'}`);
   }
 
-  async inspectSelectedChanges(install: GameInstall): Promise<ProfilePlayPrompt | null> {
+  async inspectSelectedChanges(
+    install: GameInstall,
+    ignoreDxvkRenderer = false
+  ): Promise<ProfilePlayPrompt | null> {
     await this.load();
     if (!this.index.enabled || !this.index.selectedProfileId) return null;
 
     const profile = await this.requireProfile(this.index.selectedProfileId);
-    const currentManifest = comparisonManifest(await this.captureFiles(install));
-    const savedManifest = comparisonManifest(profile.files);
+    const currentManifest = comparisonManifest(
+      await this.captureFiles(install),
+      ignoreDxvkRenderer
+    );
+    const savedManifest = comparisonManifest(profile.files, ignoreDxvkRenderer);
     if (JSON.stringify(currentManifest) === JSON.stringify(savedManifest)) return null;
 
     const installKey = resolve(install.exePath).replace(/\\/g, '/').toLowerCase();
     const comparisonToken = sha256(
       Buffer.from(
-        JSON.stringify({ profileId: profile.id, installKey, files: currentManifest }),
+        JSON.stringify({
+          profileId: profile.id,
+          installKey,
+          currentFiles: currentManifest,
+          savedFiles: savedManifest
+        }),
         'utf-8'
       )
     );

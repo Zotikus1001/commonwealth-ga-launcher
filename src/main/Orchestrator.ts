@@ -845,17 +845,20 @@ export class Orchestrator {
 
       const gameAlreadyRunning =
         this.activeGameProcesses.size > 0 || this.state.activeGameInstances > 0;
+      const ignoreDxvkRenderer =
+        PLATFORM === 'win32' &&
+        (settings.developer.useDxvk || this.state.dxvk.canRestore);
+      const decisionMatches = (prompt: ProfilePlayPrompt): boolean =>
+        profileDecision?.profileId === prompt.profileId &&
+        profileDecision.comparisonToken === prompt.comparisonToken;
       if (!gameAlreadyRunning) {
-        const profilePrompt = await this.gameProfileManager.inspectSelectedChanges(this.install);
+        const profilePrompt = await this.gameProfileManager.inspectSelectedChanges(
+          this.install,
+          ignoreDxvkRenderer
+        );
         if (profilePrompt) {
-          if (
-            !profileDecision ||
-            profileDecision.profileId !== profilePrompt.profileId ||
-            profileDecision.comparisonToken !== profilePrompt.comparisonToken
-          ) {
-            return profilePrompt;
-          }
-          if (profileDecision.action === 'save-current') {
+          if (!decisionMatches(profilePrompt)) return profilePrompt;
+          if (profileDecision?.action === 'save-current') {
             await this.gameProfileManager.overwrite(profilePrompt.profileId, this.install);
             const snapshot = this.gameProfileManager.getSnapshot();
             this.patch({
@@ -906,6 +909,13 @@ export class Orchestrator {
         ? this.gameProfileManager.getSelectedSummary()
         : null;
       if (activeProfile && !gameAlreadyRunning) {
+        const latestProfilePrompt = await this.gameProfileManager.inspectSelectedChanges(
+          this.install,
+          ignoreDxvkRenderer
+        );
+        if (latestProfilePrompt && !decisionMatches(latestProfilePrompt)) {
+          return latestProfilePrompt;
+        }
         this.patch({
           phase: 'checking',
           statusLine: `Applying game profile ${activeProfile.name}…`,

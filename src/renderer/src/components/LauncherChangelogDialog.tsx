@@ -18,6 +18,25 @@ export function changelogReleaseBadge(
   return entryVersion === currentVersion ? 'Current release' : 'NEW LAUNCHER UPDATE';
 }
 
+export function formatChangelogReleaseDate(releasedOn: string): string {
+  const [year, month, day] = releasedOn.split('-').map(Number);
+  const suffix =
+    day % 100 >= 11 && day % 100 <= 13
+      ? 'th'
+      : day % 10 === 1
+        ? 'st'
+        : day % 10 === 2
+          ? 'nd'
+          : day % 10 === 3
+            ? 'rd'
+            : 'th';
+  const monthName = new Intl.DateTimeFormat('en-GB', {
+    month: 'long',
+    timeZone: 'UTC'
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+  return `${day}${suffix} ${monthName}, ${year}`;
+}
+
 function InlineReleaseText({ text }: { text: string }): JSX.Element {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
   return (
@@ -150,7 +169,14 @@ export function LauncherChangelogDialog({
                 className={`${styles.releaseCard} ${isCurrent ? styles.currentRelease : ''}`}
               >
                 <div className={styles.releaseHeading}>
-                  <h3>{entry.title ?? `v${entry.version}`}</h3>
+                  <h3>
+                    <span>{entry.title ?? `v${entry.version}`}</span>
+                    {entry.releasedOn && (
+                      <time className={styles.releaseDate} dateTime={entry.releasedOn}>
+                        {formatChangelogReleaseDate(entry.releasedOn)}
+                      </time>
+                    )}
+                  </h3>
                   {releaseBadge && <span className={styles.releaseBadge}>{releaseBadge}</span>}
                 </div>
                 {entry.summary && <p className={styles.releaseSummary}>{entry.summary}</p>}

@@ -2,6 +2,7 @@
   "versions": [
     {
       "version": "0.1.19",
+      "releasedOn": "2026-08-02",
       "changes": [
         "Added a built-in **Launcher Changelog** that appears after a fresh install or update. Click the launcher version at any time to reopen it and view older changelogs.",
         "Added direct access to the **Discord support thread** from the changelog.",

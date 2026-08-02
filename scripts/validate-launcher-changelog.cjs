@@ -9,6 +9,13 @@ const changelog = JSON.parse(
 const versions = changelog?.versions;
 const releaseVersion = process.argv[2] ?? packageJson.version;
 const semanticVersion = /^\d+\.\d+\.\d+$/;
+const releaseDate = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidReleaseDate(value) {
+  if (!releaseDate.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) === value;
+}
 
 if (!Array.isArray(versions) || versions.length === 0 || versions.length > 100) {
   throw new Error('launcher-changelog.json must contain between 1 and 100 versions.');
@@ -32,6 +39,12 @@ for (let index = 0; index < versions.length; index += 1) {
     throw new Error(`Launcher changelog version ${entry.version} is duplicated.`);
   }
   seen.add(entry.version);
+  if (
+    entry.releasedOn !== undefined &&
+    (typeof entry.releasedOn !== 'string' || !isValidReleaseDate(entry.releasedOn))
+  ) {
+    throw new Error(`Launcher changelog version ${entry.version} has an invalid release date.`);
+  }
   if (
     entry.title !== undefined &&
     (typeof entry.title !== 'string' ||

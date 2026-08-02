@@ -2,12 +2,21 @@ import rawLauncherChangelog from '../../launcher-changelog.json';
 
 export interface LauncherChangelogEntry {
   readonly version: string;
+  readonly releasedOn?: string;
   readonly title?: string;
   readonly summary?: string;
   readonly changes: readonly string[];
 }
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+const RELEASE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidReleaseDate(value: string): boolean {
+  if (!RELEASE_DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.toISOString().slice(0, 10) === value;
+}
 
 function versionParts(version: string): readonly number[] {
   return version.split('.').map(Number);
@@ -45,6 +54,12 @@ export function parseLauncherChangelog(raw: unknown): readonly LauncherChangelog
     }
     seenVersions.add(entry.version);
     if (
+      entry.releasedOn !== undefined &&
+      (typeof entry.releasedOn !== 'string' || !isValidReleaseDate(entry.releasedOn))
+    ) {
+      throw new Error(`Launcher changelog version ${entry.version} has an invalid release date.`);
+    }
+    if (
       entry.title !== undefined &&
       (typeof entry.title !== 'string' ||
         entry.title.trim() !== entry.title ||
@@ -80,6 +95,7 @@ export function parseLauncherChangelog(raw: unknown): readonly LauncherChangelog
     });
     return Object.freeze({
       version: entry.version,
+      ...(typeof entry.releasedOn === 'string' ? { releasedOn: entry.releasedOn } : {}),
       ...(typeof entry.title === 'string' ? { title: entry.title } : {}),
       ...(typeof entry.summary === 'string' ? { summary: entry.summary } : {}),
       changes: Object.freeze(changes)

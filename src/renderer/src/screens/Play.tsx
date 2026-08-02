@@ -113,8 +113,7 @@ export function ProfilePlayDialog({
         <div className={styles.profilePlayCopy}>
           <h2 id="profile-play-title">Save your in-game settings?</h2>
           <p id="profile-play-description">
-            Your in-game settings were changed. Save them to your selected {profileLabel} —
-            “{prompt.profileName}”?
+            Your in-game settings were changed. Save them to your selected {profileLabel}?
           </p>
         </div>
       </div>

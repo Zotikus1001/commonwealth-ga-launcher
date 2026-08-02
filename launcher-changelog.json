@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.1.19",
+      "changes": [
+        "Added a built-in **Launcher Changelog** that appears after a fresh install or update. Click the launcher version at any time to reopen it and view older changelogs.",
+        "Added direct access to the **Discord support thread** from the changelog.",
+        "Added an **On/Off toggle for Game Settings Profiles**, allowing profiles to be paused without deleting them.",
+        "Before Play, the launcher now detects changed in-game settings and lets you either **save them to the selected profile** or **use the saved profile**."
+      ]
+    },
+    {
       "version": "0.1.18",
       "changes": [
         "Added an in-game **FOV Slider** in the Video Settings.",

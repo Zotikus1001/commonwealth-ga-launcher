@@ -13,9 +13,9 @@ export function changelogReleaseBadge(
   entryVersion: string,
   index: number,
   currentVersion: string
-): 'Current release' | 'Latest' | null {
+): 'Current release' | 'NEW LAUNCHER UPDATE' | null {
   if (index !== 0) return null;
-  return entryVersion === currentVersion ? 'Current release' : 'Latest';
+  return entryVersion === currentVersion ? 'Current release' : 'NEW LAUNCHER UPDATE';
 }
 
 function InlineReleaseText({ text }: { text: string }): JSX.Element {
@@ -100,7 +100,7 @@ export function LauncherChangelogDialog({
   return (
     <dialog
       ref={dialogRef}
-      className={styles.dialog}
+      className={`${styles.dialog} ${showOlderReleases ? styles.dialogExpanded : ''}`}
       aria-labelledby="launcher-changelog-title"
       tabIndex={-1}
     >
@@ -125,7 +125,7 @@ export function LauncherChangelogDialog({
 
       <aside className={styles.feedbackNote}>
         <span>
-          Please report any <strong>bugs</strong> you encounter below. Suggestions for new{' '}
+          Please report any <strong>bugs</strong> you encounter. Suggestions for new{' '}
           <strong>features, additions, or changes</strong> are also welcome.
         </span>
         <a

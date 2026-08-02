@@ -1,8 +1,8 @@
 .dialog {
   width: min(860px, calc(100vw - 44px));
-  height: min(680px, calc(100vh - 44px));
+  height: fit-content;
   max-width: none;
-  max-height: none;
+  max-height: calc(100vh - 44px);
   margin: auto;
   overflow: hidden;
   padding: 0;
@@ -16,8 +16,16 @@
   animation: changelogDialogIn 160ms ease-out;
 }
 
+.dialogExpanded {
+  height: min(680px, calc(100vh - 44px));
+}
+
 .dialog[open] {
   display: grid;
+  grid-template-rows: auto auto auto;
+}
+
+.dialogExpanded[open] {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 

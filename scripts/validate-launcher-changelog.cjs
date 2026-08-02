@@ -7,7 +7,13 @@ const changelog = JSON.parse(
   readFileSync(resolve(root, 'launcher-changelog.json'), { encoding: 'utf-8' })
 );
 const versions = changelog?.versions;
-const releaseVersion = process.argv[2] ?? packageJson.version;
+const arguments = process.argv.slice(2);
+const allowPrevious = arguments.includes('--allow-previous');
+const versionArguments = arguments.filter((argument) => argument !== '--allow-previous');
+if (versionArguments.length > 1) {
+  throw new Error('Only one release version may be supplied.');
+}
+const releaseVersion = versionArguments[0] ?? packageJson.version;
 const semanticVersion = /^\d+\.\d+\.\d+$/;
 const releaseDate = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -15,6 +21,16 @@ function isValidReleaseDate(value) {
   if (!releaseDate.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) === value;
+}
+
+function compareVersions(left, right) {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const comparison = leftParts[index] - rightParts[index];
+    if (comparison !== 0) return comparison;
+  }
+  return 0;
 }
 
 if (!Array.isArray(versions) || versions.length === 0 || versions.length > 100) {
@@ -80,24 +96,22 @@ for (let index = 0; index < versions.length; index += 1) {
     }
   }
   if (index > 0) {
-    const previous = versions[index - 1].version.split('.').map(Number);
-    const current = entry.version.split('.').map(Number);
-    let comparison = 0;
-    for (let partIndex = 0; partIndex < 3; partIndex += 1) {
-      comparison = previous[partIndex] - current[partIndex];
-      if (comparison !== 0) break;
-    }
-    if (comparison <= 0) {
+    if (compareVersions(versions[index - 1].version, entry.version) <= 0) {
       throw new Error('Launcher changelog versions must be ordered newest first.');
     }
   }
 }
 
 if (versions[0].version !== releaseVersion) {
-  throw new Error(
-    `Newest launcher changelog is v${versions[0].version}, ` +
-      `but the release build is v${releaseVersion}.`
+  if (!allowPrevious || compareVersions(releaseVersion, versions[0].version) <= 0) {
+    throw new Error(
+      `Newest launcher changelog is v${versions[0].version}, ` +
+        `but the release build is v${releaseVersion}.`
+    );
+  }
+  process.stdout.write(
+    `Launcher changelog remains at v${versions[0].version} for hotfix v${releaseVersion}.\n`
   );
+} else {
+  process.stdout.write(`Launcher changelog is ready for v${releaseVersion}.\n`);
 }
-
-process.stdout.write(`Launcher changelog is ready for v${releaseVersion}.\n`);

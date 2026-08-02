@@ -12,6 +12,11 @@ on:
           - patch
           - minor
           - major
+      hotfix_without_changelog:
+        description: Publish a patch hotfix without adding a changelog entry
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: launcher-release
@@ -43,10 +48,15 @@ jobs:
       - name: Require stable branch
         shell: pwsh
         env:
+          BUMP: ${{ inputs.bump }}
+          HOTFIX_WITHOUT_CHANGELOG: ${{ inputs.hotfix_without_changelog }}
           STABLE_BRANCH: ${{ steps.config.outputs.stable_branch }}
         run: |
           if ($env:GITHUB_REF_NAME -ne $env:STABLE_BRANCH) {
             throw "Launcher releases must run from $env:STABLE_BRANCH, not $env:GITHUB_REF_NAME."
+          }
+          if ($env:HOTFIX_WITHOUT_CHANGELOG -eq 'true' -and $env:BUMP -ne 'patch') {
+            throw 'A release without a changelog entry must be a patch hotfix.'
           }
       - id: next
         name: Compute release version
@@ -113,7 +123,11 @@ jobs:
       - name: Inject release version
         run: npm version ${{ needs.version.outputs.value }} --no-git-tag-version --allow-same-version
       - name: Validate release changelog
+        if: ${{ inputs.hotfix_without_changelog == false }}
         run: npm run validate:changelog
+      - name: Validate existing changelog for hotfix
+        if: ${{ inputs.hotfix_without_changelog }}
+        run: npm run validate:changelog -- --allow-previous
       - name: Typecheck and compile
         run: npm run build
       - name: Validate release server address

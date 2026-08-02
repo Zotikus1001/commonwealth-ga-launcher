@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
+import { LAUNCHER_CHANGELOG } from '@shared/launcherChangelog';
 import type { LauncherChangelogStatus } from '@shared/types';
 import type { Log } from './Log';
 
@@ -54,7 +55,10 @@ export class LauncherChangelogStore {
 
   getStatus(): LauncherChangelogStatus {
     if (!this.loaded) throw new Error('Launcher changelog state has not loaded.');
-    return { showOnStartup: !this.acknowledged };
+    const hasCurrentVersionNotes = LAUNCHER_CHANGELOG.some(
+      ({ version }) => version === this.launcherVersion
+    );
+    return { showOnStartup: hasCurrentVersionNotes && !this.acknowledged };
   }
 
   acknowledge(): Promise<void> {

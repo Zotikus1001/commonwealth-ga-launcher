@@ -2,6 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import {
   DLC_SETTING_KEY_BY_ID,
   isDlcId,
+  isProfilePlayDecision,
   type DeepPartial,
   type Settings
 } from '@shared/types';
@@ -194,8 +195,18 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.autoDetectGame, () => orchestrator.autoDetect());
-  ipcMain.handle(IPC.play, () => orchestrator.play());
-  ipcMain.handle(IPC.playDeveloper, () => orchestrator.play(true));
+  ipcMain.handle(IPC.play, (_event, decision: unknown) => {
+    if (decision !== undefined && !isProfilePlayDecision(decision)) {
+      throw new Error('Invalid profile launch decision.');
+    }
+    return orchestrator.play(false, decision);
+  });
+  ipcMain.handle(IPC.playDeveloper, (_event, decision: unknown) => {
+    if (decision !== undefined && !isProfilePlayDecision(decision)) {
+      throw new Error('Invalid profile launch decision.');
+    }
+    return orchestrator.play(true, decision);
+  });
   ipcMain.handle(IPC.applyClientPatch, (_event, id: unknown) => {
     if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
       throw new Error('Unknown client patch.');

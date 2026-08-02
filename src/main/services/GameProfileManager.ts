@@ -1,13 +1,14 @@
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, dirname, join, resolve } from 'path';
-import type { GameProfileSummary } from '@shared/types';
+import type { GameProfileSummary, ProfilePlayPrompt } from '@shared/types';
 import {
   MAX_GAME_PROFILES,
   normalizeGameProfileName,
   validateGameProfileName
 } from '@shared/gameProfiles';
 import type { GameInstall } from './InstallLocator';
+import { canonicalizeProfileIniForComparison } from './IniFixes';
 import type { Log } from './Log';
 
 const PROFILE_INDEX_SCHEMA_VERSION = 2;
@@ -61,6 +62,21 @@ interface RestoreTarget {
 
 function sha256(contents: Buffer): string {
   return createHash('sha256').update(contents).digest('hex');
+}
+
+function comparisonManifest(files: readonly StoredProfileFile[]): Array<{
+  name: string;
+  sha256: string;
+}> {
+  return files
+    .map((file) => {
+      const contents = decodeBase64(file.contents)!;
+      return {
+        name: file.name.toLowerCase(),
+        sha256: sha256(canonicalizeProfileIniForComparison(file.name, contents))
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -398,6 +414,30 @@ export class GameProfileManager {
     await writeJsonAtomic(this.indexPath, nextIndex);
     this.index = nextIndex;
     this.log.info(`game profiles ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  async inspectSelectedChanges(install: GameInstall): Promise<ProfilePlayPrompt | null> {
+    await this.load();
+    if (!this.index.enabled || !this.index.selectedProfileId) return null;
+
+    const profile = await this.requireProfile(this.index.selectedProfileId);
+    const currentManifest = comparisonManifest(await this.captureFiles(install));
+    const savedManifest = comparisonManifest(profile.files);
+    if (JSON.stringify(currentManifest) === JSON.stringify(savedManifest)) return null;
+
+    const installKey = resolve(install.exePath).replace(/\\/g, '/').toLowerCase();
+    const comparisonToken = sha256(
+      Buffer.from(
+        JSON.stringify({ profileId: profile.id, installKey, files: currentManifest }),
+        'utf-8'
+      )
+    );
+    return {
+      profileId: profile.id,
+      profileName: profile.name,
+      profileNumber: this.index.profileIds.indexOf(profile.id) + 1,
+      comparisonToken
+    };
   }
 
   async applySelected(install: GameInstall): Promise<AppliedGameProfile | null> {

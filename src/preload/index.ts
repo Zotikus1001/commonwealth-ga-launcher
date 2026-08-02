@@ -5,6 +5,7 @@ import type {
   DlcId,
   LauncherApi,
   LauncherState,
+  ProfilePlayDecision,
   Settings
 } from '@shared/types';
 import { IPC } from '@shared/ipc';
@@ -22,8 +23,9 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.setDlcEnabled, id, enabled),
   browseForGame: () => ipcRenderer.invoke(IPC.browseForGame),
   autoDetectGame: () => ipcRenderer.invoke(IPC.autoDetectGame),
-  play: () => ipcRenderer.invoke(IPC.play),
-  playDeveloper: () => ipcRenderer.invoke(IPC.playDeveloper),
+  play: (decision?: ProfilePlayDecision) => ipcRenderer.invoke(IPC.play, decision),
+  playDeveloper: (decision?: ProfilePlayDecision) =>
+    ipcRenderer.invoke(IPC.playDeveloper, decision),
   applyClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.applyClientPatch, id),
   removeClientPatch: (id: ClientPatchId) => ipcRenderer.invoke(IPC.removeClientPatch, id),
   createGameProfile: (name: string) => ipcRenderer.invoke(IPC.createGameProfile, name),

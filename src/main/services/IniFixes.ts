@@ -887,6 +887,58 @@ function patchDirectivePattern(keys: readonly string[]): RegExp {
   );
 }
 
+const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarget[]>> = {
+  'tgengine.ini': [
+    { sectionName: 'engine.player', keys: NET_SPEED_KEYS },
+    { sectionName: 'texturestreaming', keys: ['PoolSize'] },
+    { sectionName: 'engine.isvhacks', keys: ['bInitializeShadersOnDemand'] },
+    { sectionName: 'url', keys: LOGIN_MAP_KEYS },
+    {
+      sectionName: 'engine.gameengine',
+      keys: ['bSmoothFrameRate', 'MaxSmoothedFrameRate']
+    },
+    { sectionName: 'systemsettings', keys: ['AllowD3D10'] }
+  ],
+  'tgui.ini': [
+    {
+      sectionName: 'tgclient.tguiprimaryhud',
+      keys: ['m_bSuppressOverhealing']
+    }
+  ]
+};
+
+/** Removes only launcher-owned INI directives before comparing saved and current profiles. */
+export function canonicalizeProfileIniForComparison(
+  fileName: string,
+  contents: Buffer
+): Buffer {
+  const targets = PROFILE_COMPARISON_TARGETS[fileName.toLowerCase()];
+  if (!targets) return contents;
+
+  const text = contents.toString('utf-8');
+  if (!Buffer.from(text, 'utf-8').equals(contents)) return contents;
+
+  const patterns = new Map(
+    targets.map((target) => [target.sectionName, patchDirectivePattern(target.keys)])
+  );
+  const canonicalLines: string[] = [];
+  for (const block of splitIniSectionBlocks(text)) {
+    const body = block.name === null ? block.lines : block.lines.slice(1);
+    const ownedDirective = block.name === null ? undefined : patterns.get(block.name);
+    const meaningfulLines = body.flatMap((line) => {
+      const ending = trailingLineEnding(line);
+      const content = ending ? line.slice(0, -ending.length) : line;
+      const trimmed = content.trim();
+      if (trimmed === '' || /^[;#]/.test(trimmed) || ownedDirective?.test(content)) return [];
+      return [trimmed];
+    });
+    if (meaningfulLines.length === 0) continue;
+    if (block.name !== null) canonicalLines.push(`[${block.name}]`);
+    canonicalLines.push(...meaningfulLines);
+  }
+  return Buffer.from(canonicalLines.join('\n'), 'utf-8');
+}
+
 function targetDirectiveLines(block: IniSectionBlock, pattern: RegExp): string[] {
   return block.lines.slice(1).filter((line) => {
     const ending = trailingLineEnding(line);

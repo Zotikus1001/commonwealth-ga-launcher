@@ -42,6 +42,35 @@ export interface GameProfileSummary {
   fileCount: number;
 }
 
+export interface ProfilePlayPrompt {
+  profileId: string;
+  profileName: string;
+  profileNumber: number;
+  comparisonToken: string;
+}
+
+export type ProfilePlayAction = 'save-current' | 'use-saved';
+
+export interface ProfilePlayDecision {
+  action: ProfilePlayAction;
+  profileId: string;
+  comparisonToken: string;
+}
+
+export function isProfilePlayDecision(value: unknown): value is ProfilePlayDecision {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const decision = value as Partial<ProfilePlayDecision>;
+  return (
+    (decision.action === 'save-current' || decision.action === 'use-saved') &&
+    typeof decision.profileId === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      decision.profileId
+    ) &&
+    typeof decision.comparisonToken === 'string' &&
+    /^[0-9a-f]{64}$/.test(decision.comparisonToken)
+  );
+}
+
 export interface PatchSettings {
   gameClientPatch: boolean;
   highFpsMovementStability: boolean;
@@ -303,8 +332,8 @@ export interface LauncherApi {
   setDlcEnabled(id: DlcId, enabled: boolean): Promise<Settings>;
   browseForGame(): Promise<string | null>;
   autoDetectGame(): Promise<string | null>;
-  play(): Promise<void>;
-  playDeveloper(): Promise<void>;
+  play(decision?: ProfilePlayDecision): Promise<ProfilePlayPrompt | null>;
+  playDeveloper(decision?: ProfilePlayDecision): Promise<ProfilePlayPrompt | null>;
   applyClientPatch(id: ClientPatchId): Promise<ActionResult>;
   removeClientPatch(id: ClientPatchId): Promise<ActionResult>;
   createGameProfile(name: string): Promise<ActionResult>;

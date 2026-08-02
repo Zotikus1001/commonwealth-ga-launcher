@@ -9,6 +9,8 @@ import {
   type GameClientDllState,
   type LauncherState,
   type LauncherUpdateStatus,
+  type ProfilePlayDecision,
+  type ProfilePlayPrompt,
   type ServerChoice,
   type Settings,
   type UpdateProgress
@@ -803,33 +805,34 @@ export class Orchestrator {
     else if (tracked) this.patch({ activeGameInstances: this.trackedGameProcessCount() });
   }
 
-  async play(developerLaunch = false): Promise<void> {
+  async play(
+    developerLaunch = false,
+    profileDecision?: ProfilePlayDecision
+  ): Promise<ProfilePlayPrompt | null> {
     const initialSettings = this.config.get();
     if (developerLaunch && !initialSettings.developer.enabled) {
       this.patch({ phase: 'ready', statusLine: 'Enable developer mode before using Dev Launch.' });
-      return;
+      return null;
     }
-    if (this.launcherUpdater.getSnapshot().status === 'downloading') return;
+    if (this.launcherUpdater.getSnapshot().status === 'downloading') return null;
     if (
       this.busy ||
       this.state.launchCoolingDown ||
       this.state.phase === 'launching'
     ) {
-      return;
+      return null;
     }
     this.busy = true;
     try {
-      void this.launcherUpdater.ensureCurrent();
-
       const settings = this.config.get();
       const selection = this.applyServerSelection(settings);
       if (!this.install) {
         this.patch({ phase: 'ready', statusLine: 'Set your Global Agenda install path in Settings first.' });
-        return;
+        return null;
       }
       if (PLATFORM === 'linux' && this.linuxRuntime?.status !== 'ready') {
         this.patch({ phase: 'ready', statusLine: 'Complete your Linux game setup in Settings.' });
-        return;
+        return null;
       }
       if (!selection.host) {
         this.patch({
@@ -837,8 +840,34 @@ export class Orchestrator {
           statusLine: 'Server address unavailable. Retry after updating the launcher.',
           errorDetails: 'Play is blocked until a server address can be resolved.'
         });
-        return;
+        return null;
       }
+
+      const gameAlreadyRunning =
+        this.activeGameProcesses.size > 0 || this.state.activeGameInstances > 0;
+      if (!gameAlreadyRunning) {
+        const profilePrompt = await this.gameProfileManager.inspectSelectedChanges(this.install);
+        if (profilePrompt) {
+          if (
+            !profileDecision ||
+            profileDecision.profileId !== profilePrompt.profileId ||
+            profileDecision.comparisonToken !== profilePrompt.comparisonToken
+          ) {
+            return profilePrompt;
+          }
+          if (profileDecision.action === 'save-current') {
+            await this.gameProfileManager.overwrite(profilePrompt.profileId, this.install);
+            const snapshot = this.gameProfileManager.getSnapshot();
+            this.patch({
+              gameProfilesEnabled: snapshot.enabled,
+              gameProfiles: snapshot.profiles,
+              selectedGameProfileId: snapshot.selectedProfileId
+            });
+          }
+        }
+      }
+
+      void this.launcherUpdater.ensureCurrent();
       if (!settings.developer.enabled) {
         this.patch({
           phase: 'checking',
@@ -854,7 +883,7 @@ export class Orchestrator {
                 : SERVER_OFFLINE_STATUS,
             errorDetails: null
           });
-          return;
+          return null;
         }
       }
       const launchHost =
@@ -876,7 +905,6 @@ export class Orchestrator {
       const activeProfile = this.gameProfileManager.getSnapshot().enabled
         ? this.gameProfileManager.getSelectedSummary()
         : null;
-      const gameAlreadyRunning = this.state.activeGameInstances > 0;
       if (activeProfile && !gameAlreadyRunning) {
         this.patch({
           phase: 'checking',
@@ -972,7 +1000,7 @@ export class Orchestrator {
           statusLine: 'Could not replace or remove the existing client DLL.',
           errorDetails: clientPatchError
         });
-        return;
+        return null;
       }
 
       let useDxvk = false;
@@ -1010,7 +1038,7 @@ export class Orchestrator {
 
       if (this.launcherUpdater.getSnapshot().status === 'downloading') {
         this.patch({ phase: 'ready', statusLine: 'Launcher update is downloading…' });
-        return;
+        return null;
       }
 
       this.patch({
@@ -1037,6 +1065,7 @@ export class Orchestrator {
       await this.trackGameProcess(child);
       this.scheduleAutoCloseAfterLaunch();
       this.scheduleLaunchCooldown();
+      return null;
     } catch (error) {
       const message = (error as Error).message;
       this.log.error(`launch failed: ${message}`);
@@ -1062,6 +1091,7 @@ export class Orchestrator {
         errorDetails: message,
         dxvk
       });
+      return null;
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();

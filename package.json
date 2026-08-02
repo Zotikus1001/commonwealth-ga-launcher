@@ -1,6 +1,7 @@
 {
   "name": "commonwealth-ga-launcher",
   "productName": "Commonwealth GA Launcher",
+  "desktopName": "commonwealth-ga-launcher",
   "version": "0.1.0",
   "description": "Cross-platform launcher for the Commonwealth Global Agenda private server.",
   "author": "Commonwealth GA",

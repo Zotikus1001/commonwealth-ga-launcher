@@ -25,6 +25,12 @@ module.exports = {
     buildResources: 'build'
   },
   files: ['out/**', '!out/**/*.map'],
+  extraResources: [
+    {
+      from: 'build/icons/512x512.png',
+      to: 'icon.png'
+    }
+  ],
   toolsets: {
     appimage: '1.0.3'
   },
@@ -34,6 +40,7 @@ module.exports = {
     fallbackServerHost: launcherConfig.fallbackServerHost
   },
   win: {
+    icon: 'build/icon.ico',
     target: [{ target: 'nsis', arch: ['x64'] }],
     artifactName: launcherConfig.windowsInstallerName
   },
@@ -45,6 +52,8 @@ module.exports = {
     include: 'build/installer.nsh'
   },
   linux: {
+    icon: 'build/icons',
+    syncDesktopName: true,
     target: ['AppImage'],
     category: 'Game',
     executableName: 'commonwealth-ga-launcher',

@@ -176,6 +176,9 @@ if (!app.requestSingleInstanceLock()) {
       autoHideMenuBar: true,
       backgroundColor: '#0b0e14',
       title: 'Commonwealth GA',
+      icon: app.isPackaged
+        ? join(process.resourcesPath, 'icon.png')
+        : join(app.getAppPath(), 'build', 'icons', '512x512.png'),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         sandbox: true,

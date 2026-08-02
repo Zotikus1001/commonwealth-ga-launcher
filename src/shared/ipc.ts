@@ -15,6 +15,7 @@ export const IPC = {
   updateGameProfile: 'launcher:update-game-profile',
   renameGameProfile: 'launcher:rename-game-profile',
   deleteGameProfile: 'launcher:delete-game-profile',
+  setGameProfilesEnabled: 'launcher:set-game-profiles-enabled',
   selectGameProfile: 'launcher:select-game-profile',
   selectServer: 'launcher:select-server',
   checkServer: 'launcher:check-server',

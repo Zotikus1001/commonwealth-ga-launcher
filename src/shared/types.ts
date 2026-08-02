@@ -255,6 +255,7 @@ export interface LauncherState {
   gameClientDll: GameClientDllState;
   clientPatches: ClientPatchStatus[];
   dlcs: DlcStatus[];
+  gameProfilesEnabled: boolean;
   gameProfiles: GameProfileSummary[];
   selectedGameProfileId: string | null;
   serverCommits: ServerCommit[];
@@ -310,6 +311,7 @@ export interface LauncherApi {
   updateGameProfile(id: string): Promise<ActionResult>;
   renameGameProfile(id: string, name: string): Promise<ActionResult>;
   deleteGameProfile(id: string): Promise<ActionResult>;
+  setGameProfilesEnabled(enabled: boolean): Promise<ActionResult>;
   selectGameProfile(id: string): Promise<void>;
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;

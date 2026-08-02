@@ -226,6 +226,10 @@ export function registerIpc(
     if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
     return orchestrator.deleteGameProfile(id);
   });
+  ipcMain.handle(IPC.setGameProfilesEnabled, (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('Profile enabled state must be a boolean.');
+    return orchestrator.setGameProfilesEnabled(enabled);
+  });
   ipcMain.handle(IPC.selectGameProfile, (_event, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
     return orchestrator.selectGameProfile(id);

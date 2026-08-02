@@ -171,6 +171,7 @@ export class Orchestrator {
       gameClientDll: unavailableGameClientDllState(),
       clientPatches: unavailableClientPatches(),
       dlcs: unavailableDlcStatuses(),
+      gameProfilesEnabled: true,
       gameProfiles: [],
       selectedGameProfileId: null,
       serverCommits: [],
@@ -550,6 +551,7 @@ export class Orchestrator {
       linuxRuntimeStatus: linuxRuntime?.status ?? null,
       resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
+      gameProfilesEnabled: profileSnapshot.enabled,
       gameProfiles: profileSnapshot.profiles,
       selectedGameProfileId: profileSnapshot.selectedProfileId
     });
@@ -871,7 +873,9 @@ export class Orchestrator {
         }
       }
 
-      const activeProfile = this.gameProfileManager.getSelectedSummary();
+      const activeProfile = this.gameProfileManager.getSnapshot().enabled
+        ? this.gameProfileManager.getSelectedSummary()
+        : null;
       const gameAlreadyRunning = this.state.activeGameInstances > 0;
       if (activeProfile && !gameAlreadyRunning) {
         this.patch({
@@ -1387,6 +1391,7 @@ export class Orchestrator {
       phase: 'ready',
       statusLine,
       errorDetails: null,
+      gameProfilesEnabled: snapshot.enabled,
       gameProfiles: snapshot.profiles,
       selectedGameProfileId: snapshot.selectedProfileId
     });
@@ -1401,8 +1406,18 @@ export class Orchestrator {
       this.install = install;
       this.patch({ phase: 'checking', statusLine: 'Saving current game settings…' });
       const profile = await this.gameProfileManager.create(name, install);
-      this.patchProfileSnapshot(`Profile ${profile.name} saved and selected.`);
-      return { ok: true, message: `Profile ${profile.name} saved.` };
+      const enabled = this.gameProfileManager.getSnapshot().enabled;
+      this.patchProfileSnapshot(
+        enabled
+          ? `Profile ${profile.name} saved and selected.`
+          : `Profile ${profile.name} saved and selected. Profiles remain off.`
+      );
+      return {
+        ok: true,
+        message: enabled
+          ? `Profile ${profile.name} saved.`
+          : `Profile ${profile.name} saved. Profiles remain off.`
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.log.warn(`game profile creation failed: ${message}`);
@@ -1468,13 +1483,43 @@ export class Orchestrator {
     }
   }
 
+  async setGameProfilesEnabled(enabled: boolean): Promise<ActionResult> {
+    const unavailable = await this.beginProfileAction();
+    if (unavailable) return unavailable;
+    try {
+      await this.gameProfileManager.setEnabled(enabled);
+      const profile = this.gameProfileManager.getSelectedSummary();
+      const message = enabled
+        ? profile
+          ? `Profiles are on. ${profile.name} will be used when you press Play.`
+          : 'Profiles are on. Save a profile to use it when you press Play.'
+        : 'Profiles are off. Your saved profiles were kept.';
+      this.patchProfileSnapshot(message);
+      return { ok: true, message };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`game profile toggle failed: ${message}`);
+      return { ok: false, message };
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
   async selectGameProfile(id: string): Promise<void> {
     const unavailable = await this.beginProfileAction();
     if (unavailable) throw new Error(unavailable.message);
     try {
       await this.gameProfileManager.select(id);
       const profile = this.gameProfileManager.getSelectedSummary();
-      this.patchProfileSnapshot(profile ? `Profile ${profile.name} selected.` : 'Ready.');
+      const enabled = this.gameProfileManager.getSnapshot().enabled;
+      this.patchProfileSnapshot(
+        profile
+          ? enabled
+            ? `Profile ${profile.name} selected.`
+            : `Profile ${profile.name} selected. Profiles remain off.`
+          : 'Ready.'
+      );
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();

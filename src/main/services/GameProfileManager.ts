@@ -10,7 +10,8 @@ import {
 import type { GameInstall } from './InstallLocator';
 import type { Log } from './Log';
 
-const PROFILE_STORE_SCHEMA_VERSION = 1;
+const PROFILE_INDEX_SCHEMA_VERSION = 2;
+const PROFILE_FILE_SCHEMA_VERSION = 1;
 const PROFILE_FILE_PATTERN = /^Tg[A-Za-z0-9]+\.ini$/i;
 const PROFILE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_PROFILE_FILES = 32;
@@ -20,6 +21,7 @@ const MAX_STORED_PROFILE_BYTES = Math.ceil((MAX_PROFILE_TOTAL_BYTES * 4) / 3) + 
 
 interface StoredProfileIndex {
   schemaVersion: number;
+  enabled: boolean;
   selectedProfileId: string | null;
   profileIds: string[];
 }
@@ -41,6 +43,7 @@ interface StoredGameProfile {
 }
 
 export interface GameProfileSnapshot {
+  enabled: boolean;
   profiles: GameProfileSummary[];
   selectedProfileId: string | null;
 }
@@ -94,8 +97,15 @@ function profileSummary(profile: StoredGameProfile): GameProfileSummary {
 }
 
 function parseIndex(value: unknown): StoredProfileIndex {
-  if (!isPlainObject(value) || value.schemaVersion !== PROFILE_STORE_SCHEMA_VERSION) {
+  if (
+    !isPlainObject(value) ||
+    (value.schemaVersion !== 1 && value.schemaVersion !== PROFILE_INDEX_SCHEMA_VERSION)
+  ) {
     throw new Error('Unsupported or invalid profile index schema.');
+  }
+  const enabled = value.schemaVersion === 1 ? true : value.enabled;
+  if (typeof enabled !== 'boolean') {
+    throw new Error('Profile index contains an invalid enabled state.');
   }
   if (!Array.isArray(value.profileIds) || value.profileIds.length > MAX_GAME_PROFILES) {
     throw new Error('Profile index contains an invalid profile list.');
@@ -111,7 +121,8 @@ function parseIndex(value: unknown): StoredProfileIndex {
     throw new Error('Profile index contains an invalid selection.');
   }
   return {
-    schemaVersion: PROFILE_STORE_SCHEMA_VERSION,
+    schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
+    enabled,
     selectedProfileId:
       value.selectedProfileId !== null && profileIds.includes(value.selectedProfileId)
         ? value.selectedProfileId
@@ -121,7 +132,7 @@ function parseIndex(value: unknown): StoredProfileIndex {
 }
 
 function parseProfile(value: unknown, expectedId: string): StoredGameProfile {
-  if (!isPlainObject(value) || value.schemaVersion !== PROFILE_STORE_SCHEMA_VERSION) {
+  if (!isPlainObject(value) || value.schemaVersion !== PROFILE_FILE_SCHEMA_VERSION) {
     throw new Error('Unsupported or invalid game profile schema.');
   }
   if (value.id !== expectedId || !isProfileId(value.id)) {
@@ -185,7 +196,7 @@ function parseProfile(value: unknown, expectedId: string): StoredGameProfile {
   }
 
   return {
-    schemaVersion: PROFILE_STORE_SCHEMA_VERSION,
+    schemaVersion: PROFILE_FILE_SCHEMA_VERSION,
     id: value.id,
     name: value.name as string,
     createdAt: value.createdAt,
@@ -224,7 +235,8 @@ export class GameProfileManager {
   private loaded = false;
   private readOnlyReason: string | null = null;
   private index: StoredProfileIndex = {
-    schemaVersion: PROFILE_STORE_SCHEMA_VERSION,
+    schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
+    enabled: true,
     selectedProfileId: null,
     profileIds: []
   };
@@ -271,6 +283,7 @@ export class GameProfileManager {
 
   getSnapshot(): GameProfileSnapshot {
     return {
+      enabled: this.index.enabled,
       profiles: this.index.profileIds.map((id) => structuredClone(this.summaries.get(id)!)),
       selectedProfileId: this.index.selectedProfileId
     };
@@ -291,7 +304,7 @@ export class GameProfileManager {
     const now = new Date().toISOString();
     const id = randomUUID();
     const profile: StoredGameProfile = {
-      schemaVersion: PROFILE_STORE_SCHEMA_VERSION,
+      schemaVersion: PROFILE_FILE_SCHEMA_VERSION,
       id,
       name: normalizedName,
       createdAt: now,
@@ -378,8 +391,18 @@ export class GameProfileManager {
     this.log.info('active game profile changed');
   }
 
+  async setEnabled(enabled: boolean): Promise<void> {
+    await this.ensureWritable();
+    if (this.index.enabled === enabled) return;
+    const nextIndex = { ...this.index, enabled };
+    await writeJsonAtomic(this.indexPath, nextIndex);
+    this.index = nextIndex;
+    this.log.info(`game profiles ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
   async applySelected(install: GameInstall): Promise<AppliedGameProfile | null> {
     await this.load();
+    if (!this.index.enabled) return null;
     const id = this.index.selectedProfileId;
     if (!id) return null;
     const profile = await this.requireProfile(id);
@@ -452,7 +475,8 @@ export class GameProfileManager {
     }
     await rm(this.root, { recursive: true, force: true });
     this.index = {
-      schemaVersion: PROFILE_STORE_SCHEMA_VERSION,
+      schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
+      enabled: true,
       selectedProfileId: null,
       profileIds: []
     };

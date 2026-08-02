@@ -31,6 +31,8 @@ const api: LauncherApi = {
   renameGameProfile: (id: string, name: string) =>
     ipcRenderer.invoke(IPC.renameGameProfile, id, name),
   deleteGameProfile: (id: string) => ipcRenderer.invoke(IPC.deleteGameProfile, id),
+  setGameProfilesEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC.setGameProfilesEnabled, enabled),
   selectGameProfile: (id: string) => ipcRenderer.invoke(IPC.selectGameProfile, id),
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),

@@ -117,6 +117,12 @@ export class LauncherUpdater {
     autoUpdater.autoRunAppAfterInstall = true;
     autoUpdater.allowPrerelease = false;
     autoUpdater.allowDowngrade = true;
+    autoUpdater.logger = {
+      info: (message) => this.log.info(`electron-updater: ${String(message)}`),
+      warn: (message) => this.log.warn(`electron-updater: ${String(message)}`),
+      error: (message) => this.log.error(`electron-updater: ${String(message)}`),
+      debug: (message) => this.log.info(`electron-updater: ${message}`)
+    };
 
     autoUpdater.on('update-available', (info) => {
       this.log.info(`self-update: ${info.version} available, downloading`);
@@ -139,7 +145,7 @@ export class LauncherUpdater {
         () =>
           setTimeout(() => {
             try {
-              autoUpdater.quitAndInstall(false, true);
+              autoUpdater.quitAndInstall(true, true);
             } catch (error) {
               this.setStatus('error', null, (error as Error).message);
             }

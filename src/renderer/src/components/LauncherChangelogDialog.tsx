@@ -13,9 +13,9 @@ export function changelogReleaseBadge(
   entryVersion: string,
   index: number,
   currentVersion: string
-): 'Current release' | 'Latest notes' | null {
+): 'Current release' | 'Latest' | null {
   if (index !== 0) return null;
-  return entryVersion === currentVersion ? 'Current release' : 'Latest notes';
+  return entryVersion === currentVersion ? 'Current release' : 'Latest';
 }
 
 function InlineReleaseText({ text }: { text: string }): JSX.Element {

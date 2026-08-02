@@ -39,7 +39,7 @@ The launcher updates itself automatically.
   the install location validates
 - Server status and server selection
 - Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
-  UI preferences
+  UI preferences, with a master toggle that pauses profile application without deleting profiles
 - Game patches enabled by default, with one-click Apply and Remove controls
 - A Game Client Patch that fixes scope-transition stutters and adds an in-game FOV slider
 - Optional Surfside-Atoll and Carbon Capture PvP maps plus Central Industrial Complex and

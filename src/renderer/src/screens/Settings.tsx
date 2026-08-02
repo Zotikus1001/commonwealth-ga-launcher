@@ -1334,6 +1334,9 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
   const controlsDisabled = profilesLocked || launcherBusy;
   const createNameError = newName ? validateGameProfileName(newName) : null;
   const profileLimitReached = state.gameProfiles.length >= MAX_GAME_PROFILES;
+  const selectedProfile = state.gameProfiles.find(
+    (profile) => profile.id === state.selectedGameProfileId
+  );
 
   useEffect(() => {
     setNames((current) =>
@@ -1385,6 +1388,13 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
     if (created?.ok) setNewName('');
   };
 
+  const toggleProfiles = async (): Promise<void> => {
+    const changed = await runAction('toggle', () =>
+      window.api.setGameProfilesEnabled(!state.gameProfilesEnabled)
+    );
+    if (changed?.ok) setResult(null);
+  };
+
   const renameProfile = async (profile: GameProfileSummary): Promise<void> => {
     const name = names[profile.id] ?? profile.name;
     const validationError = validateGameProfileName(name);
@@ -1418,7 +1428,12 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
     setResult(null);
     try {
       await window.api.selectGameProfile(profile.id);
-      setResult({ ok: true, message: `Profile ${profile.name} is now active.` });
+      setResult({
+        ok: true,
+        message: state.gameProfilesEnabled
+          ? `Profile ${profile.name} is now selected.`
+          : `Profile ${profile.name} is selected. Profiles remain off.`
+      });
     } catch (error) {
       setResult({
         ok: false,
@@ -1452,16 +1467,79 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
         <div>
           <div className="panel-title">Game Settings Profiles</div>
           <p className={styles.hint}>
-            Save the game&apos;s current graphics, audio, controls, interface, and gameplay
-            configuration. The active profile is restored when you press Play, before launcher
-            patches and compatibility settings are applied. In-game changes are not saved back
-            automatically; close the game and use Update Snapshot when you want to keep them.
+            Save up to five versions of your in-game settings. Turn profile switching off whenever
+            you want the game to keep your changes normally.
           </p>
         </div>
         <span className={styles.profileCapacity}>
           {state.gameProfiles.length} / {MAX_GAME_PROFILES}
         </span>
       </div>
+
+      <div
+        className={`${styles.profileMode} ${
+          state.gameProfilesEnabled ? styles.profileModeEnabled : styles.profileModeDisabled
+        }`}
+      >
+        <div className={styles.profileModeCopy}>
+          <span className={styles.profileModeLabel}>
+            <span className={styles.profileModeSignal} aria-hidden="true" />
+            Profile switching {state.gameProfilesEnabled ? 'on' : 'off'}
+          </span>
+          <strong>
+            {state.gameProfilesEnabled
+              ? selectedProfile
+                ? `${selectedProfile.name} replaces your settings on Play`
+                : 'Choose a saved profile to use on Play'
+              : 'The game keeps your settings as you leave them'}
+          </strong>
+          <p>
+            {state.gameProfilesEnabled
+              ? selectedProfile
+                ? 'Changes made in-game are temporary until you close the game and update this saved profile.'
+                : 'Profiles are enabled, but nothing will be restored until a profile is saved and selected.'
+              : 'No saved profile is applied. Your profiles and selected slot remain saved for whenever you turn this back on.'}
+          </p>
+        </div>
+        <button
+          className={styles.profileToggle}
+          type="button"
+          role="switch"
+          aria-checked={state.gameProfilesEnabled}
+          aria-label="Use saved game settings profiles"
+          disabled={controlsDisabled}
+          onClick={() => void toggleProfiles()}
+        >
+          <span className={styles.profileToggleTrack} aria-hidden="true">
+            <span className={styles.profileToggleKnob} />
+          </span>
+          <span>{action === 'toggle' ? 'Saving…' : state.gameProfilesEnabled ? 'On' : 'Off'}</span>
+        </button>
+      </div>
+
+      <ol className={styles.profileSteps} aria-label="How to use game settings profiles">
+        <li>
+          <span>01</span>
+          <div>
+            <strong>Change</strong>
+            <small>Adjust settings in the game, then close it.</small>
+          </div>
+        </li>
+        <li>
+          <span>02</span>
+          <div>
+            <strong>Save</strong>
+            <small>Create a profile or update saved settings below.</small>
+          </div>
+        </li>
+        <li>
+          <span>03</span>
+          <div>
+            <strong>Select &amp; Play</strong>
+            <small>When profiles are on, the selected one is restored.</small>
+          </div>
+        </li>
+      </ol>
 
       {profilesLocked && (
         <div className={styles.profileLock} role="status">
@@ -1478,9 +1556,9 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
 
       <div className={styles.profileCapturePanel}>
         <div className={styles.profileCaptureCopy}>
-          <span className={styles.profileEyebrow}>New snapshot</span>
-          <strong>Save the settings currently on disk</strong>
-          <small>Close the game first so every configuration file is fully written.</small>
+          <span className={styles.profileEyebrow}>Create profile</span>
+          <strong>Save your current game settings</strong>
+          <small>Close the game first, then give those settings a name.</small>
         </div>
         <div className={styles.profileCaptureControls}>
           <input
@@ -1519,20 +1597,26 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
 
       <div className={styles.gameProfiles}>
         {state.gameProfiles.map((profile, index) => {
-          const active = profile.id === state.selectedGameProfileId;
+          const selected = profile.id === state.selectedGameProfileId;
           const name = names[profile.id] ?? profile.name;
           const nameError = validateGameProfileName(name);
           const confirming = confirmation?.id === profile.id ? confirmation.kind : null;
           return (
             <article
-              className={`${styles.gameProfile} ${active ? styles.gameProfileActive : ''}`}
+              className={`${styles.gameProfile} ${
+                selected ? styles.gameProfileActive : ''
+              } ${selected && !state.gameProfilesEnabled ? styles.gameProfilePaused : ''}`}
               key={profile.id}
             >
               <div className={styles.gameProfileIndex}>{String(index + 1).padStart(2, '0')}</div>
               <div className={styles.gameProfileBody}>
                 <div className={styles.gameProfileTitleRow}>
-                  <span>{active ? 'Active profile' : `Profile ${index + 1}`}</span>
-                  {active && <span className={styles.gameProfileActiveBadge}>Selected</span>}
+                  <span>{selected ? 'Selected profile' : `Profile ${index + 1}`}</span>
+                  {selected && (
+                    <span className={styles.gameProfileActiveBadge}>
+                      {state.gameProfilesEnabled ? 'Used on Play' : 'Paused'}
+                    </span>
+                  )}
                 </div>
                 <div className={styles.gameProfileNameRow}>
                   <input
@@ -1575,13 +1659,13 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                     role="group"
                     aria-label={
                       confirming === 'update'
-                        ? `Update ${profile.name} snapshot`
+                        ? `Update saved settings for ${profile.name}`
                         : `Remove ${profile.name}`
                     }
                   >
                     <span>
                       {confirming === 'update'
-                        ? 'Replace this snapshot with the current game settings?'
+                        ? 'Replace this profile with the current game settings?'
                         : `Permanently remove ${profile.name}?`}
                     </span>
                     <div>
@@ -1602,7 +1686,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                             ? 'Updating…'
                             : 'Removing…'
                           : confirming === 'update'
-                            ? 'Replace Snapshot'
+                            ? 'Update Profile'
                             : 'Remove Profile'}
                       </button>
                     </div>
@@ -1612,16 +1696,20 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
               <div className={styles.gameProfileActions}>
                 <button
                   className={styles.profileSelectButton}
-                  disabled={controlsDisabled || active}
+                  disabled={controlsDisabled || selected}
                   onClick={() => void selectProfile(profile)}
                 >
-                  {action === `select:${profile.id}` ? 'Selecting…' : active ? 'Active' : 'Make Active'}
+                  {action === `select:${profile.id}`
+                    ? 'Selecting…'
+                    : selected
+                      ? 'Selected'
+                      : 'Select'}
                 </button>
                 <button
                   disabled={controlsDisabled || confirmation !== null}
                   onClick={() => setConfirmation({ kind: 'update', id: profile.id })}
                 >
-                  Update Snapshot
+                  Update Saved Settings
                 </button>
                 <button
                   className={styles.profileRemoveButton}

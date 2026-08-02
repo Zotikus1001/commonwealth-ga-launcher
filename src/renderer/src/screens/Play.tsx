@@ -326,7 +326,7 @@ export default function Play({
 
         <section className={`panel rise ${styles.server}`} style={{ animationDelay: '160ms' }}>
           <div className="panel-title">Server</div>
-          {state.gameProfiles.length > 0 && (
+          {state.gameProfilesEnabled && state.gameProfiles.length > 0 && (
             <div className={styles.profileNumbers} aria-label="Game settings profiles">
               {state.gameProfiles.map((profile, index) => {
                 const active = profile.id === state.selectedGameProfileId;

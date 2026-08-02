@@ -94,6 +94,12 @@ function resolveEnvironmentReferences(value: string): string {
     .trim();
 }
 
+function launcherIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(app.getAppPath(), 'build', 'icon.png');
+}
+
 async function resolveDefaultServerHosts(log: Log): Promise<{
   primary: string;
   fallback: string;
@@ -187,6 +193,7 @@ if (!app.requestSingleInstanceLock()) {
       autoHideMenuBar: true,
       backgroundColor: '#0b0e14',
       title: 'Commonwealth GA',
+      icon: launcherIconPath(),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         sandbox: true,

@@ -25,6 +25,7 @@ module.exports = {
     buildResources: 'build'
   },
   files: ['out/**', '!out/**/*.map'],
+  extraResources: [{ from: 'build/icon.png', to: 'icon.png' }],
   toolsets: {
     appimage: '1.0.3'
   },
@@ -35,6 +36,7 @@ module.exports = {
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
+    icon: 'icon.png',
     artifactName: launcherConfig.windowsInstallerName
   },
   nsis: {
@@ -47,6 +49,8 @@ module.exports = {
   linux: {
     target: ['AppImage'],
     category: 'Game',
+    icon: 'icon.svg',
+    syncDesktopName: true,
     executableName: 'commonwealth-ga-launcher',
     artifactName: launcherConfig.linuxAppImageName,
     synopsis: 'Commonwealth Global Agenda launcher',

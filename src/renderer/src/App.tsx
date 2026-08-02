@@ -113,7 +113,9 @@ export default function App(): JSX.Element {
           <div className={styles.versionGroup}>
             <button
               type="button"
-              className={`mono ${styles.versionButton}`}
+              className={`mono ${styles.versionButton} ${
+                state.launcherUpdate === 'check-failed' ? styles.versionButtonDim : ''
+              }`}
               title="Open launcher changelog"
               aria-label={`Open launcher changelog for version ${state.launcherVersion}`}
               aria-haspopup="dialog"

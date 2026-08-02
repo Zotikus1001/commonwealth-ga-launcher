@@ -9,6 +9,15 @@ export function changelogSecondsRemaining(deadline: number, now: number): number
   return Math.max(0, Math.ceil((deadline - now) / 1_000));
 }
 
+export function changelogReleaseBadge(
+  entryVersion: string,
+  index: number,
+  currentVersion: string
+): 'Current release' | 'Latest notes' | null {
+  if (index !== 0) return null;
+  return entryVersion === currentVersion ? 'Current release' : 'Latest notes';
+}
+
 function InlineReleaseText({ text }: { text: string }): JSX.Element {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
   return (
@@ -100,24 +109,26 @@ export function LauncherChangelogDialog({
       </div>
 
       <aside className={styles.feedbackNote}>
+        <span>
+          Please report any <strong>bugs</strong> you encounter below. Suggestions for new{' '}
+          <strong>features, additions, or changes</strong> are also welcome.
+        </span>
         <a
+          className={styles.feedbackCta}
           href={LAUNCHER_CONFIG.discordSupportThreadUrl}
           onClick={(event) => {
             event.preventDefault();
             void window.api.openDiscordSupport();
           }}
         >
-          <span>
-            Please report any <strong>bugs</strong> you encounter below. Suggestions for new{' '}
-            <strong>features, additions, or changes</strong> are also welcome.
-          </span>
-          <span className={styles.feedbackCta}>Open support thread</span>
+          Open support thread
         </a>
       </aside>
 
       <div className={styles.releaseScroll} tabIndex={0} aria-label="Launcher release notes">
         {visibleReleases.map((entry, index) => {
-          const isCurrent = entry.version === currentVersion;
+          const releaseBadge = changelogReleaseBadge(entry.version, index, currentVersion);
+          const isCurrent = releaseBadge === 'Current release';
           return (
             <Fragment key={entry.version}>
               <article
@@ -125,11 +136,7 @@ export function LauncherChangelogDialog({
               >
                 <div className={styles.releaseHeading}>
                   <h3>{entry.title ?? `v${entry.version}`}</h3>
-                  {(isCurrent || index === 0) && (
-                    <span className={styles.releaseBadge}>
-                      {isCurrent ? 'Current release' : 'Latest notes'}
-                    </span>
-                  )}
+                  {releaseBadge && <span className={styles.releaseBadge}>{releaseBadge}</span>}
                 </div>
                 {entry.summary && <p className={styles.releaseSummary}>{entry.summary}</p>}
                 <ul>

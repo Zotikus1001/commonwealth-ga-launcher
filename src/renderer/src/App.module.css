@@ -69,11 +69,11 @@
 }
 
 .versionButton {
-  min-height: 24px;
-  padding: 2px 5px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-faint);
+  min-height: 26px;
+  padding: 3px 8px;
+  border-color: rgba(69, 200, 218, 0.34);
+  background: rgba(69, 200, 218, 0.055);
+  color: var(--cyan);
   font-size: 12px;
   letter-spacing: 0;
   text-transform: none;
@@ -82,14 +82,20 @@
 
 .versionButton:hover:not(:disabled),
 .versionButton:focus-visible {
-  border-color: rgba(69, 200, 218, 0.42);
-  background: rgba(69, 200, 218, 0.055);
+  border-color: rgba(69, 200, 218, 0.68);
+  background: rgba(69, 200, 218, 0.11);
   color: var(--cyan);
 }
 
 .versionButton:focus-visible {
   outline: 1px solid var(--cyan);
   outline-offset: 2px;
+}
+
+.versionButtonDim {
+  border-color: var(--line-bright);
+  background: var(--panel-raise);
+  color: var(--text-dim);
 }
 
 .updateStatus {

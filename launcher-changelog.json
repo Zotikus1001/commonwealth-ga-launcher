@@ -7,7 +7,8 @@
         "Added a built-in **Launcher Changelog** that appears after a fresh install or update. Click the launcher version at any time to reopen it and view older changelogs.",
         "Added direct access to the **Discord support thread** from the changelog.",
         "Added an **On/Off toggle for Game Settings Profiles**, allowing profiles to be paused without deleting them.",
-        "Before Play, the launcher now detects changed in-game settings and lets you either **save them to the selected profile** or **use the saved profile**."
+        "Before Play, the launcher now detects changed in-game settings and lets you either **save them to the selected profile** or **use the saved profile**.",
+        "Added a new custom **Commonwealth GA launcher icon** for Windows and Linux."
       ]
     },
     {

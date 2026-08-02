@@ -104,24 +104,25 @@ export function ProfilePlayDialog({
     >
       <div className={styles.profilePlayReadout}>
         <span className={styles.profilePlaySignal} aria-hidden="true" />
-        <span>{profileLabel} // SETTINGS CHANGED</span>
+        <span>Selected {profileLabel}</span>
       </div>
       <div className={styles.profilePlayBody}>
         <div className={styles.profilePlayNumber} aria-hidden="true">
           {String(prompt.profileNumber).padStart(2, '0')}
         </div>
         <div className={styles.profilePlayCopy}>
-          <h2 id="profile-play-title">Save changes to {profileLabel}?</h2>
+          <h2 id="profile-play-title">Save your in-game settings?</h2>
           <p id="profile-play-description">
-            Your current game settings differ from “{prompt.profileName}.” Profiles do not update
-            automatically.
+            Your in-game settings were changed. Save them to your selected {profileLabel} —
+            “{prompt.profileName}”?
           </p>
         </div>
       </div>
       <p id="profile-play-consequence" className={styles.profilePlayConsequence}>
         <span aria-hidden="true">!</span>
         <span>
-          <strong>Use Saved &amp; Play</strong> discards the current differences.
+          <strong>Use Profile &amp; Play</strong> starts with {profileLabel} without saving your new
+          settings.
         </span>
       </p>
       <div className={styles.profilePlayActions}>
@@ -131,14 +132,14 @@ export function ProfilePlayDialog({
           autoFocus
           onClick={() => onDecision('save-current')}
         >
-          Save &amp; Play
+          Save to Profile &amp; Play
         </button>
         <button
           type="button"
           className={styles.profilePlayUseSaved}
           onClick={() => onDecision('use-saved')}
         >
-          Use Saved &amp; Play
+          Use Profile &amp; Play
         </button>
         <button type="button" className={styles.profilePlayCancel} onClick={onCancel}>
           Cancel

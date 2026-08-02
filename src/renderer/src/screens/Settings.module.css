@@ -428,11 +428,12 @@
 
 .dxvkReadout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.dxvkReadout > div {
+.dxvkReadout > div,
+.dxvkVersionField {
   min-width: 0;
   padding: 9px 10px;
   border: 1px solid var(--line);
@@ -446,6 +447,15 @@
   font-size: 9px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.dxvkVersionField select {
+  min-width: 0;
+  padding: 3px 7px;
+  border-color: rgba(64, 191, 191, 0.34);
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .dxvkReadout strong {
@@ -2231,6 +2241,10 @@
 }
 
 @media (max-width: 760px) {
+  .dxvkReadout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .clientDllState {
     grid-template-columns: minmax(0, 1fr);
     gap: 5px;

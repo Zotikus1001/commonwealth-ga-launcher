@@ -14,6 +14,7 @@ import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
+import { DXVK_VERSION_OPTIONS, isDxvkVersion } from '@shared/dxvkVersions';
 import {
   GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE,
   LINUX_COMMAND_PLACEHOLDER,
@@ -1883,6 +1884,30 @@ function DxvkVulkanPanel({
           </label>
         </div>
         <div className={styles.dxvkReadout}>
+          <label className={styles.dxvkVersionField} htmlFor="developer-dxvk-version">
+            <span>DXVK Version</span>
+            <select
+              id="developer-dxvk-version"
+              value={settings.developer.dxvkVersion}
+              onChange={(event) => {
+                const dxvkVersion = event.target.value;
+                if (!isDxvkVersion(dxvkVersion)) return;
+                edit((current) => ({
+                  ...current,
+                  developer: {
+                    ...current.developer,
+                    dxvkVersion
+                  }
+                }));
+              }}
+            >
+              {DXVK_VERSION_OPTIONS.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+          </label>
           <div>
             <span>Game Setting</span>
             <strong>{rendererLabel}</strong>

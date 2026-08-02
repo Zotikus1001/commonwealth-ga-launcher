@@ -48,6 +48,8 @@ The launcher updates itself automatically.
   deleted on removal, separate download and file-operation progress, plus per-pack matchmaking
   include and exclude commands
 - Useful game options with conflict warnings for launch arguments already managed by the launcher
+- Selectable DXVK/Vulkan versions for Windows testing, while preserving an existing graphics
+  wrapper so it can be restored when launcher-managed DXVK is disabled
 - An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
   in-game chat commands, including suit-cosmetic performance controls
 - Agenda Stats and Discord access
@@ -79,6 +81,9 @@ channels.
 Developer Mode can validate and use a local 32-bit x86 client patch DLL. Local DLLs remain
 developer-owned while Local DLL Override is enabled. With the override off, pressing Play restores
 the saved managed-patch choice by replacing or removing the client DLL.
+
+Developer Mode also offers pinned DXVK/Vulkan 2.6.2 and 3.0.2 builds on Windows. The selected
+version applies to normal and developer launches.
 
 Public launcher settings are stored in `launcher.config.yml`.
 

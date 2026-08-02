@@ -37,17 +37,22 @@ function InlineReleaseText({ text }: { text: string }): JSX.Element {
 
 export function LauncherChangelogDialog({
   currentVersion,
+  enforceReadDelay,
   onClose
 }: {
   currentVersion: string;
+  enforceReadDelay: boolean;
   onClose: () => void;
 }): JSX.Element {
+  const closeDelayMs = enforceReadDelay ? CHANGELOG_CLOSE_DELAY_MS : 0;
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [remainingSeconds, setRemainingSeconds] = useState(
-    CHANGELOG_CLOSE_DELAY_MS / 1_000
-  );
+  const [remainingSeconds, setRemainingSeconds] = useState(closeDelayMs / 1_000);
   const [showOlderReleases, setShowOlderReleases] = useState(false);
   const canClose = remainingSeconds === 0;
+  const canCloseRef = useRef(canClose);
+  const onCloseRef = useRef(onClose);
+  canCloseRef.current = canClose;
+  onCloseRef.current = onClose;
   const visibleReleases = showOlderReleases
     ? LAUNCHER_CHANGELOG
     : LAUNCHER_CHANGELOG.slice(0, 1);
@@ -56,15 +61,29 @@ export function LauncherChangelogDialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+    // Chromium's Escape-triggered dialog cancel event is non-cancelable in Electron.
+    dialog.setAttribute('closedby', 'none');
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (canCloseRef.current) onCloseRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
     if (!dialog.open) dialog.showModal();
     dialog.focus();
     return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
       if (dialog.open) dialog.close();
     };
   }, []);
 
   useEffect(() => {
-    const deadline = performance.now() + CHANGELOG_CLOSE_DELAY_MS;
+    if (closeDelayMs === 0) {
+      setRemainingSeconds(0);
+      return;
+    }
+    const deadline = performance.now() + closeDelayMs;
     setRemainingSeconds(changelogSecondsRemaining(deadline, performance.now()));
     const timer = window.setInterval(() => {
       const next = changelogSecondsRemaining(deadline, performance.now());
@@ -72,7 +91,7 @@ export function LauncherChangelogDialog({
       if (next === 0) window.clearInterval(timer);
     }, 100);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [closeDelayMs]);
 
   const requestClose = (): void => {
     if (canClose) onClose();
@@ -84,10 +103,6 @@ export function LauncherChangelogDialog({
       className={styles.dialog}
       aria-labelledby="launcher-changelog-title"
       tabIndex={-1}
-      onCancel={(event) => {
-        event.preventDefault();
-        requestClose();
-      }}
     >
       <div className={styles.readout}>
         <span className={styles.signal} aria-hidden="true" />

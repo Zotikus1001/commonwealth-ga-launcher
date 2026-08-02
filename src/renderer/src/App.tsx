@@ -65,7 +65,9 @@ export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('game');
-  const [changelogOpen, setChangelogOpen] = useState(false);
+  const [changelogOpenMode, setChangelogOpenMode] = useState<
+    'automatic' | 'manual' | null
+  >(null);
   const settingsRef = useRef<SettingsHandle>(null);
 
   const openSettings = (tab: SettingsTab): void => {
@@ -81,7 +83,9 @@ export default function App(): JSX.Element {
     void window.api
       .getLauncherChangelogStatus()
       .then((status) => {
-        if (mounted && status.showOnStartup) setChangelogOpen(true);
+        if (mounted && status.showOnStartup) {
+          setChangelogOpenMode((mode) => mode ?? 'automatic');
+        }
       })
       .catch(() => {});
     const unsubscribe = window.api.onState((s) => setState(s));
@@ -97,7 +101,7 @@ export default function App(): JSX.Element {
   const launcherUpdate = launcherUpdateLabel(state);
   const updateDownloading = state.launcherUpdate === 'downloading';
   const closeChangelog = (): void => {
-    setChangelogOpen(false);
+    setChangelogOpenMode(null);
     void window.api.acknowledgeLauncherChangelog().catch(() => {});
   };
 
@@ -119,7 +123,7 @@ export default function App(): JSX.Element {
               title="Open launcher changelog"
               aria-label={`Open launcher changelog for version ${state.launcherVersion}`}
               aria-haspopup="dialog"
-              onClick={() => setChangelogOpen(true)}
+              onClick={() => setChangelogOpenMode('manual')}
             >
               v{state.launcherVersion}
             </button>
@@ -163,9 +167,10 @@ export default function App(): JSX.Element {
           </fieldset>
         )}
       </main>
-      {changelogOpen && (
+      {changelogOpenMode && (
         <LauncherChangelogDialog
           currentVersion={state.launcherVersion}
+          enforceReadDelay={changelogOpenMode === 'automatic'}
           onClose={closeChangelog}
         />
       )}

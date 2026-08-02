@@ -1,6 +1,7 @@
 // Shared contracts between main / preload / renderer. Types only — no runtime imports of
 // Electron or Node here (this file is compiled into all three targets).
 import type { LoginMap } from './loginMaps';
+import type { DxvkVersion } from './dxvkVersions';
 import type { UiScale } from './uiScale';
 
 export interface CustomServer {
@@ -168,6 +169,8 @@ export interface Settings {
     resolutionHeight: number;
     /** Experimental Windows option configured in Dev but applied to every launch mode. */
     useDxvk: boolean;
+    /** Pinned official DXVK build used by the Windows Vulkan option. */
+    dxvkVersion: DxvkVersion;
     /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
     useLocalClientDll: boolean;
   };

@@ -74,7 +74,11 @@ export function registerIpc(
       'enabled' in patch.developer;
     if (!uiScaleOnly) {
       const gamePathChanged = previous.gameExePath !== updated.gameExePath;
-      const dxvkChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
+      const dxvkEnabledChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
+      const dxvkVersionChanged =
+        previous.developer.dxvkVersion !== updated.developer.dxvkVersion;
+      const dxvkNeedsReconcile =
+        dxvkEnabledChanged || (dxvkVersionChanged && updated.developer.useDxvk);
       const localClientDllChanged =
         previous.developer.useLocalClientDll !== updated.developer.useLocalClientDll;
       const gameClientPatchChanged =
@@ -96,12 +100,17 @@ export function registerIpc(
           throw error;
         }
       }
-      if (dxvkChanged) {
+      if (dxvkNeedsReconcile) {
         try {
           await orchestrator.settingsChanged(updated.developer.useDxvk);
         } catch (error) {
           try {
-            await config.update({ developer: { useDxvk: previous.developer.useDxvk } });
+            await config.update({
+              developer: {
+                useDxvk: previous.developer.useDxvk,
+                dxvkVersion: previous.developer.dxvkVersion
+              }
+            });
           } catch (rollbackError) {
             throw new Error(
               `${(error as Error).message}; could not restore the previous DXVK/Vulkan setting: ` +
@@ -111,6 +120,9 @@ export function registerIpc(
           throw error;
         }
       }
+      if (dxvkVersionChanged && !updated.developer.useDxvk) {
+        void orchestrator.settingsChanged();
+      }
       if (gameClientPatchChanged) {
         await commitGameClientPatchChange(previous.patches.gameClientPatch, updated);
       }
@@ -119,7 +131,8 @@ export function registerIpc(
       }
       if (
         !localClientDllChanged &&
-        !dxvkChanged &&
+        !dxvkNeedsReconcile &&
+        !dxvkVersionChanged &&
         !gameClientPatchChanged &&
         !developerModeOnly
       ) {

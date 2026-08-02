@@ -28,9 +28,10 @@ import {
   validateLinuxCommandTemplate
 } from '@shared/linuxCommandTemplate';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
+import { DEFAULT_DXVK_VERSION, isDxvkVersion } from '@shared/dxvkVersions';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 18;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 19;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -307,6 +308,20 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 18: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 19,
+          developer: {
+            ...developer,
+            dxvkVersion: DEFAULT_DXVK_VERSION
+          }
+        };
+        version = 19;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -367,6 +382,7 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       resolutionWidth: 1280,
       resolutionHeight: 720,
       useDxvk: false,
+      dxvkVersion: DEFAULT_DXVK_VERSION,
       useLocalClientDll: false
     }
   };
@@ -479,6 +495,7 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       ? (value.resolutionHeight as number)
       : fallback.resolutionHeight,
     useDxvk: typeof value.useDxvk === 'boolean' ? value.useDxvk : fallback.useDxvk,
+    dxvkVersion: isDxvkVersion(value.dxvkVersion) ? value.dxvkVersion : fallback.dxvkVersion,
     useLocalClientDll:
       enabled && typeof value.useLocalClientDll === 'boolean'
         ? value.useLocalClientDll
@@ -492,6 +509,7 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     typeof value.enabled !== 'boolean' ||
     typeof value.windowed !== 'boolean' ||
     typeof value.useDxvk !== 'boolean' ||
+    !isDxvkVersion(value.dxvkVersion) ||
     typeof value.useLocalClientDll !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
@@ -505,6 +523,7 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
     useDxvk: value.useDxvk,
+    dxvkVersion: value.dxvkVersion,
     useLocalClientDll: value.enabled && value.useLocalClientDll
   };
 }

@@ -159,7 +159,7 @@ export class Orchestrator {
       linuxRuntimeStatus: PLATFORM === 'linux' ? 'wine-runner-missing' : null,
       resolvedLinuxPrefix: '',
       gameModeAvailable: PLATFORM === 'linux' ? false : null,
-      dxvk: unavailableDxvkState(PLATFORM),
+      dxvk: unavailableDxvkState(PLATFORM, config.get().developer.dxvkVersion),
       launchCoolingDown: false,
       activeGameInstances: 0,
       developerMode: false,
@@ -561,7 +561,7 @@ export class Orchestrator {
         gameClientDll: unavailableGameClientDllState(),
         clientPatches: unavailableClientPatches(),
         dlcs: unavailableDlcStatuses(),
-        dxvk: unavailableDxvkState(PLATFORM)
+        dxvk: unavailableDxvkState(PLATFORM, settings.developer.dxvkVersion)
       });
       if (!selection.host) {
         this.patch({
@@ -603,8 +603,8 @@ export class Orchestrator {
       inspectGameIniSettings(install),
       this.inspectGameClientDll(install),
       PLATFORM === 'win32'
-        ? this.dxvkManager.inspect(install)
-        : Promise.resolve(unavailableDxvkState(PLATFORM)),
+        ? this.dxvkManager.inspect(install, settings.developer.dxvkVersion)
+        : Promise.resolve(unavailableDxvkState(PLATFORM, settings.developer.dxvkVersion)),
       this.dlcManager.inspectAll(install)
     ]);
     let dlcs = inspectedDlcs;
@@ -974,28 +974,30 @@ export class Orchestrator {
       let useDxvk = false;
       if (PLATFORM === 'win32') {
         useDxvk = settings.developer.useDxvk;
+        const dxvkVersion = settings.developer.dxvkVersion;
         this.patch({
           dxvk: {
             ...this.state.dxvk,
             status: 'preparing',
             detail: useDxvk
-              ? `Preparing DXVK/Vulkan ${this.state.dxvk.version} for launch…`
+              ? `Preparing DXVK/Vulkan ${dxvkVersion} for launch…`
               : 'Restoring the previous Direct3D configuration…'
           },
           statusLine: useDxvk
-            ? `Preparing DXVK/Vulkan ${this.state.dxvk.version}…`
+            ? `Preparing DXVK/Vulkan ${dxvkVersion}…`
             : 'Checking native graphics configuration…'
         });
         const dxvk = await this.dxvkManager.prepareForLaunch(
           this.install,
           useDxvk,
-          ({ transferred, total }) => {
+          dxvkVersion,
+          ({ transferred, total, version }) => {
             const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
             this.patch({
               statusLine:
                 percent >= 0
-                  ? `Downloading DXVK/Vulkan ${this.state.dxvk.version}… ${percent}%`
-                  : `Downloading DXVK/Vulkan ${this.state.dxvk.version}…`
+                  ? `Downloading DXVK/Vulkan ${version}… ${percent}%`
+                  : `Downloading DXVK/Vulkan ${version}…`
             });
           }
         );
@@ -1037,7 +1039,10 @@ export class Orchestrator {
       let dxvk = this.state.dxvk;
       if (PLATFORM === 'win32' && this.install) {
         try {
-          dxvk = await this.dxvkManager.inspect(this.install);
+          dxvk = await this.dxvkManager.inspect(
+            this.install,
+            this.config.get().developer.dxvkVersion
+          );
         } catch (inspectError) {
           dxvk = {
             ...dxvk,
@@ -1190,11 +1195,13 @@ export class Orchestrator {
     }
     this.busy = true;
     try {
-      const install = await validateGameExe(this.config.get().gameExePath);
+      const settings = this.config.get();
+      const dxvkVersion = settings.developer.dxvkVersion;
+      const install = await validateGameExe(settings.gameExePath);
       this.install = install;
       if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
       const initialDetail = enabled
-        ? `Preparing DXVK/Vulkan ${this.state.dxvk.version}…`
+        ? `Preparing DXVK/Vulkan ${dxvkVersion}…`
         : 'Restoring the previous Direct3D configuration…';
       this.patch({
         dxvk: { ...this.state.dxvk, status: 'preparing', detail: initialDetail },
@@ -1204,12 +1211,13 @@ export class Orchestrator {
       const dxvk = await this.dxvkManager.prepareForLaunch(
         install,
         enabled,
-        ({ transferred, total }) => {
+        dxvkVersion,
+        ({ transferred, total, version }) => {
           const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
           const detail =
             percent >= 0
-              ? `Downloading DXVK/Vulkan ${this.state.dxvk.version}… ${percent}%`
-              : `Downloading DXVK/Vulkan ${this.state.dxvk.version}…`;
+              ? `Downloading DXVK/Vulkan ${version}… ${percent}%`
+              : `Downloading DXVK/Vulkan ${version}…`;
           this.patch({
             dxvk: { ...this.state.dxvk, status: 'preparing', detail },
             statusLine: detail
@@ -1233,7 +1241,10 @@ export class Orchestrator {
       let dxvk = this.state.dxvk;
       if (this.install) {
         try {
-          dxvk = await this.dxvkManager.inspect(this.install);
+          dxvk = await this.dxvkManager.inspect(
+            this.install,
+            this.config.get().developer.dxvkVersion
+          );
         } catch (inspectError) {
           dxvk = {
             ...dxvk,
@@ -1637,7 +1648,9 @@ export class Orchestrator {
       const install = await validateGameExe(gameExePath);
       if (install) {
         await this.clientPatchManager.removeManaged(install);
-        if (PLATFORM === 'win32') await this.dxvkManager.restore(install);
+        if (PLATFORM === 'win32') {
+          await this.dxvkManager.restore(install, settings.developer.dxvkVersion);
+        }
       } else if (gameExePath.trim()) {
         this.log.warn('launcher reset: configured game install is unavailable; game cleanup skipped');
       }

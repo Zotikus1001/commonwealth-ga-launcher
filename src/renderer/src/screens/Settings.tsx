@@ -1489,14 +1489,14 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
           <strong>
             {state.gameProfilesEnabled
               ? selectedProfile
-                ? `${selectedProfile.name} replaces your settings on Play`
+                ? `${selectedProfile.name} is selected for Play`
                 : 'Choose a saved profile to use on Play'
               : 'The game keeps your settings as you leave them'}
           </strong>
           <p>
             {state.gameProfilesEnabled
               ? selectedProfile
-                ? 'Changes made in-game are temporary until you close the game and update this saved profile.'
+                ? 'Changes made in-game are not saved automatically. Play asks whether to save them or use this profile.'
                 : 'Profiles are enabled, but nothing will be restored until a profile is saved and selected.'
               : 'No saved profile is applied. Your profiles and selected slot remain saved for whenever you turn this back on.'}
           </p>
@@ -1521,22 +1521,22 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
         <li>
           <span>01</span>
           <div>
-            <strong>Change</strong>
-            <small>Adjust settings in the game, then close it.</small>
+            <strong>Save</strong>
+            <small>Create a profile from your current game settings.</small>
           </div>
         </li>
         <li>
           <span>02</span>
           <div>
-            <strong>Save</strong>
-            <small>Create a profile or update saved settings below.</small>
+            <strong>Change</strong>
+            <small>Adjust settings in the game, then close it.</small>
           </div>
         </li>
         <li>
           <span>03</span>
           <div>
-            <strong>Select &amp; Play</strong>
-            <small>When profiles are on, the selected one is restored.</small>
+            <strong>Choose on Play</strong>
+            <small>Save the new changes or use the selected profile.</small>
           </div>
         </li>
       </ol>

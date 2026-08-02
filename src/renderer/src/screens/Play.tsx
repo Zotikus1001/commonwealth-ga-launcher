@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActionResult, DlcStatus, LauncherState } from '@shared/types';
+import type {
+  ActionResult,
+  DlcStatus,
+  LauncherState,
+  ProfilePlayAction,
+  ProfilePlayDecision,
+  ProfilePlayPrompt
+} from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import styles from './Play.module.css';
 
@@ -63,7 +70,90 @@ export function DlcActivityProgress({ dlc }: { dlc: DlcStatus }): JSX.Element {
   );
 }
 
-function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
+export function ProfilePlayDialog({
+  prompt,
+  onDecision,
+  onCancel
+}: {
+  prompt: ProfilePlayPrompt;
+  onDecision: (action: ProfilePlayAction) => void;
+  onCancel: () => void;
+}): JSX.Element {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  const profileLabel = `Profile #${prompt.profileNumber}`;
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.profilePlayDialog}
+      aria-labelledby="profile-play-title"
+      aria-describedby="profile-play-description profile-play-consequence"
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
+    >
+      <div className={styles.profilePlayReadout}>
+        <span className={styles.profilePlaySignal} aria-hidden="true" />
+        <span>{profileLabel} // SETTINGS CHANGED</span>
+      </div>
+      <div className={styles.profilePlayBody}>
+        <div className={styles.profilePlayNumber} aria-hidden="true">
+          {String(prompt.profileNumber).padStart(2, '0')}
+        </div>
+        <div className={styles.profilePlayCopy}>
+          <h2 id="profile-play-title">Save changes to {profileLabel}?</h2>
+          <p id="profile-play-description">
+            Your current game settings differ from “{prompt.profileName}.” Profiles do not update
+            automatically.
+          </p>
+        </div>
+      </div>
+      <p id="profile-play-consequence" className={styles.profilePlayConsequence}>
+        <span aria-hidden="true">!</span>
+        <span>
+          <strong>Use Saved &amp; Play</strong> discards the current differences.
+        </span>
+      </p>
+      <div className={styles.profilePlayActions}>
+        <button
+          type="button"
+          className={styles.profilePlaySave}
+          autoFocus
+          onClick={() => onDecision('save-current')}
+        >
+          Save &amp; Play
+        </button>
+        <button
+          type="button"
+          className={styles.profilePlayUseSaved}
+          onClick={() => onDecision('use-saved')}
+        >
+          Use Saved &amp; Play
+        </button>
+        <button type="button" className={styles.profilePlayCancel} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+function cta(
+  state: LauncherState,
+  onOpenGameSettings: () => void,
+  onPlay: () => void,
+  launchRequestPending: boolean
+): CtaSpec {
   if (state.launcherUpdate === 'downloading') {
     return {
       label: 'DOWNLOADING UPDATE',
@@ -74,6 +164,9 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
   }
   if (state.launchCoolingDown) {
     return { label: 'LAUNCHING…', disabled: true, action: () => {} };
+  }
+  if (launchRequestPending) {
+    return { label: 'CHECKING…', disabled: true, action: () => {}, loading: true };
   }
   switch (state.phase) {
     case 'init':
@@ -125,7 +218,12 @@ function cta(state: LauncherState, onOpenGameSettings: () => void): CtaSpec {
       };
     }
   }
-  return { label: 'PLAY', disabled: false, action: () => void window.api.play() };
+  return { label: 'PLAY', disabled: false, action: onPlay };
+}
+
+interface PendingProfilePlay {
+  prompt: ProfilePlayPrompt;
+  developerLaunch: boolean;
 }
 
 export default function Play({
@@ -137,15 +235,10 @@ export default function Play({
   onOpenGameSettings: () => void;
   onOpenInfo: () => void;
 }): JSX.Element {
-  const button = cta(state, onOpenGameSettings);
   const serverStatus = state.serverStatus;
   const activeDlcOperation = state.dlcs.find(
     (dlc) => dlc.status === 'installing' || dlc.status === 'removing'
   );
-  const launchCheckPending =
-    state.phase === 'init' ||
-    state.phase === 'checking' ||
-    button.label === 'CHECKING SERVER';
   const [discordOpening, setDiscordOpening] = useState(false);
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
   const [agendaStatsOpening, setAgendaStatsOpening] = useState(false);
@@ -155,12 +248,17 @@ export default function Play({
   const [selectingProfile, setSelectingProfile] = useState(false);
   const profileSelectionInFlight = useRef(false);
   const [profileSelectionError, setProfileSelectionError] = useState<string | null>(null);
+  const [pendingProfilePlay, setPendingProfilePlay] = useState<PendingProfilePlay | null>(null);
+  const [launchRequestPending, setLaunchRequestPending] = useState(false);
+  const launchRequestInFlight = useRef(false);
+  const [launchRequestError, setLaunchRequestError] = useState<string | null>(null);
   const [, setClock] = useState(0);
   const canDevLaunch =
     state.developerMode &&
     state.launcherUpdate !== 'downloading' &&
     state.phase === 'ready' &&
     !state.launchCoolingDown &&
+    !launchRequestPending &&
     state.gamePathValid &&
     (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready');
   const showsAgendaStats =
@@ -246,6 +344,39 @@ export default function Play({
       setSelectingProfile(false);
     }
   };
+
+  const requestPlay = async (
+    developerLaunch: boolean,
+    decision?: ProfilePlayDecision
+  ): Promise<void> => {
+    if (launchRequestInFlight.current) return;
+    launchRequestInFlight.current = true;
+    setLaunchRequestPending(true);
+    setLaunchRequestError(null);
+    if (decision) setPendingProfilePlay(null);
+    try {
+      const prompt = developerLaunch
+        ? await window.api.playDeveloper(decision)
+        : await window.api.play(decision);
+      setPendingProfilePlay(prompt ? { prompt, developerLaunch } : null);
+    } catch (error) {
+      setLaunchRequestError(error instanceof Error ? error.message : String(error));
+    } finally {
+      launchRequestInFlight.current = false;
+      setLaunchRequestPending(false);
+    }
+  };
+
+  const button = cta(
+    state,
+    onOpenGameSettings,
+    () => void requestPlay(false),
+    launchRequestPending
+  );
+  const launchCheckPending =
+    state.phase === 'init' ||
+    state.phase === 'checking' ||
+    button.label === 'CHECKING SERVER';
 
   return (
     <div className={styles.play}>
@@ -453,7 +584,7 @@ export default function Play({
                   <button
                     className={styles.devPlayButton}
                     disabled={!canDevLaunch}
-                    onClick={() => void window.api.playDeveloper()}
+                    onClick={() => void requestPlay(true)}
                   >
                     DEV LAUNCH
                   </button>
@@ -464,6 +595,7 @@ export default function Play({
         </div>
         {profileSelectionError && <p className={styles.errorDetails}>{profileSelectionError}</p>}
         {serverSelectionError && <p className={styles.errorDetails}>{serverSelectionError}</p>}
+        {launchRequestError && <p className={styles.errorDetails}>{launchRequestError}</p>}
         {!activeDlcOperation && !launchCheckPending && state.statusLine !== 'Ready.' && (
           <p className={styles.statusLine}>{state.statusLine}</p>
         )}
@@ -471,6 +603,23 @@ export default function Play({
           <p className={`mono ${styles.errorDetails}`}>{state.errorDetails}</p>
         )}
       </div>
+      {pendingProfilePlay && (
+        <ProfilePlayDialog
+          key={pendingProfilePlay.prompt.comparisonToken}
+          prompt={pendingProfilePlay.prompt}
+          onDecision={(action) =>
+            void requestPlay(pendingProfilePlay.developerLaunch, {
+              action,
+              profileId: pendingProfilePlay.prompt.profileId,
+              comparisonToken: pendingProfilePlay.prompt.comparisonToken
+            })
+          }
+          onCancel={() => {
+            setPendingProfilePlay(null);
+            setLaunchRequestError(null);
+          }}
+        />
+      )}
     </div>
   );
 }

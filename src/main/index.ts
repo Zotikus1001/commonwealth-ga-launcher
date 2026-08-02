@@ -141,9 +141,15 @@ if (!app.requestSingleInstanceLock()) {
 
     const launcherUpdater = new LauncherUpdater(log);
 
-    const [{ ConfigStore, defaultSettings }, { Orchestrator }, { registerIpc }] =
+    const [
+      { ConfigStore, defaultSettings },
+      { LauncherChangelogStore },
+      { Orchestrator },
+      { registerIpc }
+    ] =
       await Promise.all([
         import('./services/ConfigStore'),
+        import('./services/LauncherChangelogStore'),
         import('./Orchestrator'),
         import('./ipc')
       ]);
@@ -153,7 +159,12 @@ if (!app.requestSingleInstanceLock()) {
       defaultSettings(LAUNCHER_CONFIG.defaultServerName),
       log
     );
-    await config.load();
+    const launcherChangelog = new LauncherChangelogStore(
+      app.getPath('userData'),
+      app.getVersion(),
+      log
+    );
+    await Promise.all([config.load(), launcherChangelog.load()]);
 
     const defaultServerHosts = await resolveDefaultServerHosts(log);
     const orchestrator = new Orchestrator(
@@ -163,7 +174,7 @@ if (!app.requestSingleInstanceLock()) {
       defaultServerHosts.fallback,
       launcherUpdater
     );
-    registerIpc(() => mainWindow, orchestrator, config, log);
+    registerIpc(() => mainWindow, orchestrator, config, log, launcherChangelog);
 
     Menu.setApplicationMenu(null);
 

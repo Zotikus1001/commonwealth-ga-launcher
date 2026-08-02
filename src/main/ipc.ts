@@ -10,6 +10,7 @@ import { IPC } from '@shared/ipc';
 import type { Orchestrator } from './Orchestrator';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
+import type { LauncherChangelogStore } from './services/LauncherChangelogStore';
 import { createWinePrefix, listLinuxRuntimeOptions } from './services/LinuxRuntime';
 import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
@@ -19,7 +20,8 @@ export function registerIpc(
   getWindow: () => BrowserWindow | null,
   orchestrator: Orchestrator,
   config: ConfigStore,
-  log: Log
+  log: Log,
+  launcherChangelog: LauncherChangelogStore
 ): void {
   let resetInProgress = false;
 
@@ -32,6 +34,8 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.getState, () => orchestrator.getState());
+  ipcMain.handle(IPC.getLauncherChangelogStatus, () => launcherChangelog.getStatus());
+  ipcMain.handle(IPC.acknowledgeLauncherChangelog, () => launcherChangelog.acknowledge());
   ipcMain.handle(IPC.getSettings, () => config.get());
 
   const commitGameClientPatchChange = async (

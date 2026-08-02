@@ -12,6 +12,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "generate:config": "node scripts/generate-launcher-config.cjs",
+    "validate:changelog": "node scripts/validate-launcher-changelog.cjs",
     "predev": "npm run generate:config",
     "dev": "electron-vite dev",
     "pretypecheck": "npm run generate:config",

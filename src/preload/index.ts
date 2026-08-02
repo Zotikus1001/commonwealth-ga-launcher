@@ -15,6 +15,8 @@ import { IPC } from '@shared/ipc';
 const api: LauncherApi = {
   platform: process.platform as LauncherApi['platform'],
   getState: () => ipcRenderer.invoke(IPC.getState),
+  getLauncherChangelogStatus: () => ipcRenderer.invoke(IPC.getLauncherChangelogStatus),
+  acknowledgeLauncherChangelog: () => ipcRenderer.invoke(IPC.acknowledgeLauncherChangelog),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   updateSettings: (patch: DeepPartial<Settings>) => ipcRenderer.invoke(IPC.updateSettings, patch),
   setGameClientPatch: (enabled: boolean) =>

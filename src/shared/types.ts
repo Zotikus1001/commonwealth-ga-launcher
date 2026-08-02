@@ -254,6 +254,10 @@ export interface GameClientDllState {
 
 export type ServerStatus = 'checking' | 'online' | 'offline' | 'invalid';
 
+export interface LauncherChangelogStatus {
+  showOnStartup: boolean;
+}
+
 export interface LauncherState {
   phase: Phase;
   statusLine: string;
@@ -326,6 +330,8 @@ export type DeepPartial<T> = {
 export interface LauncherApi {
   platform: 'win32' | 'linux' | 'darwin';
   getState(): Promise<LauncherState>;
+  getLauncherChangelogStatus(): Promise<LauncherChangelogStatus>;
+  acknowledgeLauncherChangelog(): Promise<void>;
   getSettings(): Promise<Settings>;
   updateSettings(patch: DeepPartial<Settings>): Promise<Settings>;
   setGameClientPatch(enabled: boolean): Promise<Settings>;

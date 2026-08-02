@@ -1,6 +1,8 @@
 // IPC channel names — single source of truth for main and preload.
 export const IPC = {
   getState: 'launcher:get-state',
+  getLauncherChangelogStatus: 'launcher:get-changelog-status',
+  acknowledgeLauncherChangelog: 'launcher:acknowledge-changelog',
   getSettings: 'launcher:get-settings',
   updateSettings: 'launcher:update-settings',
   setGameClientPatch: 'launcher:set-game-client-patch',

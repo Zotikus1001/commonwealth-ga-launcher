@@ -1,0 +1,53 @@
+{
+  "versions": [
+    {
+      "version": "0.1.18",
+      "changes": [
+        "Added an in-game **FOV Slider** in the Video Settings.",
+        "DLC files now overwrite mismatched DLC files, with originals restored when removing the DLC.",
+        "Added performance command information for `-toggleallsuits` and `-togglebrokensuits`.",
+        "Added warnings for launch arguments already handled automatically by the launcher.",
+        "[DEV TAB] Added experimental **DXVK** versions: **2.6.2** or **3.0.2**."
+      ]
+    },
+    {
+      "version": "0.1.17",
+      "changes": [
+        "Added the **Carbon Capture** PvP map DLC pack.",
+        "Added the **Factory 3-4 PvE Maps** DLC: Central Industrial Complex and Recycling Plant 37.",
+        "Added **DLC enable/disable** command tips.",
+        "Added a copyable in-game chat command reference to the **Info / FAQ** tab."
+      ]
+    },
+    {
+      "version": "0.1.13",
+      "changes": [
+        "Added up to 5 switchable game-settings profiles.",
+        "Released the optional Game Client Patch, fixing scope in/out stutters.",
+        "Added clearer per-patch Apply/Remove controls and enabled indicators. All patches are now optional.",
+        "Added Reset All Settings recovery to the Diagnostics tab.",
+        "Added a FAQ with useful game and account tips."
+      ]
+    },
+    {
+      "version": "0.1.9",
+      "changes": [
+        "Added live player count.",
+        "Added Agenda Stats.",
+        "Added the Servers tab.",
+        "Fixed bugs and reorganized the launcher."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "title": "First Release",
+      "summary": "The launcher is now available with several useful options and quality-of-life improvements.",
+      "changes": [
+        "Automatic updates whenever a new launcher version is released.",
+        "Easy game configuration and server launching.",
+        "Small client-side fixes.",
+        "Support for larger client-side patches in the future."
+      ]
+    }
+  ]
+}

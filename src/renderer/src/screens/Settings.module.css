@@ -541,10 +541,10 @@
 }
 
 .profileModeEnabled {
-  border-color: rgba(240, 166, 60, 0.38);
-  border-left-color: var(--amber);
+  border-color: rgba(70, 192, 109, 0.38);
+  border-left-color: var(--green);
   background:
-    linear-gradient(105deg, rgba(240, 166, 60, 0.1), transparent 54%),
+    linear-gradient(105deg, rgba(70, 192, 109, 0.1), transparent 54%),
     rgba(11, 15, 23, 0.88);
 }
 
@@ -582,12 +582,12 @@
 }
 
 .profileModeEnabled .profileModeLabel {
-  color: var(--amber-hi);
+  color: var(--green);
 }
 
 .profileModeEnabled .profileModeSignal {
-  background: var(--amber);
-  box-shadow: 0 0 10px rgba(240, 166, 60, 0.7);
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(70, 192, 109, 0.7);
 }
 
 .profileModeCopy strong {
@@ -618,8 +618,8 @@
 }
 
 .profileModeEnabled .profileToggle:not(:disabled) {
-  border-color: rgba(240, 166, 60, 0.55);
-  color: var(--amber-hi);
+  border-color: rgba(70, 192, 109, 0.55);
+  color: var(--green);
 }
 
 .profileToggleTrack {
@@ -642,13 +642,13 @@
 }
 
 .profileModeEnabled .profileToggleTrack {
-  border-color: rgba(240, 166, 60, 0.6);
-  background: rgba(240, 166, 60, 0.14);
+  border-color: rgba(70, 192, 109, 0.6);
+  background: rgba(70, 192, 109, 0.14);
 }
 
 .profileModeEnabled .profileToggleKnob {
-  background: var(--amber-hi);
-  box-shadow: 0 0 8px rgba(240, 166, 60, 0.5);
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(70, 192, 109, 0.5);
   transform: translateX(20px);
 }
 
@@ -763,9 +763,9 @@
   gap: 14px 20px;
   padding: 14px 15px;
   border: 1px solid var(--line);
-  border-left: 2px solid var(--amber);
+  border-left: 2px solid var(--green);
   background:
-    linear-gradient(110deg, rgba(240, 166, 60, 0.06), transparent 48%),
+    linear-gradient(110deg, rgba(70, 192, 109, 0.06), transparent 48%),
     rgba(15, 19, 28, 0.62);
 }
 
@@ -777,7 +777,7 @@
 }
 
 .profileEyebrow {
-  color: var(--amber-hi);
+  color: var(--green);
   font-family: var(--font-mono);
   font-size: 8px;
   letter-spacing: 0.18em;
@@ -810,8 +810,14 @@
 }
 
 .profileCreateButton:not(:disabled) {
-  border-color: var(--amber);
-  color: var(--amber-hi);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.profileCreateButton:hover:not(:disabled) {
+  border-color: var(--green);
+  background: rgba(70, 192, 109, 0.1);
+  color: var(--green);
 }
 
 .profileCaptureNote {
@@ -839,10 +845,10 @@
 }
 
 .gameProfileActive {
-  border-color: rgba(240, 166, 60, 0.35);
-  border-left-color: var(--amber);
+  border-color: rgba(70, 192, 109, 0.35);
+  border-left-color: var(--green);
   background:
-    linear-gradient(100deg, rgba(240, 166, 60, 0.07), transparent 54%),
+    linear-gradient(100deg, rgba(70, 192, 109, 0.07), transparent 54%),
     rgba(15, 19, 28, 0.72);
 }
 
@@ -865,8 +871,8 @@
 }
 
 .gameProfileActive .gameProfileIndex {
-  border-right-color: rgba(240, 166, 60, 0.24);
-  color: var(--amber-hi);
+  border-right-color: rgba(70, 192, 109, 0.24);
+  color: var(--green);
 }
 
 .gameProfilePaused .gameProfileIndex {
@@ -896,8 +902,8 @@
 
 .gameProfileActiveBadge {
   padding: 3px 5px;
-  border: 1px solid rgba(240, 166, 60, 0.38);
-  color: var(--amber-hi);
+  border: 1px solid rgba(70, 192, 109, 0.38);
+  color: var(--green);
   letter-spacing: 0.12em;
 }
 
@@ -957,8 +963,8 @@
 }
 
 .gameProfileActive .profileSelectButton:disabled {
-  border-color: rgba(240, 166, 60, 0.35);
-  color: var(--amber-hi);
+  border-color: rgba(70, 192, 109, 0.35);
+  color: var(--green);
   opacity: 0.78;
 }
 
@@ -974,8 +980,14 @@
 }
 
 .profileUpdateConfirm:not(:disabled) {
-  border-color: var(--amber);
-  color: var(--amber-hi);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.profileUpdateConfirm:hover:not(:disabled) {
+  border-color: var(--green);
+  background: rgba(70, 192, 109, 0.1);
+  color: var(--green);
 }
 
 .profileInlineConfirm {

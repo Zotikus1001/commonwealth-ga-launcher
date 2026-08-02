@@ -34,7 +34,8 @@ The launcher updates itself automatically.
 
 ## Features
 
-- Automatic updates
+- Automatic updates, with a once-per-version changelog and direct access to the launcher support
+  thread from the version button
 - Easy game setup and launching, with saved game settings and enabled content prepared as soon as
   the install location validates
 - Server status and server selection

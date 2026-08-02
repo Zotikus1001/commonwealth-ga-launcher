@@ -9,6 +9,7 @@ const CONFIG_KEYS = new Set([
   'agenda_stats_url',
   'agenda_stats_status_url',
   'discord_invite_url',
+  'discord_support_thread_url',
   'steam_store_url',
   'steam_install_url',
   'stable_branch',
@@ -316,6 +317,26 @@ function loadLauncherConfig(options = {}) {
   }
   if (discordUrl.protocol !== 'https:') {
     throw new Error('discord_invite_url must use HTTPS');
+  }
+
+  let discordSupportThreadUrl;
+  try {
+    discordSupportThreadUrl = new URL(raw.discord_support_thread_url);
+  } catch {
+    throw new Error('discord_support_thread_url must be a valid URL');
+  }
+  if (
+    discordSupportThreadUrl.protocol !== 'https:' ||
+    discordSupportThreadUrl.hostname !== 'discord.com' ||
+    !/^\/channels\/\d+\/\d+\/?$/.test(discordSupportThreadUrl.pathname) ||
+    discordSupportThreadUrl.username ||
+    discordSupportThreadUrl.password ||
+    discordSupportThreadUrl.search ||
+    discordSupportThreadUrl.hash
+  ) {
+    throw new Error(
+      'discord_support_thread_url must use https://discord.com/channels/<server-id>/<channel-id>'
+    );
   }
 
   let steamStoreUrl;
@@ -652,6 +673,7 @@ function loadLauncherConfig(options = {}) {
     agendaStatsUrl: agendaStatsUrl.toString(),
     agendaStatsStatusUrl: agendaStatsStatusUrl.toString(),
     discordInviteUrl: raw.discord_invite_url,
+    discordSupportThreadUrl: discordSupportThreadUrl.toString(),
     steamStoreUrl: raw.steam_store_url,
     steamInstallUrl: raw.steam_install_url,
     stableBranch: raw.stable_branch,

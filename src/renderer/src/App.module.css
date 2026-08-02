@@ -68,9 +68,28 @@
   min-width: 0;
 }
 
-.version {
+.versionButton {
+  min-height: 24px;
+  padding: 2px 5px;
+  border-color: transparent;
+  background: transparent;
   color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
+}
+
+.versionButton:hover:not(:disabled),
+.versionButton:focus-visible {
+  border-color: rgba(69, 200, 218, 0.42);
+  background: rgba(69, 200, 218, 0.055);
+  color: var(--cyan);
+}
+
+.versionButton:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 .updateStatus {

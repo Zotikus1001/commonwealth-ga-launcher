@@ -277,6 +277,27 @@ export function registerIpc(
     }
   });
 
+  ipcMain.handle(IPC.openDiscordSupport, async () => {
+    const channelPath = new URL(LAUNCHER_CONFIG.discordSupportThreadUrl).pathname.slice(1);
+    try {
+      await shell.openExternal(`discord://-/${channelPath}`);
+      return { ok: true, message: 'Launcher support thread opened.' };
+    } catch (appError) {
+      log.warn(`Discord app support link failed: ${(appError as Error).message}`);
+    }
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.discordSupportThreadUrl);
+      return { ok: true, message: 'Launcher support thread opened in the browser.' };
+    } catch (browserError) {
+      return {
+        ok: false,
+        message:
+          'Could not open the launcher support thread in Discord or the browser. ' +
+          (browserError as Error).message
+      };
+    }
+  });
+
   ipcMain.handle(IPC.openAgendaStats, async () => {
     if (orchestrator.getState().selectedServerId !== DEFAULT_SERVER_ID) {
       return { ok: false, message: 'Agenda Stats is available only for the Commonwealth server.' };

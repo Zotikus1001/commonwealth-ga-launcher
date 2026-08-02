@@ -67,6 +67,10 @@ export class LauncherChangelogStore {
         this.acknowledged = true;
         this.log.info(`launcher changelog v${this.launcherVersion} acknowledged`);
       })
+      .catch((error) => {
+        this.log.error(`launcher changelog acknowledgement save failed: ${error.message}`);
+        throw error;
+      })
       .finally(() => {
         this.acknowledgeInFlight = null;
       });

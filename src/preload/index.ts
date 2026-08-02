@@ -45,6 +45,7 @@ const api: LauncherApi = {
   listLinuxRuntimeOptions: () => ipcRenderer.invoke(IPC.listLinuxRuntimeOptions),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),
   openDiscord: () => ipcRenderer.invoke(IPC.openDiscord),
+  openDiscordSupport: () => ipcRenderer.invoke(IPC.openDiscordSupport),
   openAgendaStats: () => ipcRenderer.invoke(IPC.openAgendaStats),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),
   openSteamInstall: () => ipcRenderer.invoke(IPC.openSteamInstall),

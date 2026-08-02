@@ -26,6 +26,7 @@ export const IPC = {
   listLinuxRuntimeOptions: 'launcher:list-linux-runtime-options',
   createWinePrefix: 'launcher:create-wine-prefix',
   openDiscord: 'launcher:open-discord',
+  openDiscordSupport: 'launcher:open-discord-support',
   openAgendaStats: 'launcher:open-agenda-stats',
   openSteamStore: 'launcher:open-steam-store',
   openSteamInstall: 'launcher:open-steam-install',

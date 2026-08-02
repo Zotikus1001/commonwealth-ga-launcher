@@ -355,6 +355,7 @@ export interface LauncherApi {
   listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
+  openDiscordSupport(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;

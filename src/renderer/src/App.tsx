@@ -3,6 +3,7 @@ import type { LauncherState } from '@shared/types';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import Play from './screens/Play';
 import Settings, { type SettingsHandle, type SettingsTab } from './screens/Settings';
+import { LauncherChangelogDialog } from './components/LauncherChangelogDialog';
 import styles from './App.module.css';
 
 const manualUpdateRepository = LAUNCHER_CONFIG.updateRepositories[0];
@@ -64,6 +65,7 @@ export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('game');
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const settingsRef = useRef<SettingsHandle>(null);
 
   const openSettings = (tab: SettingsTab): void => {
@@ -76,6 +78,12 @@ export default function App(): JSX.Element {
     void window.api.getState().then((s) => {
       if (mounted) setState(s);
     });
+    void window.api
+      .getLauncherChangelogStatus()
+      .then((status) => {
+        if (mounted && status.showOnStartup) setChangelogOpen(true);
+      })
+      .catch(() => {});
     const unsubscribe = window.api.onState((s) => setState(s));
     return () => {
       mounted = false;
@@ -88,6 +96,10 @@ export default function App(): JSX.Element {
   }
   const launcherUpdate = launcherUpdateLabel(state);
   const updateDownloading = state.launcherUpdate === 'downloading';
+  const closeChangelog = (): void => {
+    setChangelogOpen(false);
+    void window.api.acknowledgeLauncherChangelog().catch(() => {});
+  };
 
   return (
     <div className={styles.shell}>
@@ -99,9 +111,16 @@ export default function App(): JSX.Element {
         </div>
         <div className={styles.headerRight}>
           <div className={styles.versionGroup}>
-            <span className={`mono ${styles.version}`} title="Launcher version">
+            <button
+              type="button"
+              className={`mono ${styles.versionButton}`}
+              title="Open launcher changelog"
+              aria-label={`Open launcher changelog for version ${state.launcherVersion}`}
+              aria-haspopup="dialog"
+              onClick={() => setChangelogOpen(true)}
+            >
               v{state.launcherVersion}
-            </span>
+            </button>
             <span
               className={`${styles.updateStatus} ${styles[launcherUpdate.tone]}`}
               title={launcherUpdate.title}
@@ -142,6 +161,12 @@ export default function App(): JSX.Element {
           </fieldset>
         )}
       </main>
+      {changelogOpen && (
+        <LauncherChangelogDialog
+          currentVersion={state.launcherVersion}
+          onClose={closeChangelog}
+        />
+      )}
     </div>
   );
 }

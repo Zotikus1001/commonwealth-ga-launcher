@@ -94,7 +94,8 @@ const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: 
   'adaptive-client-performance': {
     title: 'Client Performance Stability',
     description:
-      'Improves consistency in busy scenes and reduces avoidable loading stutters during play.'
+      'Reduces avoidable loading and frame-time stutters in busy scenes by tuning texture streaming, ' +
+      'shader work, audio capacity, and unused network statistics.'
   }
 };
 

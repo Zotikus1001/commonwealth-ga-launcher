@@ -21,6 +21,8 @@ const MISSING_GAME_CONFIG_MESSAGE =
   'outside this launcher, close it after the login screen appears, then try again.';
 const NET_SPEED_KEYS = ['ConfiguredInternetSpeed', 'ConfiguredLanSpeed'] as const;
 type NetSpeedKey = (typeof NET_SPEED_KEYS)[number];
+const PERFORMANCE_OPENAL_MAX_CHANNELS = 64;
+const PERFORMANCE_UNUSED_SHADER_THREADS = 2;
 const LOGIN_MAP_KEYS = ['Map', 'LocalMap'] as const;
 type LoginMapKey = (typeof LOGIN_MAP_KEYS)[number];
 
@@ -407,6 +409,37 @@ function verifyAdaptivePerformance(
   );
   if (shaderValues.length === 0 || shaderValues.some((value) => value.toLowerCase() !== 'false')) {
     throw new Error(`${fileName} did not retain the managed shader initialization setting`);
+  }
+
+  const unusedShaderThreads = effectiveSectionValues(
+    text,
+    'DevOptions.Shaders',
+    'NumUnusedShaderCompilingThreads'
+  ).map(Number);
+  if (
+    unusedShaderThreads.length === 0 ||
+    unusedShaderThreads.some((value) => value !== PERFORMANCE_UNUSED_SHADER_THREADS)
+  ) {
+    throw new Error(`${fileName} did not retain the managed shader thread reserve`);
+  }
+
+  const statsUdp = effectiveSectionValues(
+    text,
+    'StatNotifyProviders',
+    'StatsNotifyProvider_UDP'
+  );
+  if (statsUdp.length === 0 || statsUdp.some((value) => value.toLowerCase() !== 'false')) {
+    throw new Error(`${fileName} did not retain the managed UDP stats setting`);
+  }
+
+  const openAlChannels = effectiveSectionValues(text, 'ALAudio.ALAudioDevice', 'MaxChannels').map(
+    Number
+  );
+  if (
+    openAlChannels.length === 0 ||
+    openAlChannels.some((value) => value !== PERFORMANCE_OPENAL_MAX_CHANNELS)
+  ) {
+    throw new Error(`${fileName} did not retain the managed OpenAL channel count`);
   }
 }
 
@@ -892,6 +925,9 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
     { sectionName: 'engine.player', keys: NET_SPEED_KEYS },
     { sectionName: 'texturestreaming', keys: ['PoolSize'] },
     { sectionName: 'engine.isvhacks', keys: ['bInitializeShadersOnDemand'] },
+    { sectionName: 'devoptions.shaders', keys: ['NumUnusedShaderCompilingThreads'] },
+    { sectionName: 'statnotifyproviders', keys: ['StatsNotifyProvider_UDP'] },
+    { sectionName: 'alaudio.alaudiodevice', keys: ['MaxChannels'] },
     { sectionName: 'url', keys: LOGIN_MAP_KEYS },
     {
       sectionName: 'engine.gameengine',
@@ -1066,7 +1102,10 @@ function clientPatchTargets(id: ClientPatchId): IniPatchTarget[] {
   if (id === 'adaptive-client-performance') {
     return [
       { sectionName: 'TextureStreaming', keys: ['PoolSize'] },
-      { sectionName: 'Engine.ISVHacks', keys: ['bInitializeShadersOnDemand'] }
+      { sectionName: 'Engine.ISVHacks', keys: ['bInitializeShadersOnDemand'] },
+      { sectionName: 'DevOptions.Shaders', keys: ['NumUnusedShaderCompilingThreads'] },
+      { sectionName: 'StatNotifyProviders', keys: ['StatsNotifyProvider_UDP'] },
+      { sectionName: 'ALAudio.ALAudioDevice', keys: ['MaxChannels'] }
     ];
   }
   throw new Error(`Unsupported client patch: ${id}`);
@@ -1444,6 +1483,30 @@ async function patchIniFile(
         'Engine.ISVHacks',
         'bInitializeShadersOnDemand',
         'False'
+      )
+    );
+    apply(
+      patchSectionValue(
+        patchedText,
+        'DevOptions.Shaders',
+        'NumUnusedShaderCompilingThreads',
+        String(PERFORMANCE_UNUSED_SHADER_THREADS)
+      )
+    );
+    apply(
+      patchSectionValue(
+        patchedText,
+        'StatNotifyProviders',
+        'StatsNotifyProvider_UDP',
+        'False'
+      )
+    );
+    apply(
+      patchSectionValue(
+        patchedText,
+        'ALAudio.ALAudioDevice',
+        'MaxChannels',
+        String(PERFORMANCE_OPENAL_MAX_CHANNELS)
       )
     );
   }

@@ -33,7 +33,6 @@ import {
 import {
   applyClientPatch as applyIniClientPatch,
   ensureClientConfiguration,
-  ensureGameIniSettings,
   inspectClientPatches,
   inspectGameIniSettings,
   removeClientPatch as removeIniClientPatch,
@@ -91,23 +90,11 @@ function enabledDlcDefinitions(settings: Settings) {
   );
 }
 
-function hasPendingGameIniSettings(settings: Settings): boolean {
-  const baseline = settings.gameIniBaseline;
-  return (
-    (baseline.loginMap !== null && settings.loginMap !== baseline.loginMap) ||
-    (baseline.showOverhealing !== null &&
-      settings.showOverhealing !== baseline.showOverhealing) ||
-    (baseline.fpsLimit.enabled !== null &&
-      settings.fpsLimit.enabled !== baseline.fpsLimit.enabled) ||
-    (baseline.fpsLimit.value !== null && settings.fpsLimit.value !== baseline.fpsLimit.value)
-  );
-}
-
 /** Owns launcher state and keeps the renderer as a pure state consumer. */
 export class Orchestrator {
   private state: LauncherState;
   private install: GameInstall | null = null;
-  private patchesPreparedGameExePath = '';
+  private dlcsPreparedGameExePath = '';
   private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
   private readonly dxvkManager: DxvkManager;
@@ -119,6 +106,7 @@ export class Orchestrator {
   private broadcast: (state: LauncherState) => void = () => {};
   private busy = false;
   private refreshPending = false;
+  private patchStatusRefreshInFlight: Promise<void> | null = null;
   private probeTimer: NodeJS.Timeout | null = null;
   private readonly probesInFlight = new Map<string, Promise<ServerProbeStatus>>();
   private offlineRefreshInFlight = false;
@@ -530,6 +518,67 @@ export class Orchestrator {
     await this.launcherUpdater.ensureCurrent();
   }
 
+  async refreshPatchStatuses(): Promise<void> {
+    if (this.patchStatusRefreshInFlight) return this.patchStatusRefreshInFlight;
+    const refresh = this.runPatchStatusRefresh();
+    this.patchStatusRefreshInFlight = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (this.patchStatusRefreshInFlight === refresh) this.patchStatusRefreshInFlight = null;
+    }
+  }
+
+  private async runPatchStatusRefresh(): Promise<void> {
+    if (this.busy) {
+      this.refreshPending = true;
+      return;
+    }
+    this.busy = true;
+    try {
+      const settings = this.config.get();
+      const install = await validateGameExe(settings.gameExePath);
+      if (!sameGameExecutable(settings.gameExePath, this.config.get().gameExePath)) {
+        this.refreshPending = true;
+        return;
+      }
+      this.install = install;
+      if (!install) {
+        this.patch({
+          gamePathValid: false,
+          validatedGameExePath: settings.gameExePath,
+          clientPatches: unavailableClientPatches(),
+          gameClientDll: unavailableGameClientDllState()
+        });
+        return;
+      }
+      const [clientPatches, gameClientDll] = await Promise.all([
+        inspectClientPatches(install),
+        this.inspectGameClientDll(install)
+      ]);
+      this.patch({
+        gamePathValid: true,
+        validatedGameExePath: settings.gameExePath,
+        clientPatches,
+        gameClientDll
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`patch status refresh failed: ${message}`);
+      this.patch({
+        clientPatches: unavailableClientPatches(),
+        gameClientDll: {
+          status: 'invalid',
+          detail: `Could not refresh patch status: ${message}`,
+          hasManagedMarker: false
+        }
+      });
+    } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
   private async refreshRuntimeState(): Promise<void> {
     this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
     await this.gameProfileManager.load();
@@ -559,7 +608,7 @@ export class Orchestrator {
     });
     const selection = this.applyServerSelection(settings);
     if (!install) {
-      this.patchesPreparedGameExePath = '';
+      this.dlcsPreparedGameExePath = '';
       this.log.info('game install validation: invalid or unset');
       this.patch({
         gameClientDll: unavailableGameClientDllState(),
@@ -587,10 +636,9 @@ export class Orchestrator {
 
     const dlcPreparationErrors = new Map<DlcId, string>();
     if (
-      !this.patchesPreparedGameExePath ||
-      !sameGameExecutable(this.patchesPreparedGameExePath, install.exePath)
+      !this.dlcsPreparedGameExePath ||
+      !sameGameExecutable(this.dlcsPreparedGameExePath, install.exePath)
     ) {
-      await this.applyEnabledIniPatchesForInstall(install, settings);
       for (const definition of enabledDlcDefinitions(settings)) {
         try {
           this.patchDlcStatus(await this.ensureDlcInstalled(install, definition.id));
@@ -600,7 +648,7 @@ export class Orchestrator {
           this.log.warn(`automatic ${definition.name} install failed: ${message}`);
         }
       }
-      this.patchesPreparedGameExePath = install.exePath;
+      this.dlcsPreparedGameExePath = install.exePath;
     }
     const [clientPatches, gameIniSettings, gameClientDll, dxvk, inspectedDlcs] = await Promise.all([
       inspectClientPatches(install),
@@ -619,27 +667,7 @@ export class Orchestrator {
           : dlc
       );
     }
-    settings = await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
-    if (hasPendingGameIniSettings(settings)) {
-      this.patch({ statusLine: 'Applying saved game settings…' });
-      try {
-        await ensureGameIniSettings(
-          install,
-          settings.loginMap,
-          settings.showOverhealing,
-          settings.fpsLimit.enabled,
-          settings.fpsLimit.value,
-          this.log,
-          managedIniBackupDirectory(app.getPath('userData'), install)
-        );
-        settings = await this.config.syncGameIniSettings(
-          settings.gameExePath,
-          await inspectGameIniSettings(install)
-        );
-      } catch (error) {
-        this.log.warn(`automatic game settings apply failed: ${(error as Error).message}`);
-      }
-    }
+    await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
     this.log.info('game install validation: valid');
     this.patch({
       gameClientDll,
@@ -662,42 +690,6 @@ export class Orchestrator {
       return;
     }
     this.patch({ phase: 'ready', statusLine: 'Ready.' });
-  }
-
-  private async applyEnabledIniPatchesForInstall(
-    install: GameInstall,
-    settings: Settings
-  ): Promise<void> {
-    const backupDirectory = managedIniBackupDirectory(app.getPath('userData'), install);
-    if (settings.patches.highFpsMovementStability) {
-      this.patch({ statusLine: 'Applying High-FPS Movement Stability…' });
-      try {
-        await applyIniClientPatch(
-          install,
-          'high-fps-movement-stability',
-          this.log,
-          backupDirectory
-        );
-      } catch (error) {
-        this.log.warn(`automatic high-FPS patch failed: ${(error as Error).message}`);
-      }
-    }
-    if (settings.patches.adaptiveClientPerformance) {
-      this.patch({ statusLine: 'Applying Client Performance Stability…' });
-      try {
-        const texturePoolMb = (await this.gpuMemoryDetector.select(settings.launch.gpuAdapter))
-          .texturePoolMb;
-        await applyIniClientPatch(
-          install,
-          'adaptive-client-performance',
-          this.log,
-          backupDirectory,
-          texturePoolMb
-        );
-      } catch (error) {
-        this.log.warn(`automatic client performance patch failed: ${(error as Error).message}`);
-      }
-    }
   }
 
   private shouldAutoClose(settings: Settings): boolean {
@@ -1615,7 +1607,7 @@ export class Orchestrator {
     const install = await validateGameExe(settings.gameExePath);
     this.install = install;
     if (!install) {
-      this.patchesPreparedGameExePath = '';
+      this.dlcsPreparedGameExePath = '';
       this.patch({
         gamePathValid: false,
         validatedGameExePath: settings.gameExePath,

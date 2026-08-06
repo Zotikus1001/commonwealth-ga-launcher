@@ -22,6 +22,7 @@ export const IPC = {
   selectServer: 'launcher:select-server',
   checkServer: 'launcher:check-server',
   refresh: 'launcher:refresh',
+  refreshPatchStatuses: 'launcher:refresh-patch-statuses',
   checkLauncherUpdates: 'launcher:check-launcher-updates',
   listLinuxRuntimeOptions: 'launcher:list-linux-runtime-options',
   createWinePrefix: 'launcher:create-wine-prefix',

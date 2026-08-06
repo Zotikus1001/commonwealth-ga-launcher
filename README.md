@@ -36,8 +36,8 @@ The launcher updates itself automatically.
 
 - Automatic updates, with a once-per-version changelog and direct access to the launcher support
   thread from the version button
-- Easy game setup and launching, with saved game settings and enabled content prepared as soon as
-  the install location validates
+- Easy game setup and launching, with DLC content checked after the install location validates and
+  saved game settings plus enabled patches prepared when Play is pressed
 - Server status and server selection
 - Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
   UI preferences, with a master toggle that pauses profile application without deleting profiles;

@@ -41,6 +41,7 @@ const api: LauncherApi = {
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),
+  refreshPatchStatuses: () => ipcRenderer.invoke(IPC.refreshPatchStatuses),
   checkLauncherUpdates: () => ipcRenderer.invoke(IPC.checkLauncherUpdates),
   listLinuxRuntimeOptions: () => ipcRenderer.invoke(IPC.listLinuxRuntimeOptions),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),

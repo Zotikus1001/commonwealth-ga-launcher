@@ -147,6 +147,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     void window.api.getSettings().then(setDraft);
   }, [dirty, state.gamePathValid, state.validatedGameExePath]);
 
+  useEffect(() => {
+    if (tab !== 'patches') return;
+    void window.api.refreshPatchStatuses();
+  }, [tab]);
+
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },

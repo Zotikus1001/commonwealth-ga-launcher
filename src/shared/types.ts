@@ -351,6 +351,7 @@ export interface LauncherApi {
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;
   refresh(): Promise<void>;
+  refreshPatchStatuses(): Promise<void>;
   checkLauncherUpdates(): Promise<void>;
   listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;

@@ -255,6 +255,7 @@ export function registerIpc(
   });
   ipcMain.handle(IPC.checkServer, () => orchestrator.checkServer());
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
+  ipcMain.handle(IPC.refreshPatchStatuses, () => orchestrator.refreshPatchStatuses());
   ipcMain.handle(IPC.checkLauncherUpdates, () => orchestrator.checkLauncherUpdates());
   ipcMain.handle(IPC.listLinuxRuntimeOptions, () =>
     listLinuxRuntimeOptions(config.get(), log)

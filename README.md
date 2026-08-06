@@ -40,8 +40,8 @@ The launcher updates itself automatically.
   saved game settings plus enabled patches prepared when Play is pressed
 - Server status and server selection
 - Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
-  UI preferences, with a master toggle that pauses profile application without deleting profiles;
-  when current settings differ, Play offers to update the selected profile or use its saved settings
+  UI preferences. Profiles start disabled on fresh installs; the master toggle pauses profile
+  application without deleting profiles, and Play can save changed settings or use the saved profile
 - Game patches enabled by default, with one-click Apply and Remove controls, including client
   performance tuning for texture streaming, shader work, audio capacity, and unused network stats
 - A Game Client Patch that fixes scope-transition stutters and adds an in-game FOV slider

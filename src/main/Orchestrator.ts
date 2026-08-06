@@ -17,6 +17,7 @@ import {
 } from '@shared/types';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
+import { DEFAULT_GAME_PROFILES_ENABLED } from '@shared/gameProfiles';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
 import { validateGameExe, autoDetectGame, type GameInstall } from './services/InstallLocator';
@@ -161,7 +162,7 @@ export class Orchestrator {
       gameClientDll: unavailableGameClientDllState(),
       clientPatches: unavailableClientPatches(),
       dlcs: unavailableDlcStatuses(),
-      gameProfilesEnabled: true,
+      gameProfilesEnabled: DEFAULT_GAME_PROFILES_ENABLED,
       gameProfiles: [],
       selectedGameProfileId: null,
       serverCommits: [],

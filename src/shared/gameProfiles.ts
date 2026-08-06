@@ -1,5 +1,6 @@
 export const MAX_GAME_PROFILES = 5;
 export const MAX_GAME_PROFILE_NAME_LENGTH = 48;
+export const DEFAULT_GAME_PROFILES_ENABLED = false;
 
 export function normalizeGameProfileName(value: string): string {
   return value.trim();

@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promis
 import { basename, dirname, join, resolve } from 'path';
 import type { GameProfileSummary, ProfilePlayPrompt } from '@shared/types';
 import {
+  DEFAULT_GAME_PROFILES_ENABLED,
   MAX_GAME_PROFILES,
   normalizeGameProfileName,
   validateGameProfileName
@@ -257,7 +258,7 @@ export class GameProfileManager {
   private readOnlyReason: string | null = null;
   private index: StoredProfileIndex = {
     schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
-    enabled: true,
+    enabled: DEFAULT_GAME_PROFILES_ENABLED,
     selectedProfileId: null,
     profileIds: []
   };
@@ -532,7 +533,7 @@ export class GameProfileManager {
     await rm(this.root, { recursive: true, force: true });
     this.index = {
       schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
-      enabled: true,
+      enabled: DEFAULT_GAME_PROFILES_ENABLED,
       selectedProfileId: null,
       profileIds: []
     };

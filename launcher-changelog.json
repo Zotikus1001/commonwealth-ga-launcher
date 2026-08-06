@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "0.1.21",
+      "releasedOn": "2026-08-06",
+      "changes": [
+        "Expanded **Client Performance Stability** with additional shader, audio, and network-stat tuning for smoother performance."
+      ]
+    },
+    {
       "version": "0.1.19",
       "releasedOn": "2026-08-02",
       "changes": [

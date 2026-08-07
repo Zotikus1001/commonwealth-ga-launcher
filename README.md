@@ -34,30 +34,18 @@ The launcher updates itself automatically.
 
 ## Features
 
-- Automatic updates, with a once-per-version changelog and direct access to the launcher support
-  thread from the version button
-- Easy game setup and launching, with DLC content checked after the install location validates and
-  saved game settings plus enabled patches prepared when Play is pressed
-- Server status and server selection
-- Up to five named game-settings profiles for quickly switching graphics, audio, controls, and
-  UI preferences. Profiles start disabled on fresh installs; the master toggle pauses profile
-  application without deleting profiles, and Play can save changed settings or use the saved profile
-- Game patches enabled by default, with one-click Apply and Remove controls, including client
-  performance tuning for texture streaming, shader work, audio capacity, and unused network stats
+- Automatic updates and an in-launcher changelog
+- Easy game setup and one-click launching
+- Live server status, player count, server selection, and Agenda Stats
+- Up to five optional profiles for quickly switching game settings
+- One-click performance and stability patches
 - A Game Client Patch that fixes scope-transition stutters and adds an in-game FOV slider
-- Optional Surfside-Atoll and Carbon Capture PvP maps plus Central Industrial Complex and
-  Recycling Plant 37 PvE maps, with one-click install and repair that replaces mismatched files at
-  that pack's declared locations, pre-install backups that restore saved copies and are then
-  deleted on removal, separate download and file-operation progress, plus per-pack matchmaking
-  include and exclude commands
-- Useful game options with conflict warnings for launch arguments already managed by the launcher
-- Selectable DXVK/Vulkan versions for Windows testing, while preserving an existing graphics
-  wrapper so it can be restored when launcher-managed DXVK is disabled
-- An Info and FAQ guide for performance, graphics stability, account setup, and click-to-copy
-  in-game chat commands, including suit-cosmetic performance controls
-- Agenda Stats and Discord access
-- Diagnostics and a one-click recovery reset
-- Windows support and flexible Linux compatibility options, including custom command wrappers
+- Optional PvP and PvE map packs with simple install, remove, and matchmaking controls
+- Useful game, graphics, and launch options in one place
+- Selectable DXVK/Vulkan versions on Windows
+- Performance tips, account help, and copyable in-game commands
+- Direct Discord access and built-in diagnostics
+- Windows and Linux support through Wine or Proton, including Gamescope and custom launch commands
 
 ---
 

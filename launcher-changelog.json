@@ -2,9 +2,12 @@
   "versions": [
     {
       "version": "0.1.21",
-      "releasedOn": "2026-08-06",
+      "releasedOn": "2026-08-07",
       "changes": [
-        "Expanded **Client Performance Stability** with additional shader, audio, and network-stat tuning for smoother performance."
+        "Expanded **Client Performance Stability** with additional shader, audio, and network-stat tuning for smoother performance.",
+        "Game settings and enabled patches are now applied when you press **Play**, preventing conflicts when game settings are replaced while the launcher is open.",
+        "The **Patches** tab now checks every patch's installed status when opened.",
+        "**Game Settings Profiles** now start disabled for new users."
       ]
     },
     {

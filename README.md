@@ -1,7 +1,7 @@
-# Commonwealth GA Launcher
+# Commonwealth GA — Global Agenda Private Server Launcher
 
-The easiest way to install, configure, and launch Global Agenda for the Commonwealth private
-server.
+A Windows and Linux launcher for Commonwealth, a Global Agenda private server hosted in
+Europe (EU).
 
 ---
 

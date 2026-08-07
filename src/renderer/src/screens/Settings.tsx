@@ -1639,12 +1639,13 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                     value={name}
                     aria-label={`Name for profile ${index + 1}`}
                     disabled={controlsDisabled}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextName = event.currentTarget.value;
                       setNames((current) => ({
                         ...current,
-                        [profile.id]: event.currentTarget.value
-                      }))
-                    }
+                        [profile.id]: nextName
+                      }));
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') void renameProfile(profile);
                     }}

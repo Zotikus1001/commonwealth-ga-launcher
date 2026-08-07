@@ -44,7 +44,6 @@ The launcher updates itself automatically.
     - An FOV slider in the in-game Video Settings
 - Optional PvP and PvE map packs with simple install, remove, and matchmaking controls
 - Useful game, graphics, and launch options in one place
-- Selectable DXVK/Vulkan versions on Windows
 - Performance tips, account help, and copyable in-game commands
 - Direct Discord access and built-in diagnostics
 - Windows and Linux support through Wine or Proton, including Gamescope and custom launch commands

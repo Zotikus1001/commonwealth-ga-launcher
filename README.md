@@ -39,7 +39,9 @@ The launcher updates itself automatically.
 - Live server status, player count, server selection, and Agenda Stats
 - Up to five optional profiles for quickly switching game settings
 - One-click performance and stability patches
-- A Game Client Patch that fixes scope-transition stutters and adds an in-game FOV slider
+- An optional Game Client Patch with:
+    - Smoother scope transitions
+    - An FOV slider in the in-game Video Settings
 - Optional PvP and PvE map packs with simple install, remove, and matchmaking controls
 - Useful game, graphics, and launch options in one place
 - Selectable DXVK/Vulkan versions on Windows

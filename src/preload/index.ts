@@ -6,6 +6,7 @@ import type {
   LauncherApi,
   LauncherState,
   ProfilePlayDecision,
+  ProfileSwitchDecision,
   Settings
 } from '@shared/types';
 import { IPC } from '@shared/ipc';
@@ -37,7 +38,8 @@ const api: LauncherApi = {
   deleteGameProfile: (id: string) => ipcRenderer.invoke(IPC.deleteGameProfile, id),
   setGameProfilesEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC.setGameProfilesEnabled, enabled),
-  selectGameProfile: (id: string) => ipcRenderer.invoke(IPC.selectGameProfile, id),
+  selectGameProfile: (id: string, decision?: ProfileSwitchDecision) =>
+    ipcRenderer.invoke(IPC.selectGameProfile, id, decision),
   selectServer: (id: string) => ipcRenderer.invoke(IPC.selectServer, id),
   checkServer: () => ipcRenderer.invoke(IPC.checkServer),
   refresh: () => ipcRenderer.invoke(IPC.refresh),

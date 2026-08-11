@@ -3,6 +3,7 @@ import {
   DLC_SETTING_KEY_BY_ID,
   isDlcId,
   isProfilePlayDecision,
+  isProfileSwitchDecision,
   type DeepPartial,
   type Settings
 } from '@shared/types';
@@ -245,9 +246,12 @@ export function registerIpc(
     if (typeof enabled !== 'boolean') throw new Error('Profile enabled state must be a boolean.');
     return orchestrator.setGameProfilesEnabled(enabled);
   });
-  ipcMain.handle(IPC.selectGameProfile, (_event, id: unknown) => {
+  ipcMain.handle(IPC.selectGameProfile, (_event, id: unknown, decision: unknown) => {
     if (typeof id !== 'string') throw new Error('Profile identifier must be a string.');
-    return orchestrator.selectGameProfile(id);
+    if (decision !== undefined && !isProfileSwitchDecision(decision)) {
+      throw new Error('Profile switch decision is invalid.');
+    }
+    return orchestrator.selectGameProfile(id, decision);
   });
   ipcMain.handle(IPC.selectServer, (_event, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Server identifier must be a string.');

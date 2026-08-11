@@ -12,7 +12,7 @@ import type { GameInstall } from './InstallLocator';
 import { canonicalizeProfileIniForComparison } from './IniFixes';
 import type { Log } from './Log';
 
-const PROFILE_INDEX_SCHEMA_VERSION = 2;
+const PROFILE_INDEX_SCHEMA_VERSION = 3;
 const PROFILE_FILE_SCHEMA_VERSION = 1;
 const PROFILE_FILE_PATTERN = /^Tg[A-Za-z0-9]+\.ini$/i;
 const PROFILE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -25,6 +25,7 @@ interface StoredProfileIndex {
   schemaVersion: number;
   enabled: boolean;
   selectedProfileId: string | null;
+  appliedProfileId: string | null;
   profileIds: string[];
 }
 
@@ -121,7 +122,9 @@ function profileSummary(profile: StoredGameProfile): GameProfileSummary {
 function parseIndex(value: unknown): StoredProfileIndex {
   if (
     !isPlainObject(value) ||
-    (value.schemaVersion !== 1 && value.schemaVersion !== PROFILE_INDEX_SCHEMA_VERSION)
+    value.schemaVersion !== 1 &&
+    value.schemaVersion !== 2 &&
+    value.schemaVersion !== PROFILE_INDEX_SCHEMA_VERSION
   ) {
     throw new Error('Unsupported or invalid profile index schema.');
   }
@@ -142,13 +145,28 @@ function parseIndex(value: unknown): StoredProfileIndex {
   if (value.selectedProfileId !== null && !isProfileId(value.selectedProfileId)) {
     throw new Error('Profile index contains an invalid selection.');
   }
+  if (
+    value.schemaVersion === PROFILE_INDEX_SCHEMA_VERSION &&
+    value.appliedProfileId !== null &&
+    !isProfileId(value.appliedProfileId)
+  ) {
+    throw new Error('Profile index contains an invalid applied profile.');
+  }
+  const selectedProfileId =
+    value.selectedProfileId !== null && profileIds.includes(value.selectedProfileId)
+      ? value.selectedProfileId
+      : null;
+  const appliedProfileId =
+    value.schemaVersion === PROFILE_INDEX_SCHEMA_VERSION
+      ? value.appliedProfileId !== null && profileIds.includes(value.appliedProfileId as string)
+        ? (value.appliedProfileId as string)
+        : null
+      : selectedProfileId;
   return {
     schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
     enabled,
-    selectedProfileId:
-      value.selectedProfileId !== null && profileIds.includes(value.selectedProfileId)
-        ? value.selectedProfileId
-        : null,
+    selectedProfileId,
+    appliedProfileId,
     profileIds
   };
 }
@@ -260,6 +278,7 @@ export class GameProfileManager {
     schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
     enabled: DEFAULT_GAME_PROFILES_ENABLED,
     selectedProfileId: null,
+    appliedProfileId: null,
     profileIds: []
   };
   private summaries = new Map<string, GameProfileSummary>();
@@ -336,6 +355,7 @@ export class GameProfileManager {
     const nextIndex: StoredProfileIndex = {
       ...this.index,
       selectedProfileId: id,
+      appliedProfileId: id,
       profileIds: [...this.index.profileIds, id]
     };
     await writeJsonAtomic(this.profilePath(id), profile);
@@ -392,6 +412,7 @@ export class GameProfileManager {
         this.index.selectedProfileId === id
           ? (profileIds[0] ?? null)
           : this.index.selectedProfileId,
+      appliedProfileId: this.index.appliedProfileId === id ? null : this.index.appliedProfileId,
       profileIds
     };
     await writeJsonAtomic(this.indexPath, nextIndex);
@@ -427,9 +448,32 @@ export class GameProfileManager {
     ignoreDxvkRenderer = false
   ): Promise<ProfilePlayPrompt | null> {
     await this.load();
-    if (!this.index.enabled || !this.index.selectedProfileId) return null;
+    if (
+      !this.index.enabled ||
+      !this.index.selectedProfileId ||
+      this.index.selectedProfileId !== this.index.appliedProfileId
+    ) {
+      return null;
+    }
+    return this.inspectProfileChanges(this.index.selectedProfileId, install, ignoreDxvkRenderer);
+  }
 
-    const profile = await this.requireProfile(this.index.selectedProfileId);
+  async inspectAppliedChanges(
+    install: GameInstall,
+    ignoreDxvkRenderer = false
+  ): Promise<ProfilePlayPrompt | null> {
+    await this.load();
+    if (!this.index.enabled || !this.index.appliedProfileId) return null;
+    return this.inspectProfileChanges(this.index.appliedProfileId, install, ignoreDxvkRenderer);
+  }
+
+  private async inspectProfileChanges(
+    profileId: string,
+    install: GameInstall,
+    ignoreDxvkRenderer: boolean
+  ): Promise<ProfilePlayPrompt | null> {
+    const profile = await this.requireProfile(profileId);
+
     const currentManifest = comparisonManifest(
       await this.captureFiles(install),
       ignoreDxvkRenderer
@@ -522,6 +566,16 @@ export class GameProfileManager {
       throw new Error(`Could not apply game profile: ${(error as Error).message}.${suffix}`);
     }
 
+    if (this.index.appliedProfileId !== id) {
+      const nextIndex = { ...this.index, appliedProfileId: id };
+      try {
+        await writeJsonAtomic(this.indexPath, nextIndex);
+      } catch (error) {
+        this.log.warn(`applied profile state could not be saved: ${(error as Error).message}`);
+      }
+      this.index = nextIndex;
+    }
+
     this.log.info(`game profile applied (${profile.files.length} files, ${totalBytes} bytes)`);
     return { ...profileSummary(profile), totalBytes };
   }
@@ -535,6 +589,7 @@ export class GameProfileManager {
       schemaVersion: PROFILE_INDEX_SCHEMA_VERSION,
       enabled: DEFAULT_GAME_PROFILES_ENABLED,
       selectedProfileId: null,
+      appliedProfileId: null,
       profileIds: []
     };
     this.summaries.clear();

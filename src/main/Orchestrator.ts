@@ -11,6 +11,8 @@ import {
   type LauncherUpdateStatus,
   type ProfilePlayDecision,
   type ProfilePlayPrompt,
+  type ProfileSwitchDecision,
+  type ProfileSwitchPrompt,
   type ServerChoice,
   type Settings,
   type UpdateProgress
@@ -1539,10 +1541,43 @@ export class Orchestrator {
     }
   }
 
-  async selectGameProfile(id: string): Promise<void> {
+  async selectGameProfile(
+    id: string,
+    decision?: ProfileSwitchDecision
+  ): Promise<ProfileSwitchPrompt | null> {
     const unavailable = await this.beginProfileAction();
     if (unavailable) throw new Error(unavailable.message);
     try {
+      const snapshot = this.gameProfileManager.getSnapshot();
+      if (snapshot.selectedProfileId === id) return null;
+      const targetIndex = snapshot.profiles.findIndex((profile) => profile.id === id);
+      if (targetIndex < 0) throw new Error('Unknown game profile.');
+      const target = snapshot.profiles[targetIndex];
+      if (this.install && snapshot.enabled) {
+        const settings = this.config.get();
+        const ignoreDxvkRenderer =
+          PLATFORM === 'win32' &&
+          (settings.developer.useDxvk || this.state.dxvk.canRestore);
+        const changes = await this.gameProfileManager.inspectAppliedChanges(
+          this.install,
+          ignoreDxvkRenderer
+        );
+        if (changes) {
+          const prompt: ProfileSwitchPrompt = {
+            ...changes,
+            targetProfileId: target.id,
+            targetProfileNumber: targetIndex + 1
+          };
+          const decisionMatches =
+            decision?.profileId === prompt.profileId &&
+            decision.targetProfileId === prompt.targetProfileId &&
+            decision.comparisonToken === prompt.comparisonToken;
+          if (!decisionMatches) return prompt;
+          if (decision.action === 'save-current') {
+            await this.gameProfileManager.overwrite(prompt.profileId, this.install);
+          }
+        }
+      }
       await this.gameProfileManager.select(id);
       const profile = this.gameProfileManager.getSelectedSummary();
       const enabled = this.gameProfileManager.getSnapshot().enabled;
@@ -1553,6 +1588,7 @@ export class Orchestrator {
             : `Profile ${profile.name} selected. Profiles remain off.`
           : 'Ready.'
       );
+      return null;
     } finally {
       this.busy = false;
       if (this.refreshPending) void this.refresh();

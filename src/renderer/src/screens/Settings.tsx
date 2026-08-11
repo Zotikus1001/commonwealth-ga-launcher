@@ -8,6 +8,8 @@ import {
   type GameProfileSummary,
   type LauncherState,
   type LinuxRuntimeOptions,
+  type ProfileSwitchDecision,
+  type ProfileSwitchPrompt,
   type Settings as SettingsModel
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
@@ -45,6 +47,7 @@ import {
   manualPatchErrorMessage,
   type GameClientDllNoticeTone
 } from './settingsPresentation';
+import { ProfileSwitchDialog } from '../components/ProfileSwitchDialog';
 import styles from './Settings.module.css';
 
 export type SettingsTab =
@@ -1337,6 +1340,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
   const actionInFlight = useRef(false);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [confirmation, setConfirmation] = useState<ProfileConfirmation | null>(null);
+  const [pendingProfileSwitch, setPendingProfileSwitch] = useState<ProfileSwitchPrompt | null>(null);
   const profilesLocked = state.activeGameInstances > 0;
   const launcherBusy =
     action !== null ||
@@ -1429,7 +1433,10 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
     }
   };
 
-  const selectProfile = async (profile: GameProfileSummary): Promise<void> => {
+  const selectProfile = async (
+    profile: GameProfileSummary,
+    decision?: ProfileSwitchDecision
+  ): Promise<void> => {
     if (
       profile.id === state.selectedGameProfileId ||
       controlsDisabled ||
@@ -1441,13 +1448,16 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
     setAction(`select:${profile.id}`);
     setResult(null);
     try {
-      await window.api.selectGameProfile(profile.id);
-      setResult({
-        ok: true,
-        message: state.gameProfilesEnabled
-          ? `Profile ${profile.name} is now selected.`
-          : `Profile ${profile.name} is selected. Profiles remain off.`
-      });
+      const prompt = await window.api.selectGameProfile(profile.id, decision);
+      setPendingProfileSwitch(prompt);
+      if (!prompt) {
+        setResult({
+          ok: true,
+          message: state.gameProfilesEnabled
+            ? `Profile ${profile.name} is now selected.`
+            : `Profile ${profile.name} is selected. Profiles remain off.`
+        });
+      }
     } catch (error) {
       setResult({
         ok: false,
@@ -1751,6 +1761,32 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
         <p className={result.ok ? styles.valid : styles.invalid} role="status">
           {result.message}
         </p>
+      )}
+      {pendingProfileSwitch && (
+        <ProfileSwitchDialog
+          key={`${pendingProfileSwitch.targetProfileId}:${pendingProfileSwitch.comparisonToken}`}
+          prompt={pendingProfileSwitch}
+          onDecision={(switchAction) => {
+            const target = state.gameProfiles.find(
+              (profile) => profile.id === pendingProfileSwitch.targetProfileId
+            );
+            if (!target) {
+              setPendingProfileSwitch(null);
+              setResult({ ok: false, message: 'That game profile is no longer available.' });
+              return;
+            }
+            void selectProfile(target, {
+              action: switchAction,
+              profileId: pendingProfileSwitch.profileId,
+              targetProfileId: pendingProfileSwitch.targetProfileId,
+              comparisonToken: pendingProfileSwitch.comparisonToken
+            });
+          }}
+          onCancel={() => {
+            setPendingProfileSwitch(null);
+            setResult(null);
+          }}
+        />
       )}
     </section>
   );

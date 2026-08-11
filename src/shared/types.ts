@@ -71,6 +71,36 @@ export function isProfilePlayDecision(value: unknown): value is ProfilePlayDecis
   );
 }
 
+export interface ProfileSwitchPrompt extends ProfilePlayPrompt {
+  targetProfileId: string;
+  targetProfileNumber: number;
+}
+
+export type ProfileSwitchAction = 'save-current' | 'switch-without-saving';
+
+export interface ProfileSwitchDecision {
+  action: ProfileSwitchAction;
+  profileId: string;
+  targetProfileId: string;
+  comparisonToken: string;
+}
+
+export function isProfileSwitchDecision(value: unknown): value is ProfileSwitchDecision {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const decision = value as Partial<ProfileSwitchDecision>;
+  const profileIdPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  return (
+    (decision.action === 'save-current' || decision.action === 'switch-without-saving') &&
+    typeof decision.profileId === 'string' &&
+    profileIdPattern.test(decision.profileId) &&
+    typeof decision.targetProfileId === 'string' &&
+    profileIdPattern.test(decision.targetProfileId) &&
+    typeof decision.comparisonToken === 'string' &&
+    /^[0-9a-f]{64}$/.test(decision.comparisonToken)
+  );
+}
+
 export interface PatchSettings {
   gameClientPatch: boolean;
   highFpsMovementStability: boolean;
@@ -347,7 +377,10 @@ export interface LauncherApi {
   renameGameProfile(id: string, name: string): Promise<ActionResult>;
   deleteGameProfile(id: string): Promise<ActionResult>;
   setGameProfilesEnabled(enabled: boolean): Promise<ActionResult>;
-  selectGameProfile(id: string): Promise<void>;
+  selectGameProfile(
+    id: string,
+    decision?: ProfileSwitchDecision
+  ): Promise<ProfileSwitchPrompt | null>;
   selectServer(id: string): Promise<void>;
   checkServer(): Promise<void>;
   refresh(): Promise<void>;

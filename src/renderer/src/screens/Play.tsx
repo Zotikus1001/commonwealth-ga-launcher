@@ -5,9 +5,12 @@ import type {
   LauncherState,
   ProfilePlayAction,
   ProfilePlayDecision,
-  ProfilePlayPrompt
+  ProfilePlayPrompt,
+  ProfileSwitchDecision,
+  ProfileSwitchPrompt
 } from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
+import { ProfileSwitchDialog } from '../components/ProfileSwitchDialog';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -248,6 +251,7 @@ export default function Play({
   const [selectingProfile, setSelectingProfile] = useState(false);
   const profileSelectionInFlight = useRef(false);
   const [profileSelectionError, setProfileSelectionError] = useState<string | null>(null);
+  const [pendingProfileSwitch, setPendingProfileSwitch] = useState<ProfileSwitchPrompt | null>(null);
   const [pendingProfilePlay, setPendingProfilePlay] = useState<PendingProfilePlay | null>(null);
   const [launchRequestPending, setLaunchRequestPending] = useState(false);
   const launchRequestInFlight = useRef(false);
@@ -324,7 +328,10 @@ export default function Play({
     }
   };
 
-  const selectProfile = async (id: string): Promise<void> => {
+  const selectProfile = async (
+    id: string,
+    decision?: ProfileSwitchDecision
+  ): Promise<void> => {
     if (
       profileSelectionDisabled ||
       profileSelectionInFlight.current ||
@@ -336,7 +343,8 @@ export default function Play({
     setSelectingProfile(true);
     setProfileSelectionError(null);
     try {
-      await window.api.selectGameProfile(id);
+      const prompt = await window.api.selectGameProfile(id, decision);
+      setPendingProfileSwitch(prompt);
     } catch (error) {
       setProfileSelectionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -617,6 +625,24 @@ export default function Play({
           onCancel={() => {
             setPendingProfilePlay(null);
             setLaunchRequestError(null);
+          }}
+        />
+      )}
+      {pendingProfileSwitch && (
+        <ProfileSwitchDialog
+          key={`${pendingProfileSwitch.targetProfileId}:${pendingProfileSwitch.comparisonToken}`}
+          prompt={pendingProfileSwitch}
+          onDecision={(action) =>
+            void selectProfile(pendingProfileSwitch.targetProfileId, {
+              action,
+              profileId: pendingProfileSwitch.profileId,
+              targetProfileId: pendingProfileSwitch.targetProfileId,
+              comparisonToken: pendingProfileSwitch.comparisonToken
+            })
+          }
+          onCancel={() => {
+            setPendingProfileSwitch(null);
+            setProfileSelectionError(null);
           }}
         />
       )}

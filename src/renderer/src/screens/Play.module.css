@@ -355,12 +355,17 @@
   50% { opacity: 1; }
 }
 
-.agendaStats {
+.serverResources {
   display: grid;
   gap: 9px;
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid rgba(69, 200, 218, 0.24);
+}
+
+.agendaStats {
+  display: grid;
+  gap: 9px;
 }
 
 .agendaStatsPopulation {
@@ -433,6 +438,22 @@
   transform: translateY(-1px);
 }
 
+.gaCardsButton {
+  border-color: rgba(240, 166, 60, 0.58);
+  border-left-color: var(--amber);
+  background:
+    linear-gradient(105deg, rgba(240, 166, 60, 0.1), transparent 62%),
+    rgba(18, 16, 20, 0.8);
+}
+
+.gaCardsButton:hover:not(:disabled) {
+  border-color: var(--amber);
+  background:
+    linear-gradient(105deg, rgba(240, 166, 60, 0.18), transparent 68%),
+    rgba(25, 21, 23, 0.9);
+  color: var(--text);
+}
+
 .agendaStatsButtonCopy {
   display: flex;
   min-width: 0;
@@ -464,6 +485,10 @@
   font-size: 9px;
   letter-spacing: 0.1em;
   white-space: nowrap;
+}
+
+.gaCardsOpen {
+  color: var(--amber-hi);
 }
 
 .agendaStatsOpenError {
@@ -992,6 +1017,34 @@
   .dlcActivityIndeterminate,
   .profilePlayDialog {
     animation: none;
+  }
+}
+
+@media (max-height: 640px) {
+  .commitList li:nth-child(n+6) {
+    display: none;
+  }
+
+  .serverName {
+    margin-bottom: 12px;
+  }
+
+  .serverRow {
+    margin-bottom: 12px;
+  }
+
+  .serverResources,
+  .agendaStats {
+    gap: 7px;
+  }
+
+  .serverResources {
+    padding-top: 9px;
+  }
+
+  .agendaStatsButton {
+    min-height: 42px;
+    padding-block: 5px;
   }
 }
 

@@ -38,7 +38,7 @@ The launcher updates itself automatically.
 - Easy game setup and one-click launching
 - Optional Steam integration that replaces the Hi-Rez launcher when starting from Steam, enabling
   Steam playtime tracking and the in-game overlay
-- Live server status, player count, server selection, and Agenda Stats
+- Live server status, player count, server selection, Agenda Stats, and GA CARDS access
 - Up to five optional profiles for quickly switching game settings, with change summaries and save protection
 - One-click performance and stability patches
 - An optional Game Client Patch with:

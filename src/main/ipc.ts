@@ -328,6 +328,15 @@ export function registerIpc(
     }
   });
 
+  ipcMain.handle(IPC.openGaCards, async () => {
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.gaCardsUrl);
+      return { ok: true, message: 'GA CARDS opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open GA CARDS: ${(error as Error).message}` };
+    }
+  });
+
   ipcMain.handle(IPC.openSteamStore, async () => {
     try {
       await shell.openExternal(LAUNCHER_CONFIG.steamStoreUrl);

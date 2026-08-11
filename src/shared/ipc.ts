@@ -29,6 +29,7 @@ export const IPC = {
   openDiscord: 'launcher:open-discord',
   openDiscordSupport: 'launcher:open-discord-support',
   openAgendaStats: 'launcher:open-agenda-stats',
+  openGaCards: 'launcher:open-ga-cards',
   openSteamStore: 'launcher:open-steam-store',
   openSteamInstall: 'launcher:open-steam-install',
   getSteamLaunchIntegration: 'launcher:get-steam-launch-integration',

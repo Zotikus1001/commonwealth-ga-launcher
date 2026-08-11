@@ -254,6 +254,8 @@ export default function Play({
   const [discordResult, setDiscordResult] = useState<ActionResult | null>(null);
   const [agendaStatsOpening, setAgendaStatsOpening] = useState(false);
   const [agendaStatsOpenError, setAgendaStatsOpenError] = useState<string | null>(null);
+  const [gaCardsOpening, setGaCardsOpening] = useState(false);
+  const [gaCardsOpenError, setGaCardsOpenError] = useState<string | null>(null);
   const [selectingServer, setSelectingServer] = useState(false);
   const [serverSelectionError, setServerSelectionError] = useState<string | null>(null);
   const [selectingProfile, setSelectingProfile] = useState(false);
@@ -321,6 +323,22 @@ export default function Play({
       );
     } finally {
       setAgendaStatsOpening(false);
+    }
+  };
+
+  const openGaCards = async (): Promise<void> => {
+    if (gaCardsOpening) return;
+    setGaCardsOpening(true);
+    setGaCardsOpenError(null);
+    try {
+      const result = await window.api.openGaCards();
+      if (!result.ok) setGaCardsOpenError(result.message);
+    } catch (error) {
+      setGaCardsOpenError(
+        `Could not open GA CARDS: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setGaCardsOpening(false);
     }
   };
 
@@ -518,38 +536,58 @@ export default function Play({
                     : 'PROBING'}
             </span>
           </div>
-          {showsAgendaStats && (
-            <div className={styles.agendaStats}>
-              <div className={styles.agendaStatsPopulation}>
-                <span className={styles.agendaStatsLabel}>Live population</span>
-                <span
-                  className={`${styles.agendaStatsValue} ${styles.agendaStatsReady}`}
-                  role="status"
-                  aria-live="polite"
+          <div className={styles.serverResources}>
+            {showsAgendaStats && (
+              <div className={styles.agendaStats}>
+                <div className={styles.agendaStatsPopulation}>
+                  <span className={styles.agendaStatsLabel}>Live population</span>
+                  <span
+                    className={`${styles.agendaStatsValue} ${styles.agendaStatsReady}`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span className={styles.agendaStatsSignal} aria-hidden="true" />
+                    <span className={styles.agendaStatsText}>{state.agendaStatsText}</span>
+                  </span>
+                </div>
+                <button
+                  className={styles.agendaStatsButton}
+                  disabled={agendaStatsOpening}
+                  title="View recorded PvP, PvE, mission, and player statistics"
+                  onClick={() => void openAgendaStats()}
                 >
-                  <span className={styles.agendaStatsSignal} aria-hidden="true" />
-                  <span className={styles.agendaStatsText}>{state.agendaStatsText}</span>
-                </span>
+                  <span className={styles.agendaStatsButtonCopy}>
+                    <strong>Agenda Stats</strong>
+                    <small>PvP · PvE · player records</small>
+                  </span>
+                  <span className={styles.agendaStatsOpen}>
+                    {agendaStatsOpening ? 'OPENING…' : 'VIEW ↗'}
+                  </span>
+                </button>
+                {agendaStatsOpenError && (
+                  <p className={styles.agendaStatsOpenError}>{agendaStatsOpenError}</p>
+                )}
               </div>
-              <button
-                className={styles.agendaStatsButton}
-                disabled={agendaStatsOpening}
-                title="View recorded PvP, PvE, mission, and player statistics"
-                onClick={() => void openAgendaStats()}
-              >
-                <span className={styles.agendaStatsButtonCopy}>
-                  <strong>Agenda Stats</strong>
-                  <small>PvP · PvE · player records</small>
-                </span>
-                <span className={styles.agendaStatsOpen}>
-                  {agendaStatsOpening ? 'OPENING…' : 'VIEW ↗'}
-                </span>
-              </button>
-              {agendaStatsOpenError && (
-                <p className={styles.agendaStatsOpenError}>{agendaStatsOpenError}</p>
-              )}
-            </div>
-          )}
+            )}
+            <button
+              className={`${styles.agendaStatsButton} ${styles.gaCardsButton}`}
+              disabled={gaCardsOpening}
+              title="Open the GA CARDS website"
+              aria-label="Open the GA CARDS website"
+              onClick={() => void openGaCards()}
+            >
+              <span className={styles.agendaStatsButtonCopy}>
+                <strong>GA CARDS</strong>
+                <small>Global Agenda card game</small>
+              </span>
+              <span className={`${styles.agendaStatsOpen} ${styles.gaCardsOpen}`}>
+                {gaCardsOpening ? 'OPENING…' : 'VISIT ↗'}
+              </span>
+            </button>
+            {gaCardsOpenError && (
+              <p className={styles.agendaStatsOpenError}>{gaCardsOpenError}</p>
+            )}
+          </div>
         </section>
       </div>
 

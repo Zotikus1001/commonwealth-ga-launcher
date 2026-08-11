@@ -405,6 +405,7 @@ export interface LauncherApi {
   openDiscord(): Promise<ActionResult>;
   openDiscordSupport(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;
+  openGaCards(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;
   getSteamLaunchIntegration(): Promise<SteamLaunchIntegrationStatus>;

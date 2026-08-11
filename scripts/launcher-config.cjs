@@ -8,6 +8,7 @@ const CONFIG_KEYS = new Set([
   'default_server_name',
   'agenda_stats_url',
   'agenda_stats_status_url',
+  'ga_cards_url',
   'discord_invite_url',
   'discord_support_thread_url',
   'steam_store_url',
@@ -307,6 +308,24 @@ function loadLauncherConfig(options = {}) {
   }
   if (agendaStatsUrl.origin !== agendaStatsStatusUrl.origin) {
     throw new Error('agenda_stats_url and agenda_stats_status_url must use the same origin');
+  }
+
+  let gaCardsUrl;
+  try {
+    gaCardsUrl = new URL(raw.ga_cards_url);
+  } catch {
+    throw new Error('ga_cards_url must be a valid URL');
+  }
+  if (
+    gaCardsUrl.protocol !== 'https:' ||
+    gaCardsUrl.hostname !== 'gatcg.net' ||
+    gaCardsUrl.pathname !== '/' ||
+    gaCardsUrl.username ||
+    gaCardsUrl.password ||
+    gaCardsUrl.search ||
+    gaCardsUrl.hash
+  ) {
+    throw new Error('ga_cards_url must use https://gatcg.net/');
   }
 
   let discordUrl;
@@ -672,6 +691,7 @@ function loadLauncherConfig(options = {}) {
     defaultServerName,
     agendaStatsUrl: agendaStatsUrl.toString(),
     agendaStatsStatusUrl: agendaStatsStatusUrl.toString(),
+    gaCardsUrl: gaCardsUrl.toString(),
     discordInviteUrl: raw.discord_invite_url,
     discordSupportThreadUrl: discordSupportThreadUrl.toString(),
     steamStoreUrl: raw.steam_store_url,

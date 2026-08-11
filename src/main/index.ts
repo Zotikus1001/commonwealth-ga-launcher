@@ -150,12 +150,14 @@ if (!app.requestSingleInstanceLock()) {
     const [
       { ConfigStore, defaultSettings },
       { LauncherChangelogStore },
+      { SteamLaunchIntegration },
       { Orchestrator },
       { registerIpc }
     ] =
       await Promise.all([
         import('./services/ConfigStore'),
         import('./services/LauncherChangelogStore'),
+        import('./services/SteamLaunchIntegration'),
         import('./Orchestrator'),
         import('./ipc')
       ]);
@@ -170,6 +172,18 @@ if (!app.requestSingleInstanceLock()) {
       app.getVersion(),
       log
     );
+    const installedLauncherPath = app.isPackaged
+      ? process.platform === 'linux'
+        ? process.env.APPIMAGE?.trim() || process.execPath
+        : process.execPath
+      : null;
+    const steamLaunchIntegration = new SteamLaunchIntegration(
+      app.getPath('userData'),
+      LAUNCHER_CONFIG.steamAppId,
+      installedLauncherPath,
+      process.platform,
+      log
+    );
     await Promise.all([config.load(), launcherChangelog.load()]);
 
     const defaultServerHosts = await resolveDefaultServerHosts(log);
@@ -180,7 +194,14 @@ if (!app.requestSingleInstanceLock()) {
       defaultServerHosts.fallback,
       launcherUpdater
     );
-    registerIpc(() => mainWindow, orchestrator, config, log, launcherChangelog);
+    registerIpc(
+      () => mainWindow,
+      orchestrator,
+      config,
+      log,
+      launcherChangelog,
+      steamLaunchIntegration
+    );
 
     Menu.setApplicationMenu(null);
 

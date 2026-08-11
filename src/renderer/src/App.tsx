@@ -61,6 +61,66 @@ function launcherUpdateLabel(state: LauncherState): {
   }
 }
 
+function SteamLaunchOfferDialog({
+  onDecision
+}: {
+  onDecision: (setUp: boolean) => Promise<void>;
+}): JSX.Element {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    dialog.setAttribute('closedby', 'none');
+    if (!dialog.open) dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  const decide = async (setUp: boolean): Promise<void> => {
+    if (saving) return;
+    setSaving(true);
+    await onDecision(setUp);
+  };
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.steamOfferDialog}
+      aria-labelledby="steam-offer-title"
+      aria-describedby="steam-offer-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        void decide(false);
+      }}
+    >
+      <div className={styles.steamOfferReadout}>Steam // Launcher Link</div>
+      <div className={styles.steamOfferBody}>
+        <span className={styles.steamOfferMark} aria-hidden="true">
+          S
+        </span>
+        <div>
+          <h2 id="steam-offer-title">Launch Global Agenda through Steam?</h2>
+          <p id="steam-offer-description">
+            Keep Steam playtime tracking and use the Steam overlay while launching through
+            Commonwealth GA Launcher.
+          </p>
+        </div>
+      </div>
+      <div className={styles.steamOfferActions}>
+        <button type="button" disabled={saving} onClick={() => void decide(true)} autoFocus>
+          {saving ? 'Opening…' : 'Set Up'}
+        </button>
+        <button type="button" disabled={saving} onClick={() => void decide(false)}>
+          No Thanks
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
@@ -68,6 +128,7 @@ export default function App(): JSX.Element {
   const [changelogOpenMode, setChangelogOpenMode] = useState<
     'automatic' | 'manual' | null
   >(null);
+  const [steamLaunchOfferOpen, setSteamLaunchOfferOpen] = useState(false);
   const settingsRef = useRef<SettingsHandle>(null);
 
   const openSettings = (tab: SettingsTab): void => {
@@ -101,8 +162,21 @@ export default function App(): JSX.Element {
   const launcherUpdate = launcherUpdateLabel(state);
   const updateDownloading = state.launcherUpdate === 'downloading';
   const closeChangelog = (): void => {
+    const wasAutomatic = changelogOpenMode === 'automatic';
     setChangelogOpenMode(null);
     void window.api.acknowledgeLauncherChangelog().catch(() => {});
+    if (wasAutomatic) {
+      void window.api
+        .shouldOfferSteamLaunchIntegration()
+        .then((shouldOffer) => setSteamLaunchOfferOpen(shouldOffer))
+        .catch(() => {});
+    }
+  };
+
+  const respondToSteamLaunchOffer = async (setUp: boolean): Promise<void> => {
+    await window.api.acknowledgeSteamLaunchIntegrationOffer().catch(() => {});
+    setSteamLaunchOfferOpen(false);
+    if (setUp) openSettings('launcher');
   };
 
   return (
@@ -173,6 +247,9 @@ export default function App(): JSX.Element {
           enforceReadDelay={changelogOpenMode === 'automatic'}
           onClose={closeChangelog}
         />
+      )}
+      {steamLaunchOfferOpen && (
+        <SteamLaunchOfferDialog onDecision={respondToSteamLaunchOffer} />
       )}
     </div>
   );

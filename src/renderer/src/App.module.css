@@ -137,3 +137,97 @@
   padding: 0;
   border: 0;
 }
+
+.steamOfferDialog {
+  width: min(560px, calc(100vw - 48px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line-bright);
+  border-left: 3px solid #66c0f4;
+  background:
+    linear-gradient(135deg, rgba(27, 73, 101, 0.15), transparent 48%),
+    #0d121a;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72), 0 0 42px rgba(102, 192, 244, 0.08);
+  color: var(--text);
+}
+
+.steamOfferDialog::backdrop {
+  background: rgba(3, 5, 9, 0.82);
+  backdrop-filter: blur(3px);
+}
+
+.steamOfferReadout {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(102, 192, 244, 0.26);
+  background: rgba(27, 73, 101, 0.1);
+  color: #8bd6ff;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.steamOfferBody {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 25px 24px 23px;
+}
+
+.steamOfferMark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid rgba(102, 192, 244, 0.52);
+  background: rgba(27, 73, 101, 0.24);
+  color: #8bd6ff;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.steamOfferBody h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.035em;
+}
+
+.steamOfferBody p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.steamOfferActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--line);
+  background: rgba(6, 9, 14, 0.52);
+}
+
+.steamOfferActions button:first-child:not(:disabled) {
+  border-color: rgba(102, 192, 244, 0.68);
+  background: rgba(27, 73, 101, 0.3);
+  color: #a9e2ff;
+}
+
+@media (max-width: 620px) {
+  .steamOfferBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .steamOfferMark {
+    display: none;
+  }
+
+  .steamOfferActions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

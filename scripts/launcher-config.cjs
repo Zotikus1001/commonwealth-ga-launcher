@@ -676,6 +676,7 @@ function loadLauncherConfig(options = {}) {
     discordSupportThreadUrl: discordSupportThreadUrl.toString(),
     steamStoreUrl: raw.steam_store_url,
     steamInstallUrl: raw.steam_install_url,
+    steamAppId: storeAppId,
     stableBranch: raw.stable_branch,
     updateRepositories,
     serverHistoryRepository: parseRepository(

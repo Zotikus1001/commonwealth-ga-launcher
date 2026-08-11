@@ -10,7 +10,8 @@ import {
   type LinuxRuntimeOptions,
   type ProfileSwitchDecision,
   type ProfileSwitchPrompt,
-  type Settings as SettingsModel
+  type Settings as SettingsModel,
+  type SteamLaunchIntegrationStatus
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
@@ -122,6 +123,10 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [prefixResult, setPrefixResult] = useState<ActionResult | null>(null);
   const [steamAction, setSteamAction] = useState<'store' | 'install' | null>(null);
   const [steamResult, setSteamResult] = useState<ActionResult | null>(null);
+  const [steamLaunchStatus, setSteamLaunchStatus] =
+    useState<SteamLaunchIntegrationStatus | null>(null);
+  const [steamLaunchSaving, setSteamLaunchSaving] = useState(false);
+  const [steamLaunchError, setSteamLaunchError] = useState<string | null>(null);
   const [devUnlocked, setDevUnlocked] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
@@ -135,6 +140,8 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const [localClientDllSaving, setLocalClientDllSaving] = useState(false);
   const [localClientDllError, setLocalClientDllError] = useState<string | null>(null);
   const aboutClicks = useRef<number[]>([]);
+  const steamLaunchCardRef = useRef<HTMLDivElement>(null);
+  const steamLaunchFocusHandled = useRef(false);
 
   const isLinux = window.api.platform === 'linux';
 
@@ -154,6 +161,43 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     if (tab !== 'patches') return;
     void window.api.refreshPatchStatuses();
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'launcher') return;
+    let cancelled = false;
+    setSteamLaunchStatus(null);
+    setSteamLaunchError(null);
+    void window.api
+      .getSteamLaunchIntegration()
+      .then((status) => {
+        if (!cancelled) setSteamLaunchStatus(status);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setSteamLaunchStatus({
+            state: 'unavailable',
+            detail: message,
+            steamRunning: null,
+            canApply: false,
+            canRemove: false
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  useEffect(() => {
+    if (initialTab !== 'launcher' || !draft || steamLaunchFocusHandled.current) return;
+    steamLaunchFocusHandled.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      steamLaunchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      steamLaunchCardRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draft, initialTab]);
 
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
@@ -313,6 +357,19 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
       });
     } finally {
       setSteamAction(null);
+    }
+  };
+
+  const configureSteamLaunch = async (enabled: boolean): Promise<void> => {
+    if (steamLaunchSaving) return;
+    setSteamLaunchSaving(true);
+    setSteamLaunchError(null);
+    try {
+      setSteamLaunchStatus(await window.api.setSteamLaunchIntegration(enabled));
+    } catch (error) {
+      setSteamLaunchError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSteamLaunchSaving(false);
     }
   };
 
@@ -1199,6 +1256,91 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                   ))}
                 </select>
                 {uiScaleError && <span className={styles.invalid}>{uiScaleError}</span>}
+              </div>
+            </div>
+
+            <div className="panel-title">Steam Launch</div>
+            <div
+              ref={steamLaunchCardRef}
+              tabIndex={-1}
+              className={`${styles.steamLaunchSetting} ${
+                steamLaunchStatus?.state === 'enabled'
+                  ? styles.steamLaunchEnabled
+                  : steamLaunchStatus?.state === 'needs-repair' ||
+                      steamLaunchStatus?.state === 'conflict'
+                    ? styles.steamLaunchWarning
+                    : ''
+              }`}
+            >
+              <div className={styles.steamLaunchCopy}>
+                <span className={styles.steamLaunchEyebrow}>Steam // Global Agenda</span>
+                <span className={styles.featureName}>Launch Through Commonwealth GA Launcher</span>
+                <span className={styles.featureDetail}>
+                  Keeps Steam playtime tracking and the Steam overlay available when starting the
+                  game from Steam.
+                </span>
+                <span
+                  className={`${styles.steamLaunchState} ${
+                    steamLaunchStatus?.state === 'enabled'
+                      ? styles.steamLaunchStateEnabled
+                      : steamLaunchStatus?.state === 'needs-repair' ||
+                          steamLaunchStatus?.state === 'conflict'
+                        ? styles.steamLaunchStateWarning
+                        : ''
+                  }`}
+                  role="status"
+                >
+                  {steamLaunchStatus?.state === 'enabled' && (
+                    <span className={styles.steamLaunchCheck} aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                  <strong>
+                    {!steamLaunchStatus
+                      ? 'Checking'
+                      : steamLaunchStatus.state === 'enabled'
+                        ? 'Applied'
+                        : steamLaunchStatus.state === 'needs-repair'
+                          ? 'Update needed'
+                          : steamLaunchStatus.state === 'conflict'
+                            ? 'Changed'
+                            : steamLaunchStatus.state === 'disabled'
+                              ? 'Not applied'
+                              : 'Unavailable'}
+                  </strong>
+                  <span>{steamLaunchStatus?.detail ?? 'Checking Steam launch options…'}</span>
+                </span>
+                {steamLaunchError && (
+                  <span className={styles.steamLaunchError} role="alert">
+                    {steamLaunchError}
+                  </span>
+                )}
+              </div>
+              <div className={styles.steamLaunchActions}>
+                {steamLaunchStatus?.canApply && (
+                  <button
+                    type="button"
+                    className={styles.steamLaunchApply}
+                    disabled={steamLaunchSaving}
+                    onClick={() => void configureSteamLaunch(true)}
+                  >
+                    {steamLaunchSaving
+                      ? 'Working…'
+                      : steamLaunchStatus.state === 'needs-repair'
+                        ? 'Update'
+                        : 'Apply'}
+                  </button>
+                )}
+                {steamLaunchStatus?.canRemove && (
+                  <button
+                    type="button"
+                    className={styles.steamLaunchRemove}
+                    disabled={steamLaunchSaving}
+                    onClick={() => void configureSteamLaunch(false)}
+                  >
+                    {steamLaunchSaving ? 'Working…' : 'Remove'}
+                  </button>
+                )}
               </div>
             </div>
 

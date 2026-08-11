@@ -12,6 +12,7 @@ import type { Orchestrator } from './Orchestrator';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
 import type { LauncherChangelogStore } from './services/LauncherChangelogStore';
+import type { SteamLaunchIntegration } from './services/SteamLaunchIntegration';
 import { createWinePrefix, listLinuxRuntimeOptions } from './services/LinuxRuntime';
 import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
@@ -22,7 +23,8 @@ export function registerIpc(
   orchestrator: Orchestrator,
   config: ConfigStore,
   log: Log,
-  launcherChangelog: LauncherChangelogStore
+  launcherChangelog: LauncherChangelogStore,
+  steamLaunchIntegration: SteamLaunchIntegration
 ): void {
   let resetInProgress = false;
 
@@ -332,6 +334,18 @@ export function registerIpc(
       return { ok: false, message: `Could not open Steam: ${(error as Error).message}` };
     }
   });
+
+  ipcMain.handle(IPC.getSteamLaunchIntegration, () => steamLaunchIntegration.inspect());
+  ipcMain.handle(IPC.setSteamLaunchIntegration, (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('Invalid Steam launch integration state.');
+    return steamLaunchIntegration.setEnabled(enabled);
+  });
+  ipcMain.handle(IPC.shouldOfferSteamLaunchIntegration, () =>
+    steamLaunchIntegration.shouldOfferOnboarding()
+  );
+  ipcMain.handle(IPC.acknowledgeSteamLaunchIntegrationOffer, () =>
+    steamLaunchIntegration.acknowledgeOnboarding()
+  );
 
   ipcMain.handle(IPC.openLauncherLogs, async () => {
     const error = await shell.openPath(log.logDir);

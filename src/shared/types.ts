@@ -349,6 +349,14 @@ export interface ActionResult {
   message: string;
 }
 
+export interface SteamLaunchIntegrationStatus {
+  state: 'enabled' | 'disabled' | 'needs-repair' | 'conflict' | 'unavailable';
+  detail: string;
+  steamRunning: boolean | null;
+  canApply: boolean;
+  canRemove: boolean;
+}
+
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (infer U)[]
     ? U[]
@@ -394,6 +402,10 @@ export interface LauncherApi {
   openAgendaStats(): Promise<ActionResult>;
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;
+  getSteamLaunchIntegration(): Promise<SteamLaunchIntegrationStatus>;
+  setSteamLaunchIntegration(enabled: boolean): Promise<SteamLaunchIntegrationStatus>;
+  shouldOfferSteamLaunchIntegration(): Promise<boolean>;
+  acknowledgeSteamLaunchIntegrationOffer(): Promise<void>;
   openLauncherLogs(): Promise<ActionResult>;
   copyChatCommand(command: string): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;

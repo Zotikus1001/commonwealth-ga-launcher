@@ -52,6 +52,13 @@ const api: LauncherApi = {
   openAgendaStats: () => ipcRenderer.invoke(IPC.openAgendaStats),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),
   openSteamInstall: () => ipcRenderer.invoke(IPC.openSteamInstall),
+  getSteamLaunchIntegration: () => ipcRenderer.invoke(IPC.getSteamLaunchIntegration),
+  setSteamLaunchIntegration: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC.setSteamLaunchIntegration, enabled),
+  shouldOfferSteamLaunchIntegration: () =>
+    ipcRenderer.invoke(IPC.shouldOfferSteamLaunchIntegration),
+  acknowledgeSteamLaunchIntegrationOffer: () =>
+    ipcRenderer.invoke(IPC.acknowledgeSteamLaunchIntegrationOffer),
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
   copyChatCommand: (command: string) => ipcRenderer.invoke(IPC.copyChatCommand, command),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),

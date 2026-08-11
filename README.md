@@ -36,6 +36,7 @@ The launcher updates itself automatically.
 
 - Automatic updates and an in-launcher changelog
 - Easy game setup and one-click launching
+- Optional Steam launch integration for Steam playtime tracking and the in-game overlay
 - Live server status, player count, server selection, and Agenda Stats
 - Up to five optional profiles for quickly switching game settings, with change summaries and save protection
 - One-click performance and stability patches

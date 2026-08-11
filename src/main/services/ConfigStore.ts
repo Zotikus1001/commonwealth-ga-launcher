@@ -29,9 +29,13 @@ import {
 } from '@shared/linuxCommandTemplate';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
 import { DEFAULT_DXVK_VERSION, isDxvkVersion } from '@shared/dxvkVersions';
+import {
+  DEFAULT_DEVELOPER_CONSOLE_KEY,
+  isDeveloperConsoleKey
+} from '@shared/developerConsoleKeys';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 20;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 21;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -336,6 +340,21 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 20: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 21,
+          developer: {
+            ...developer,
+            gameConsoleEnabled: false,
+            gameConsoleKey: DEFAULT_DEVELOPER_CONSOLE_KEY
+          }
+        };
+        version = 21;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -397,6 +416,8 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       resolutionHeight: 720,
       useDxvk: false,
       dxvkVersion: DEFAULT_DXVK_VERSION,
+      gameConsoleEnabled: false,
+      gameConsoleKey: DEFAULT_DEVELOPER_CONSOLE_KEY,
       useLocalClientDll: false
     }
   };
@@ -510,6 +531,13 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
       : fallback.resolutionHeight,
     useDxvk: false,
     dxvkVersion: isDxvkVersion(value.dxvkVersion) ? value.dxvkVersion : fallback.dxvkVersion,
+    gameConsoleEnabled:
+      typeof value.gameConsoleEnabled === 'boolean'
+        ? value.gameConsoleEnabled
+        : fallback.gameConsoleEnabled,
+    gameConsoleKey: isDeveloperConsoleKey(value.gameConsoleKey)
+      ? value.gameConsoleKey
+      : fallback.gameConsoleKey,
     useLocalClientDll:
       enabled && typeof value.useLocalClientDll === 'boolean'
         ? value.useLocalClientDll
@@ -524,6 +552,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     typeof value.windowed !== 'boolean' ||
     typeof value.useDxvk !== 'boolean' ||
     !isDxvkVersion(value.dxvkVersion) ||
+    typeof value.gameConsoleEnabled !== 'boolean' ||
+    !isDeveloperConsoleKey(value.gameConsoleKey) ||
     typeof value.useLocalClientDll !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
@@ -539,6 +569,8 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     resolutionHeight: value.resolutionHeight as number,
     useDxvk: false,
     dxvkVersion: value.dxvkVersion,
+    gameConsoleEnabled: value.gameConsoleEnabled,
+    gameConsoleKey: value.gameConsoleKey,
     useLocalClientDll: value.enabled && value.useLocalClientDll
   };
 }

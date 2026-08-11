@@ -19,6 +19,10 @@ import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
 import { DXVK_VERSION_OPTIONS } from '@shared/dxvkVersions';
 import {
+  DEVELOPER_CONSOLE_KEY_OPTIONS,
+  isDeveloperConsoleKey
+} from '@shared/developerConsoleKeys';
+import {
   GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE,
   LINUX_COMMAND_PLACEHOLDER,
   MAX_LINUX_COMMAND_TEMPLATE_LENGTH,
@@ -2316,6 +2320,60 @@ function DeveloperTab({
                 />
               </label>
             </div>
+          </div>
+
+          <div className="panel-title">In-Game Console</div>
+          <div
+            className={`${styles.developerConsoleSetting} ${
+              settings.developer.gameConsoleEnabled
+                ? styles.developerConsoleEnabled
+                : ''
+            }`}
+          >
+            <div className={styles.featureToggle}>
+              <input
+                id="developer-game-console"
+                type="checkbox"
+                checked={settings.developer.gameConsoleEnabled}
+                onChange={(event) =>
+                  edit((current) => ({
+                    ...current,
+                    developer: {
+                      ...current.developer,
+                      gameConsoleEnabled: event.target.checked
+                    }
+                  }))
+                }
+              />
+              <label htmlFor="developer-game-console">
+                <span className={styles.featureName}>Enable In-Game Console</span>
+                <span className={styles.featureDetail}>
+                  Enables the full UE3 developer console in-game.
+                </span>
+              </label>
+            </div>
+            <label className={styles.developerConsoleKey} htmlFor="developer-game-console-key">
+              <span>Console Key</span>
+              <select
+                id="developer-game-console-key"
+                value={settings.developer.gameConsoleKey}
+                disabled={!settings.developer.gameConsoleEnabled}
+                onChange={(event) => {
+                  const gameConsoleKey = event.target.value;
+                  if (!isDeveloperConsoleKey(gameConsoleKey)) return;
+                  edit((current) => ({
+                    ...current,
+                    developer: { ...current.developer, gameConsoleKey }
+                  }));
+                }}
+              >
+                {DEVELOPER_CONSOLE_KEY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {state.platform === 'win32' && (

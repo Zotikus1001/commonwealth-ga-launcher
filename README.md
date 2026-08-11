@@ -75,6 +75,8 @@ Developer Mode can validate and use a local 32-bit x86 client patch DLL. Local D
 developer-owned while Local DLL Override is enabled. With the override off, pressing Play restores
 the saved managed-patch choice by replacing or removing the client DLL.
 
+Developer Mode can also enable the full in-game console with a selectable activation key.
+
 The former experimental DXVK/Vulkan option remains visible but disabled. Existing
 launcher-managed DXVK installations are removed automatically.
 

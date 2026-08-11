@@ -2,6 +2,7 @@
 // Electron or Node here (this file is compiled into all three targets).
 import type { LoginMap } from './loginMaps';
 import type { DxvkVersion } from './dxvkVersions';
+import type { DeveloperConsoleKey } from './developerConsoleKeys';
 import type { UiScale } from './uiScale';
 
 export interface CustomServer {
@@ -231,6 +232,8 @@ export interface Settings {
     useDxvk: boolean;
     /** Pinned DXVK build used only to recover old managed installations. */
     dxvkVersion: DxvkVersion;
+    gameConsoleEnabled: boolean;
+    gameConsoleKey: DeveloperConsoleKey;
     /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
     useLocalClientDll: boolean;
   };

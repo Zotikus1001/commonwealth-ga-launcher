@@ -967,6 +967,10 @@ export class Orchestrator {
         settings.fpsLimit.value,
         gpuMemory.texturePoolMb,
         settings.patches,
+        {
+          enabled: settings.developer.enabled && settings.developer.gameConsoleEnabled,
+          key: settings.developer.gameConsoleKey
+        },
         this.log,
         managedIniBackupDirectory(app.getPath('userData'), this.install)
       );

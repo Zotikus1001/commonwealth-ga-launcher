@@ -3,6 +3,10 @@ import { access, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from '
 import { basename, join } from 'path';
 import { isLoginMap, LOGIN_MAP_OPTIONS, type LoginMap } from '@shared/loginMaps';
 import { isFpsLimit } from '@shared/fpsLimit';
+import {
+  isDeveloperConsoleKey,
+  type DeveloperConsoleKey
+} from '@shared/developerConsoleKeys';
 import type {
   ClientPatchId,
   ClientPatchStatus,
@@ -51,6 +55,7 @@ type IniPatchOptions =
   | { kind: 'dxvk-renderer-restore'; snapshot: DxvkRendererSnapshot }
   | { kind: 'fps-smoothing'; enabled: boolean }
   | { kind: 'fps-limit'; limit: number }
+  | { kind: 'developer-console'; key: DeveloperConsoleKey }
   | { kind: 'adaptive-performance'; texturePoolMb: number };
 
 interface IniFileEdit {
@@ -63,6 +68,16 @@ interface IniPatchTarget {
   sectionName: string;
   keys: readonly string[];
 }
+
+export interface DeveloperConsoleSettings {
+  enabled: boolean;
+  key: DeveloperConsoleKey;
+}
+
+const DEVELOPER_CONSOLE_TARGET: IniPatchTarget = {
+  sectionName: 'Engine.Console',
+  keys: ['ConsoleKey']
+};
 
 interface IniSectionBlock {
   name: string | null;
@@ -940,7 +955,9 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
       sectionName: 'tgclient.tguiprimaryhud',
       keys: ['m_bSuppressOverhealing']
     }
-  ]
+  ],
+  'tginput.ini': [{ sectionName: 'engine.console', keys: ['ConsoleKey'] }],
+  'defaultinput.ini': [{ sectionName: 'engine.console', keys: ['ConsoleKey'] }]
 };
 
 /** Removes only launcher-owned INI directives before comparing saved and current profiles. */
@@ -1475,6 +1492,9 @@ async function patchIniFile(
   if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
     apply(patchGameEngineFrameRate(patchedText, options));
   }
+  if (options.kind === 'developer-console') {
+    apply(patchSectionValue(patchedText, 'Engine.Console', 'ConsoleKey', options.key));
+  }
   if (options.kind === 'adaptive-performance') {
     apply(patchSectionValue(patchedText, 'TextureStreaming', 'PoolSize', String(options.texturePoolMb)));
     apply(
@@ -1524,6 +1544,12 @@ async function patchIniFile(
     }
     if (options.kind === 'fps-smoothing' || options.kind === 'fps-limit') {
       verifyGameEngineFrameRate(text, fileName, options);
+    }
+    if (options.kind === 'developer-console') {
+      const values = effectiveSectionValues(text, 'Engine.Console', 'ConsoleKey');
+      if (values.length === 0 || values.some((value) => value !== options.key)) {
+        throw new Error(`${fileName} did not retain ConsoleKey=${options.key}`);
+      }
     }
     if (options.kind === 'adaptive-performance') {
       verifyAdaptivePerformance(text, fileName, options.texturePoolMb);
@@ -1748,6 +1774,103 @@ export async function removeClientPatch(
   return result;
 }
 
+async function restoreDeveloperConsoleFile(
+  path: string,
+  backupDirectory: string
+): Promise<boolean> {
+  const backupPath = join(backupDirectory, `${basename(path)}.commonwealth-backup`);
+  let backupText: string;
+  try {
+    backupText = await readFile(backupPath, { encoding: 'utf-8' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+
+  const currentText = await readFile(path, { encoding: 'utf-8' });
+  if (targetSignature(splitIniSectionBlocks(currentText), DEVELOPER_CONSOLE_TARGET).length === 0) {
+    return false;
+  }
+  const restoredText = restorePatchTarget(
+    currentText,
+    backupText,
+    DEVELOPER_CONSOLE_TARGET
+  );
+  if (restoredText === currentText) return false;
+
+  const temporaryPath = `${path}.commonwealth-console-restore-${process.pid}`;
+  const mode = (await stat(path)).mode;
+  try {
+    await writeFile(temporaryPath, restoredText, { encoding: 'utf-8', mode });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => {});
+    throw error;
+  }
+
+  const verified = await readFile(path, { encoding: 'utf-8' });
+  if (restorePatchTarget(verified, backupText, DEVELOPER_CONSOLE_TARGET) !== verified) {
+    throw new Error(`${basename(path)} did not retain the restored console setting.`);
+  }
+  return true;
+}
+
+export async function ensureDeveloperConsole(
+  install: GameInstall,
+  settings: DeveloperConsoleSettings,
+  log: Log,
+  backupDirectory: string
+): Promise<IniRepairResult> {
+  if (typeof settings.enabled !== 'boolean' || !isDeveloperConsoleKey(settings.key)) {
+    throw new Error('Invalid Developer console setting');
+  }
+  const files = [
+    { path: join(install.configDir, 'TgInput.ini'), required: settings.enabled },
+    { path: join(install.configDir, 'DefaultInput.ini'), required: false }
+  ];
+  if (settings.enabled) {
+    const result = await applyIniEdits(
+      files.map(({ path, required }) => ({
+        path,
+        required,
+        options: { kind: 'developer-console', key: settings.key } as const
+      })),
+      log,
+      backupDirectory
+    );
+    log.info(
+      `Developer console: ConsoleKey=${settings.key} verified in ` +
+        `${result.checkedFiles.length} file(s); ${result.changedFiles.length} changed`
+    );
+    return result;
+  }
+
+  const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
+  for (const { path, required } of files) {
+    try {
+      await access(path, constants.R_OK | constants.W_OK);
+    } catch (error) {
+      if (!required && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? new Error(MISSING_GAME_CONFIG_MESSAGE)
+        : new Error(`Cannot update ${basename(path)}: ${(error as Error).message}`);
+    }
+    try {
+      result.checkedFiles.push(path);
+      if (await restoreDeveloperConsoleFile(path, backupDirectory)) {
+        result.changedFiles.push(path);
+      }
+    } catch (error) {
+      throw new Error(`Cannot disable console in ${basename(path)}: ${(error as Error).message}`);
+    }
+  }
+  log.info(
+    `Developer console: disabled in ${result.checkedFiles.length} file(s); ` +
+      `${result.changedFiles.length} changed`
+  );
+  return result;
+}
+
 async function ensureLoginMap(
   install: GameInstall,
   loginMap: LoginMap,
@@ -1922,6 +2045,7 @@ export async function ensureClientConfiguration(
   fpsLimit: number,
   texturePoolMb: number,
   patches: PatchSettings,
+  developerConsole: DeveloperConsoleSettings,
   log: Log,
   backupDirectory: string
 ): Promise<IniRepairResult> {
@@ -1951,7 +2075,18 @@ export async function ensureClientConfiguration(
     log,
     backupDirectory
   );
-  const result = mergeRepairResults([networkResult, performanceResult, gameSettingsResult]);
+  const developerConsoleResult = await ensureDeveloperConsole(
+    install,
+    developerConsole,
+    log,
+    backupDirectory
+  );
+  const result = mergeRepairResults([
+    networkResult,
+    performanceResult,
+    gameSettingsResult,
+    developerConsoleResult
+  ]);
 
   log.info(
     `client ini: ${CLIENT_NET_SPEED}/${CLIENT_NET_SPEED}, ${loginMap}, and overhealing ` +

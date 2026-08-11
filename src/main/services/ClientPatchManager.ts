@@ -26,14 +26,20 @@ const DLL_NAME = 'dinput8.dll';
 const LEGACY_MARKER_NAME = '.commonwealth-client-patches.json';
 const STATE_FILE_NAME = 'client-patches.json';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
-const ASSET_NAME = 'Commonwealth-GA-Client-Patches-x86.dll';
 const MAX_PAYLOAD_BYTES = 50 * 1024 * 1024;
 const IMAGE_FILE_MACHINE_I386 = 0x014c;
 const IMAGE_FILE_DLL = 0x2000;
 const PE32_MAGIC = 0x010b;
 
-export interface ClientPatchDefinition {
-  enabled: boolean;
+export interface ClientPatchSource {
+  repository: {
+    owner: string;
+    repo: string;
+  };
+  assetName: string;
+}
+
+interface ClientPatchDefinition {
   revision: string;
   url: string;
   size: number;
@@ -115,27 +121,18 @@ function parseMarker(value: unknown): ClientPatchMarker {
   return marker as ClientPatchMarker;
 }
 
-function releaseRepository(definition: ClientPatchDefinition): {
-  owner: string;
-  repo: string;
-} {
-  const url = new URL(definition.url);
-  const [, owner, repo] = url.pathname.split('/');
-  if (!owner || !repo) throw new Error('client patch release URL has no repository');
-  return { owner, repo };
-}
-
 function parseReleaseDefinition(
   value: GitHubRelease,
-  owner: string,
-  repo: string
+  source: ClientPatchSource
 ): ClientPatchDefinition | null {
   if (value.draft === true || typeof value.id !== 'number' || !Number.isInteger(value.id)) return null;
   if (typeof value.published_at !== 'string' || !Number.isFinite(Date.parse(value.published_at))) {
     return null;
   }
   if (!Array.isArray(value.assets)) return null;
-  const asset = (value.assets as GitHubReleaseAsset[]).find((candidate) => candidate.name === ASSET_NAME);
+  const asset = (value.assets as GitHubReleaseAsset[]).find(
+    (candidate) => candidate.name === source.assetName
+  );
   if (
     !asset ||
     typeof asset.size !== 'number' ||
@@ -153,8 +150,10 @@ function parseReleaseDefinition(
   if (
     url.protocol !== 'https:' ||
     url.hostname !== 'github.com' ||
-    !url.pathname.startsWith(`/${owner}/${repo}/releases/download/`) ||
-    !url.pathname.endsWith(`/${ASSET_NAME}`) ||
+    !url.pathname.startsWith(
+      `/${source.repository.owner}/${source.repository.repo}/releases/download/`
+    ) ||
+    !url.pathname.endsWith(`/${source.assetName}`) ||
     url.search ||
     url.hash ||
     url.username ||
@@ -163,7 +162,6 @@ function parseReleaseDefinition(
     return null;
   }
   return {
-    enabled: true,
     revision: String(value.id),
     url: url.toString(),
     size: asset.size,
@@ -265,7 +263,7 @@ export class ClientPatchManager {
   constructor(
     private readonly userDataDir: string,
     private readonly log: Log,
-    private readonly definition: ClientPatchDefinition = LAUNCHER_CONFIG.clientPatch,
+    private readonly source: ClientPatchSource = LAUNCHER_CONFIG.clientPatch,
     private readonly downloader: Downloader = downloadToFile,
     private readonly releaseFetcher: ReleaseFetcher = (url) => fetchJson<unknown>(url)
   ) {}
@@ -503,23 +501,7 @@ export class ClientPatchManager {
   private async validManagedMarker(install: GameInstall): Promise<ClientPatchMarker | null> {
     const marker = await this.readMarker(install);
     const target = await this.resolveTarget(install);
-    if (!marker) {
-      if (!this.definition.enabled || !(await this.validPayload(target, this.definition))) {
-        return null;
-      }
-      const claimed: ClientPatchMarker = {
-        schemaVersion: 1,
-        owner: 'commonwealth-ga-launcher',
-        phase: 'active',
-        revision: this.definition.revision,
-        publishedAt: this.definition.publishedAt,
-        installedSha256: this.definition.sha256,
-        pendingSha256: null
-      };
-      await this.writeMarker(install, claimed);
-      await this.cleanupTransactionFiles(install);
-      return claimed;
-    }
+    if (!marker) return null;
     if (!(await isFile(target))) return null;
     const hash = await sha256File(target);
     if (marker.phase === 'installing' && hash === marker.pendingSha256) {
@@ -545,13 +527,13 @@ export class ClientPatchManager {
   }
 
   private async latestReleaseDefinition(): Promise<ClientPatchDefinition> {
-    const { owner, repo } = releaseRepository(this.definition);
+    const { owner, repo } = this.source.repository;
     const response = await this.releaseFetcher(
       `https://api.github.com/repos/${owner}/${repo}/releases?per_page=20`
     );
     if (!Array.isArray(response)) throw new Error('GitHub returned invalid client patch release data');
     const candidates = response
-      .map((release) => parseReleaseDefinition(release as GitHubRelease, owner, repo))
+      .map((release) => parseReleaseDefinition(release as GitHubRelease, this.source))
       .filter((release): release is ClientPatchDefinition => release !== null)
       .sort(
         (left, right) =>
@@ -629,16 +611,10 @@ export class ClientPatchManager {
         (hash): hash is string => typeof hash === 'string'
       )
     );
-    const knownPinnedRelease =
-      this.definition.enabled &&
-      SHA256_PATTERN.test(this.definition.sha256) &&
-      targetHash === this.definition.sha256;
-    if (markerHashes.has(targetHash) || knownPinnedRelease) {
+    if (markerHashes.has(targetHash)) {
       return {
         status: 'managed',
-        detail: marker
-          ? 'Launcher-managed Game Client Patch release detected.'
-          : 'Known Game Client Patch release detected; ownership will be restored on Apply or Play.',
+        detail: 'Launcher-managed Game Client Patch release detected.',
         hasManagedMarker: marker !== null
       };
     }
@@ -675,7 +651,6 @@ export class ClientPatchManager {
     platform: NodeJS.Platform,
     onProgress: (progress: DownloadProgress) => void = () => {}
   ): Promise<NodeJS.ProcessEnv> {
-    if (!this.definition.enabled) return {};
     let installedBeforeCheck: ClientPatchMarker | null = null;
     try {
       installedBeforeCheck = await this.validManagedMarker(install);
@@ -685,7 +660,7 @@ export class ClientPatchManager {
       );
     }
     if (!installedBeforeCheck) await this.removeAnyInstalledDll(install);
-    let desired = this.definition;
+    let desired: ClientPatchDefinition;
     try {
       desired = await this.latestReleaseDefinition();
       this.log.info(
@@ -693,10 +668,11 @@ export class ClientPatchManager {
       );
     } catch (error) {
       this.log.warn(`client patch update check failed: ${(error as Error).message}`);
-      if (installedBeforeCheck?.publishedAt) {
+      if (installedBeforeCheck) {
         await this.cleanupTransactionFiles(install);
         return this.launchEnvironment(platform);
       }
+      throw error;
     }
 
     if (await this.installedFileMatches(install, desired)) {

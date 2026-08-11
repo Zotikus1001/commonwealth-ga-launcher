@@ -28,10 +28,8 @@ const CONFIG_KEYS = new Set([
   'dxvk_alternative_archive_url',
   'dxvk_alternative_archive_sha256',
   'dxvk_alternative_d3d9_sha256',
-  'client_patch_revision',
-  'client_patch_url',
-  'client_patch_size',
-  'client_patch_sha256',
+  'client_patch_repository',
+  'client_patch_asset_name',
   'surfside_atoll_dlc_url',
   'surfside_atoll_dlc_archive_size',
   'surfside_atoll_dlc_archive_sha256',
@@ -420,39 +418,13 @@ function loadLauncherConfig(options = {}) {
     throw new Error('DXVK versions must be unique');
   }
 
-  const clientPatchSize = Number.parseInt(raw.client_patch_size, 10);
-  const clientPatchDisabled = raw.client_patch_revision === '0';
-  let clientPatchUrl = null;
-  if (clientPatchDisabled) {
-    if (raw.client_patch_url || raw.client_patch_sha256 || raw.client_patch_size !== '0') {
-      throw new Error('disabled client patches require an empty URL/hash and size 0');
-    }
-  } else {
-    if (!/^[1-9]\d*$/.test(raw.client_patch_revision)) {
-      throw new Error('client_patch_revision must be 0 or a positive integer');
-    }
-    try {
-      clientPatchUrl = new URL(raw.client_patch_url);
-    } catch {
-      throw new Error('client_patch_url must be a valid GitHub release asset URL');
-    }
-    if (
-      clientPatchUrl.protocol !== 'https:' ||
-      clientPatchUrl.hostname !== 'github.com' ||
-      !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases\/download\/[^/]+\/Commonwealth-GA-Client-Patches-x86\.dll$/.test(
-        clientPatchUrl.pathname
-      ) ||
-      clientPatchUrl.search ||
-      clientPatchUrl.hash ||
-      clientPatchUrl.username ||
-      clientPatchUrl.password
-    ) {
-      throw new Error('client_patch_url must point to a Commonwealth client-patch GitHub release asset');
-    }
-    if (!/^\d+$/.test(raw.client_patch_size) || clientPatchSize < 1 || clientPatchSize > 50 * 1024 * 1024) {
-      throw new Error('client_patch_size must be between 1 byte and 50 MiB');
-    }
-    assertSha256(raw.client_patch_sha256, 'client_patch_sha256');
+  const clientPatchRepository = parseRepository(
+    raw.client_patch_repository,
+    'client_patch_repository'
+  );
+  assertFileName(raw.client_patch_asset_name, '.dll', 'client_patch_asset_name');
+  if (!/^[A-Za-z0-9_.-]+\.dll$/.test(raw.client_patch_asset_name)) {
+    throw new Error('client_patch_asset_name contains unsupported characters');
   }
 
   const surfsideAtollDlcUrl = parseDirectZipUrl(
@@ -712,12 +684,8 @@ function loadLauncherConfig(options = {}) {
       versions: [dxvk, alternativeDxvk]
     },
     clientPatch: {
-      enabled: !clientPatchDisabled,
-      revision: raw.client_patch_revision,
-      url: clientPatchUrl?.toString() ?? '',
-      size: clientPatchSize,
-      sha256: raw.client_patch_sha256,
-      publishedAt: null
+      repository: clientPatchRepository,
+      assetName: raw.client_patch_asset_name
     },
     dlcs: [
       {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ActionResult,
   DlcStatus,
@@ -14,6 +14,7 @@ import {
   ProfileChangeSummary,
   ProfileSwitchDialog
 } from '../components/ProfileSwitchDialog';
+import ToastQueue, { type ToastNotification } from '../components/ToastQueue';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -412,9 +413,58 @@ export default function Play({
     state.phase === 'init' ||
     state.phase === 'checking' ||
     button.label === 'CHECKING SERVER';
+  const toastNotifications = useMemo(() => {
+    const notifications: ToastNotification[] = [];
+    if (profileSelectionError) {
+      notifications.push({
+        source: 'profile-selection',
+        message: profileSelectionError,
+        tone: 'error'
+      });
+    }
+    if (serverSelectionError) {
+      notifications.push({
+        source: 'server-selection',
+        message: serverSelectionError,
+        tone: 'error'
+      });
+    }
+    if (launchRequestError) {
+      notifications.push({
+        source: 'launch-request',
+        message: launchRequestError,
+        tone: 'error'
+      });
+    }
+    if (!activeDlcOperation && !launchCheckPending && state.statusLine !== 'Ready.') {
+      notifications.push({
+        source: 'launcher-status',
+        message: state.statusLine,
+        tone: state.phase === 'error' ? 'error' : 'status'
+      });
+    }
+    if (state.phase === 'error' && state.errorDetails) {
+      notifications.push({
+        source: 'launcher-error',
+        message: state.errorDetails,
+        tone: 'error'
+      });
+    }
+    return notifications;
+  }, [
+    activeDlcOperation,
+    launchCheckPending,
+    launchRequestError,
+    profileSelectionError,
+    serverSelectionError,
+    state.errorDetails,
+    state.phase,
+    state.statusLine
+  ]);
 
   return (
     <div className={styles.play}>
+      <ToastQueue notifications={toastNotifications} />
       <div className={`rise ${styles.utilityGrid}`} style={{ animationDelay: '40ms' }}>
         <div className={styles.discordWrap}>
           <button
@@ -648,15 +698,6 @@ export default function Play({
             )}
           </div>
         </div>
-        {profileSelectionError && <p className={styles.errorDetails}>{profileSelectionError}</p>}
-        {serverSelectionError && <p className={styles.errorDetails}>{serverSelectionError}</p>}
-        {launchRequestError && <p className={styles.errorDetails}>{launchRequestError}</p>}
-        {!activeDlcOperation && !launchCheckPending && state.statusLine !== 'Ready.' && (
-          <p className={styles.statusLine}>{state.statusLine}</p>
-        )}
-        {state.phase === 'error' && state.errorDetails && (
-          <p className={`mono ${styles.errorDetails}`}>{state.errorDetails}</p>
-        )}
       </div>
       {pendingProfilePlay && (
         <ProfilePlayDialog

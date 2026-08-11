@@ -776,23 +776,6 @@
   }
 }
 
-.statusLine {
-  min-height: 17px;
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 12px;
-  text-align: center;
-}
-
-.errorDetails {
-  max-width: 640px;
-  margin: 0;
-  color: var(--red);
-  font-size: 11px;
-  text-align: center;
-  user-select: text;
-}
-
 .profilePlayDialog {
   width: min(610px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);

@@ -36,6 +36,7 @@ The launcher updates itself automatically.
 
 - Automatic updates and an in-launcher changelog
 - Easy game setup and one-click launching
+- 130% interface scaling by default, adjustable from Launcher settings
 - Optional Steam integration that replaces the Hi-Rez launcher when starting from Steam, enabling
   Steam playtime tracking and the in-game overlay
 - Live server status, player count, server selection, Agenda Stats, and GA CARDS access

@@ -1344,26 +1344,6 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </div>
             </div>
 
-            <div className="panel-title">After Game Launch</div>
-            <div className={styles.featureToggle}>
-              <input
-                id="close-after-launch"
-                type="checkbox"
-                checked={draft.launch.closeAfterLaunch}
-                onChange={(event) =>
-                  edit((current) => ({
-                    ...current,
-                    launch: { ...current.launch, closeAfterLaunch: event.target.checked }
-                  }))
-                }
-              />
-              <label htmlFor="close-after-launch">
-                <span className={styles.featureName}>Automatically Close Launcher After Launching Game</span>
-                <span className={styles.featureDetail}>
-                  Closes the launcher five seconds after it starts the game.
-                </span>
-              </label>
-            </div>
           </section>
         )}
 
@@ -2282,6 +2262,27 @@ function DeveloperTab({
 
       {settings.developer.enabled && (
         <>
+          <div className="panel-title">After Game Launch</div>
+          <div className={styles.featureToggle}>
+            <input
+              id="developer-keep-launcher-open"
+              type="checkbox"
+              checked={!settings.launch.closeAfterLaunch}
+              onChange={(event) =>
+                edit((current) => ({
+                  ...current,
+                  launch: { ...current.launch, closeAfterLaunch: !event.target.checked }
+                }))
+              }
+            />
+            <label htmlFor="developer-keep-launcher-open">
+              <span className={styles.featureName}>Keep Launcher Open</span>
+              <span className={styles.featureDetail}>
+                Keeps the launcher open after starting the game.
+              </span>
+            </label>
+          </div>
+
           <div className="panel-title">Dev Launch Display</div>
           <div className={styles.developerDisplayGrid}>
             <div className={styles.featureToggle}>

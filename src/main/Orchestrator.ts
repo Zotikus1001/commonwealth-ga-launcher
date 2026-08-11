@@ -696,9 +696,9 @@ export class Orchestrator {
   }
 
   private shouldAutoClose(settings: Settings): boolean {
+    if (!settings.developer.enabled) return true;
     return (
       settings.launch.closeAfterLaunch &&
-      !settings.developer.enabled &&
       !(PLATFORM === 'linux' && settings.linux.wineDebug)
     );
   }

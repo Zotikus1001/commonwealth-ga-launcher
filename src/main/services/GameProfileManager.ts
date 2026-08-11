@@ -20,6 +20,15 @@ const MAX_PROFILE_FILES = 32;
 const MAX_PROFILE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_PROFILE_TOTAL_BYTES = 16 * 1024 * 1024;
 const MAX_STORED_PROFILE_BYTES = Math.ceil((MAX_PROFILE_TOTAL_BYTES * 4) / 3) + 1024 * 1024;
+const PROFILE_CHANGE_CATEGORIES = [
+  'Graphics, display, audio, or engine settings',
+  'Controls or key bindings',
+  'Interface or HUD settings',
+  'Gameplay settings',
+  'Other game settings'
+] as const;
+
+type ProfileChangeCategory = (typeof PROFILE_CHANGE_CATEGORIES)[number];
 
 interface StoredProfileIndex {
   schemaVersion: number;
@@ -62,6 +71,11 @@ interface RestoreTarget {
   originalMode: number | null;
 }
 
+interface ProfileComparisonEntry {
+  name: string;
+  sha256: string;
+}
+
 function sha256(contents: Buffer): string {
   return createHash('sha256').update(contents).digest('hex');
 }
@@ -69,10 +83,7 @@ function sha256(contents: Buffer): string {
 function comparisonManifest(
   files: readonly StoredProfileFile[],
   ignoreDxvkRenderer: boolean
-): Array<{
-  name: string;
-  sha256: string;
-}> {
+): ProfileComparisonEntry[] {
   return files
     .map((file) => {
       const contents = decodeBase64(file.contents)!;
@@ -84,6 +95,39 @@ function comparisonManifest(
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function profileChangeCategory(fileName: string): ProfileChangeCategory {
+  switch (fileName.toLowerCase()) {
+    case 'tgengine.ini':
+      return PROFILE_CHANGE_CATEGORIES[0];
+    case 'tginput.ini':
+      return PROFILE_CHANGE_CATEGORIES[1];
+    case 'tgui.ini':
+      return PROFILE_CHANGE_CATEGORIES[2];
+    case 'tggame.ini':
+      return PROFILE_CHANGE_CATEGORIES[3];
+    default:
+      return PROFILE_CHANGE_CATEGORIES[4];
+  }
+}
+
+function profileChangeSummary(
+  currentManifest: readonly ProfileComparisonEntry[],
+  savedManifest: readonly ProfileComparisonEntry[]
+): string[] {
+  const currentHashes = new Map(currentManifest.map((file) => [file.name, file.sha256]));
+  const savedHashes = new Map(savedManifest.map((file) => [file.name, file.sha256]));
+  const changedNames = new Set([...currentHashes.keys(), ...savedHashes.keys()]);
+  const categories = new Set<ProfileChangeCategory>();
+
+  for (const name of changedNames) {
+    if (currentHashes.get(name) !== savedHashes.get(name)) {
+      categories.add(profileChangeCategory(name));
+    }
+  }
+
+  return PROFILE_CHANGE_CATEGORIES.filter((category) => categories.has(category));
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -497,7 +541,8 @@ export class GameProfileManager {
       profileId: profile.id,
       profileName: profile.name,
       profileNumber: this.index.profileIds.indexOf(profile.id) + 1,
-      comparisonToken
+      comparisonToken,
+      changeSummary: profileChangeSummary(currentManifest, savedManifest)
     };
   }
 

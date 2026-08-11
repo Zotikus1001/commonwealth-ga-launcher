@@ -37,7 +37,7 @@ The launcher updates itself automatically.
 - Automatic updates and an in-launcher changelog
 - Easy game setup and one-click launching
 - Live server status, player count, server selection, and Agenda Stats
-- Up to five optional profiles for quickly switching game settings without losing unsaved changes
+- Up to five optional profiles for quickly switching game settings, with change summaries and save protection
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions

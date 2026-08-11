@@ -47,6 +47,7 @@ export interface ProfilePlayPrompt {
   profileName: string;
   profileNumber: number;
   comparisonToken: string;
+  changeSummary: string[];
 }
 
 export type ProfilePlayAction = 'save-current' | 'use-saved';

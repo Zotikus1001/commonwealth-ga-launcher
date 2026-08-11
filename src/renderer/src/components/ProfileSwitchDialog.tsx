@@ -2,6 +2,19 @@ import { useEffect, useRef } from 'react';
 import type { ProfileSwitchAction, ProfileSwitchPrompt } from '@shared/types';
 import styles from '../screens/Play.module.css';
 
+export function ProfileChangeSummary({ items }: { items: readonly string[] }): JSX.Element {
+  return (
+    <div className={styles.profileChangeSummary} aria-label="Changed settings summary">
+      <strong>What changed</strong>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ProfileSwitchDialog({
   prompt,
   onDecision,
@@ -54,6 +67,7 @@ export function ProfileSwitchDialog({
           </p>
         </div>
       </div>
+      <ProfileChangeSummary items={prompt.changeSummary} />
       <div className={styles.profilePlayActions}>
         <button
           type="button"

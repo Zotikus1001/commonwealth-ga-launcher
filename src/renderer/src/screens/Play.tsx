@@ -10,7 +10,10 @@ import type {
   ProfileSwitchPrompt
 } from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
-import { ProfileSwitchDialog } from '../components/ProfileSwitchDialog';
+import {
+  ProfileChangeSummary,
+  ProfileSwitchDialog
+} from '../components/ProfileSwitchDialog';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -120,6 +123,7 @@ export function ProfilePlayDialog({
           </p>
         </div>
       </div>
+      <ProfileChangeSummary items={prompt.changeSummary} />
       <p id="profile-play-consequence" className={styles.profilePlayConsequence}>
         <span aria-hidden="true">!</span>
         <span>

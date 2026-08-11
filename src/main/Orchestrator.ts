@@ -637,6 +637,29 @@ export class Orchestrator {
       return;
     }
 
+    let dxvk = unavailableDxvkState(PLATFORM, settings.developer.dxvkVersion);
+    if (PLATFORM === 'win32') {
+      try {
+        dxvk = await this.dxvkManager.restore(install, settings.developer.dxvkVersion);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log.error(`automatic DXVK/Vulkan removal failed: ${message}`);
+        try {
+          dxvk = {
+            ...(await this.dxvkManager.inspect(install, settings.developer.dxvkVersion)),
+            status: 'error',
+            detail: `Could not remove the retired DXVK/Vulkan files: ${message}`
+          };
+        } catch {
+          dxvk = {
+            ...dxvk,
+            status: 'error',
+            detail: `Could not remove the retired DXVK/Vulkan files: ${message}`
+          };
+        }
+      }
+    }
+
     const dlcPreparationErrors = new Map<DlcId, string>();
     if (
       !this.dlcsPreparedGameExePath ||
@@ -653,13 +676,10 @@ export class Orchestrator {
       }
       this.dlcsPreparedGameExePath = install.exePath;
     }
-    const [clientPatches, gameIniSettings, gameClientDll, dxvk, inspectedDlcs] = await Promise.all([
+    const [clientPatches, gameIniSettings, gameClientDll, inspectedDlcs] = await Promise.all([
       inspectClientPatches(install),
       inspectGameIniSettings(install),
       this.inspectGameClientDll(install),
-      PLATFORM === 'win32'
-        ? this.dxvkManager.inspect(install, settings.developer.dxvkVersion)
-        : Promise.resolve(unavailableDxvkState(PLATFORM, settings.developer.dxvkVersion)),
       this.dlcManager.inspectAll(install)
     ]);
     let dlcs = inspectedDlcs;
@@ -841,8 +861,7 @@ export class Orchestrator {
       const gameAlreadyRunning =
         this.activeGameProcesses.size > 0 || this.state.activeGameInstances > 0;
       const ignoreDxvkRenderer =
-        PLATFORM === 'win32' &&
-        (settings.developer.useDxvk || this.state.dxvk.canRestore);
+        PLATFORM === 'win32' && this.state.dxvk.canRestore;
       const decisionMatches = (prompt: ProfilePlayPrompt): boolean =>
         profileDecision?.profileId === prompt.profileId &&
         profileDecision.comparisonToken === prompt.comparisonToken;
@@ -1008,33 +1027,27 @@ export class Orchestrator {
         return null;
       }
 
-      let useDxvk = false;
       if (PLATFORM === 'win32') {
-        useDxvk = settings.developer.useDxvk;
         const dxvkVersion = settings.developer.dxvkVersion;
         this.patch({
           dxvk: {
             ...this.state.dxvk,
             status: 'preparing',
-            detail: useDxvk
-              ? `Preparing DXVK/Vulkan ${dxvkVersion} for launch…`
-              : 'Restoring the previous Direct3D configuration…'
+            detail: 'Checking for retired DXVK/Vulkan files…'
           },
-          statusLine: useDxvk
-            ? `Preparing DXVK/Vulkan ${dxvkVersion}…`
-            : 'Checking native graphics configuration…'
+          statusLine: 'Checking native graphics configuration…'
         });
         const dxvk = await this.dxvkManager.prepareForLaunch(
           this.install,
-          useDxvk,
+          false,
           dxvkVersion,
-          ({ transferred, total, version }) => {
+          ({ transferred, total }) => {
             const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
             this.patch({
               statusLine:
                 percent >= 0
-                  ? `Downloading DXVK/Vulkan ${version}… ${percent}%`
-                  : `Downloading DXVK/Vulkan ${version}…`
+                  ? `Recovering previous graphics files… ${percent}%`
+                  : 'Recovering previous graphics files…'
             });
           }
         );
@@ -1052,7 +1065,6 @@ export class Orchestrator {
         statusLine:
           `Launching ${selection.name}` +
           (developerLaunch ? ' with developer settings' : '') +
-          (useDxvk ? `${developerLaunch ? ' and' : ' with'} DXVK/Vulkan` : '') +
           '…'
       });
       const child = this.gameLauncher.launch(
@@ -1062,10 +1074,7 @@ export class Orchestrator {
         PLATFORM,
         developerLaunch,
         this.linuxRuntime,
-        {
-          ...clientPatchEnvironment,
-          ...(useDxvk ? this.dxvkManager.launchEnvironment() : {})
-        }
+        clientPatchEnvironment
       );
       await this.trackGameProcess(child);
       this.scheduleAutoCloseAfterLaunch();
@@ -1226,6 +1235,9 @@ export class Orchestrator {
   }
 
   private async configureDxvkVulkan(enabled: boolean): Promise<ActionResult> {
+    if (enabled) {
+      return { ok: false, message: 'DXVK/Vulkan is disabled in this launcher version.' };
+    }
     if (PLATFORM !== 'win32') {
       return { ok: false, message: 'DXVK/Vulkan is currently available only on Windows.' };
     }
@@ -1251,12 +1263,12 @@ export class Orchestrator {
         install,
         enabled,
         dxvkVersion,
-        ({ transferred, total, version }) => {
+        ({ transferred, total }) => {
           const percent = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : -1;
           const detail =
             percent >= 0
-              ? `Downloading DXVK/Vulkan ${version}… ${percent}%`
-              : `Downloading DXVK/Vulkan ${version}…`;
+              ? `Recovering previous graphics files… ${percent}%`
+              : 'Recovering previous graphics files…';
           this.patch({
             dxvk: { ...this.state.dxvk, status: 'preparing', detail },
             statusLine: detail
@@ -1554,10 +1566,8 @@ export class Orchestrator {
       if (targetIndex < 0) throw new Error('Unknown game profile.');
       const target = snapshot.profiles[targetIndex];
       if (this.install && snapshot.enabled) {
-        const settings = this.config.get();
         const ignoreDxvkRenderer =
-          PLATFORM === 'win32' &&
-          (settings.developer.useDxvk || this.state.dxvk.canRestore);
+          PLATFORM === 'win32' && this.state.dxvk.canRestore;
         const changes = await this.gameProfileManager.inspectAppliedChanges(
           this.install,
           ignoreDxvkRenderer

@@ -227,9 +227,9 @@ export interface Settings {
     windowed: boolean;
     resolutionWidth: number;
     resolutionHeight: number;
-    /** Experimental Windows option configured in Dev but applied to every launch mode. */
+    /** Retired Windows option retained only for settings migration and recovery state. */
     useDxvk: boolean;
-    /** Pinned official DXVK build used by the Windows Vulkan option. */
+    /** Pinned DXVK build used only to recover old managed installations. */
     dxvkVersion: DxvkVersion;
     /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
     useLocalClientDll: boolean;

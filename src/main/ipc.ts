@@ -63,6 +63,16 @@ export function registerIpc(
   };
 
   ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
+    if (
+      typeof patch === 'object' &&
+      patch !== null &&
+      typeof patch.developer === 'object' &&
+      patch.developer !== null &&
+      !Array.isArray(patch.developer) &&
+      patch.developer.useDxvk === true
+    ) {
+      throw new Error('DXVK/Vulkan is disabled in this launcher version.');
+    }
     const previous = config.get();
     const updated = await config.update(patch);
     getWindow()?.webContents.setZoomFactor(updated.uiScale);

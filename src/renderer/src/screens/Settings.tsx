@@ -17,7 +17,7 @@ import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
-import { DXVK_VERSION_OPTIONS, isDxvkVersion } from '@shared/dxvkVersions';
+import { DXVK_VERSION_OPTIONS } from '@shared/dxvkVersions';
 import {
   GAMESCOPE_COMMAND_TEMPLATE_EXAMPLE,
   LINUX_COMMAND_PLACEHOLDER,
@@ -2080,32 +2080,23 @@ function ServersTab({
 
 function DxvkVulkanPanel({
   state,
-  settings,
-  edit
+  settings
 }: {
   state: LauncherState;
   settings: SettingsModel;
-  edit: (fn: (settings: SettingsModel) => SettingsModel) => void;
 }): JSX.Element {
   const rendererLabel =
     state.dxvk.rendererSetting === 'directx-10'
-      ? 'DirectX 10 — Switches Automatically'
+      ? 'DirectX 10'
       : state.dxvk.rendererSetting === 'directx-9'
         ? 'DirectX 9'
-        : 'Not Detected — Will Configure';
-  const detail =
-    state.dxvk.rendererSetting === 'directx-10' &&
-    state.dxvk.status !== 'needs-restore' &&
-    state.dxvk.status !== 'error'
-      ? 'DirectX 10 is temporarily disabled while DXVK/Vulkan is enabled and restored when disabled.'
-      : state.dxvk.rendererSetting === 'unknown' && state.dxvk.status !== 'error'
-        ? 'The launcher preserves the current renderer state before configuring DXVK/Vulkan.'
-        : state.dxvk.detail;
+        : 'Not Detected';
+  const detail = state.dxvk.detail;
   const statusLabel: Record<LauncherState['dxvk']['status'], string> = {
     unsupported: 'Windows Only',
-    native: 'Native Direct3D',
-    preparing: 'Preparing DXVK/Vulkan',
-    active: `DXVK/Vulkan ${state.dxvk.version} Active`,
+    native: 'Disabled',
+    preparing: 'Removing DXVK/Vulkan',
+    active: 'Removal Pending',
     external: 'Existing Graphics Wrapper',
     'needs-restore': 'Recovery Required',
     error: 'Inspection Failed'
@@ -2116,31 +2107,26 @@ function DxvkVulkanPanel({
       <div className="panel-title">Graphics Renderer</div>
       <div
         className={`${styles.dxvkPanel} ${
-          state.dxvk.status === 'needs-restore' || state.dxvk.status === 'error'
+          state.dxvk.status === 'active' ||
+          state.dxvk.status === 'needs-restore' ||
+          state.dxvk.status === 'error'
             ? styles.dxvkProblem
-            : state.dxvk.status === 'active'
-              ? styles.dxvkActive
-              : ''
+            : ''
         }`}
       >
         <div className={styles.featureToggle}>
           <input
             id="developer-dxvk-vulkan"
             type="checkbox"
-            checked={settings.developer.useDxvk}
-            onChange={(event) =>
-              edit((current) => ({
-                ...current,
-                developer: { ...current.developer, useDxvk: event.target.checked }
-              }))
-            }
+            checked={false}
+            disabled
+            readOnly
           />
           <label htmlFor="developer-dxvk-vulkan">
-            <span className={styles.featureName}>Enable Experimental DXVK/Vulkan</span>
+            <span className={styles.featureName}>DXVK/Vulkan Disabled</span>
             <span className={styles.featureDetail}>
-              Uses Vulkan for all game launches. Depending on hardware and drivers, it may improve
-              performance by roughly 10–40%, reduce CPU overhead and stuttering, and improve
-              stability.
+              This experimental feature is no longer available. Existing launcher-managed files
+              are removed automatically.
             </span>
           </label>
         </div>
@@ -2150,17 +2136,7 @@ function DxvkVulkanPanel({
             <select
               id="developer-dxvk-version"
               value={settings.developer.dxvkVersion}
-              onChange={(event) => {
-                const dxvkVersion = event.target.value;
-                if (!isDxvkVersion(dxvkVersion)) return;
-                edit((current) => ({
-                  ...current,
-                  developer: {
-                    ...current.developer,
-                    dxvkVersion
-                  }
-                }));
-              }}
+              disabled
             >
               {DXVK_VERSION_OPTIONS.map((version) => (
                 <option key={version} value={version}>
@@ -2179,11 +2155,6 @@ function DxvkVulkanPanel({
           </div>
         </div>
         <p className={styles.dxvkDetail}>{detail}</p>
-        <p className={styles.dxvkDriverTip}>
-          <strong>Driver Tip</strong>
-          If the game does not launch correctly with DXVK/Vulkan enabled, update your GPU drivers
-          and try again.
-        </p>
       </div>
     </>
   );
@@ -2348,7 +2319,7 @@ function DeveloperTab({
           </div>
 
           {state.platform === 'win32' && (
-            <DxvkVulkanPanel state={state} settings={settings} edit={edit} />
+            <DxvkVulkanPanel state={state} settings={settings} />
           )}
 
           <div className="panel-title">Local Client Patch Testing</div>

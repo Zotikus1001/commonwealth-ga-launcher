@@ -535,13 +535,6 @@
   background: transparent;
 }
 
-.dxvkActive {
-  border-left-color: var(--green);
-  background:
-    linear-gradient(90deg, rgba(76, 201, 143, 0.08), transparent 52%),
-    rgba(15, 19, 28, 0.58);
-}
-
 .dxvkProblem {
   border-left-color: var(--amber);
   background:
@@ -598,25 +591,6 @@
   color: var(--text-faint);
   font-size: 11px;
   line-height: 1.45;
-}
-
-.dxvkDriverTip {
-  margin: 9px 0 0;
-  padding-top: 9px;
-  border-top: 1px solid rgba(240, 166, 60, 0.2);
-  color: var(--text-faint);
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.dxvkDriverTip strong {
-  margin-right: 7px;
-  color: var(--amber-hi);
-  font-family: var(--font-display);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .profileSection {

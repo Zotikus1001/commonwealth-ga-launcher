@@ -31,7 +31,7 @@ import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
 import { DEFAULT_DXVK_VERSION, isDxvkVersion } from '@shared/dxvkVersions';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 19;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 20;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -322,6 +322,20 @@ export function migrateStoredSettings(
         migrated = true;
         break;
       }
+      case 19: {
+        const developer = isPlainObject(settings.developer) ? settings.developer : {};
+        settings = {
+          ...settings,
+          schemaVersion: 20,
+          developer: {
+            ...developer,
+            useDxvk: false
+          }
+        };
+        version = 20;
+        migrated = true;
+        break;
+      }
       default:
         throw new UnsupportedSettingsVersionError(`No migration from settings schema ${version}`);
     }
@@ -494,7 +508,7 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
     resolutionHeight: isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)
       ? (value.resolutionHeight as number)
       : fallback.resolutionHeight,
-    useDxvk: typeof value.useDxvk === 'boolean' ? value.useDxvk : fallback.useDxvk,
+    useDxvk: false,
     dxvkVersion: isDxvkVersion(value.dxvkVersion) ? value.dxvkVersion : fallback.dxvkVersion,
     useLocalClientDll:
       enabled && typeof value.useLocalClientDll === 'boolean'
@@ -514,6 +528,7 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   ) {
     throw new Error('Developer mode state is invalid.');
   }
+  if (value.useDxvk) throw new Error('DXVK/Vulkan is disabled in this launcher version.');
   if (!isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)) {
     throw new Error('Developer launch resolution is invalid.');
   }
@@ -522,7 +537,7 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     windowed: value.windowed,
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
-    useDxvk: value.useDxvk,
+    useDxvk: false,
     dxvkVersion: value.dxvkVersion,
     useLocalClientDll: value.enabled && value.useLocalClientDll
   };

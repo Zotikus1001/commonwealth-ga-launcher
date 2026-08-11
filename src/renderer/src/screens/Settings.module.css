@@ -1383,6 +1383,14 @@
   line-height: 1.45;
 }
 
+.patchIntro strong,
+.patchDescription strong,
+.patchFixCopy small strong {
+  color: var(--text-dim);
+  font-size: inherit;
+  font-weight: 600;
+}
+
 .patchList {
   display: flex;
   flex-direction: column;

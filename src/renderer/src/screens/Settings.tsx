@@ -100,18 +100,24 @@ function steamLaunchErrorMessage(error: unknown): string {
   return message.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '');
 }
 
-const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: string }> = {
+const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: JSX.Element }> = {
   'high-fps-movement-stability': {
     title: 'High-FPS Movement Stability',
-    description:
-      'Fixes teleporting and harsh position corrections caused by running the game at high frame rates. ' +
-      'Limiting FPS to your monitor refresh rate is still recommended to avoid other potential issues.'
+    description: (
+      <>
+        Fixes <strong>teleporting and harsh position corrections</strong> caused by high frame
+        rates. Limiting FPS to your monitor refresh rate is <strong>still recommended</strong>.
+      </>
+    )
   },
   'adaptive-client-performance': {
     title: 'Client Performance Stability',
-    description:
-      'Reduces avoidable loading and frame-time stutters in busy scenes by tuning texture streaming, ' +
-      'shader work, audio capacity, and unused network statistics.'
+    description: (
+      <>
+        Reduces avoidable <strong>loading and frame-time stutters</strong> in busy scenes by tuning
+        texture streaming, shader work, audio capacity, and unused network statistics.
+      </>
+    )
   }
 };
 
@@ -2543,9 +2549,9 @@ function PatchesTab({
   return (
     <section className={styles.section}>
       <div className="panel-title">Game Patches</div>
-      <p className={styles.hint}>
-        All patches are enabled by default. Apply or remove each one independently to compare the
-        game with and without it; your choice is kept for future launches.
+      <p className={`${styles.hint} ${styles.patchIntro}`}>
+        All patches are <strong>enabled by default</strong>. Apply or remove each one independently
+        to compare the game with and without it; your choice is kept for future launches.
       </p>
       <div className={styles.patchList}>
         <article className={`${styles.patchCard} ${gameClientPatchTone}`}>
@@ -2569,8 +2575,9 @@ function PatchesTab({
           <div className={styles.patchBody}>
             <div className={styles.patchTitle}>Game Client Patch</div>
             <p className={styles.patchDescription}>
-              Installs and owns the verified release DLL, then checks for updates on Play. Local
-              DLLs remain untouched only while Local DLL Override is enabled.
+              Installs and owns the <strong>verified release DLL</strong>, then checks for updates
+              on Play. Local DLLs remain untouched only while{' '}
+              <strong>Local DLL Override</strong> is enabled.
             </p>
             <GameClientDllStatusPanel
               dll={state.gameClientDll}
@@ -2588,7 +2595,9 @@ function PatchesTab({
                   </span>
                   <span className={styles.patchFixCopy}>
                     <strong>Smoother scope transitions</strong>
-                    <small>Fixes client stutters when scoping in or out.</small>
+                    <small>
+                      Fixes <strong>client stutters</strong> when scoping in or out.
+                    </small>
                   </span>
                 </li>
               </ul>
@@ -2604,8 +2613,10 @@ function PatchesTab({
                     01
                   </span>
                   <span className={styles.patchFixCopy}>
-                    <strong>In-game FOV slider</strong>
-                    <small>Adds an FOV slider to the in-game Video settings.</small>
+                    <strong>In-Game FOV Slider</strong>
+                    <small>
+                      Adds an <strong>FOV Slider</strong> to the in-game Video settings.
+                    </small>
                   </span>
                 </li>
                 <li>
@@ -2615,8 +2626,10 @@ function PatchesTab({
                   <span className={styles.patchFixCopy}>
                     <strong>Combat Text Scaling Slider</strong>
                     <small>
-                      Scales damage and healing numbers, crosshair HP and Power, warnings, and the
-                      triangles above enemy players for high-resolution displays.
+                      Scales <strong>damage and healing numbers</strong>,{' '}
+                      <strong>crosshair HP and Power</strong>, and{' '}
+                      <strong>warnings and enemy-player triangles</strong> for high-resolution
+                      displays.
                     </small>
                   </span>
                 </li>

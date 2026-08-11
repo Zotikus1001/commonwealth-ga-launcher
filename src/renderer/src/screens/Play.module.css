@@ -1021,10 +1021,6 @@
 }
 
 @media (max-height: 640px) {
-  .commitList li:nth-child(n+6) {
-    display: none;
-  }
-
   .serverName {
     margin-bottom: 12px;
   }

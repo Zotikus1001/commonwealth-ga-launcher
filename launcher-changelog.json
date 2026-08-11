@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "0.1.23",
+      "releasedOn": "2026-08-11",
+      "changes": [
+        "Added optional **Steam Integration** that replaces the Hi-Rez launcher when starting Global Agenda from Steam, enabling **Steam playtime tracking** and the **in-game Steam overlay**.",
+        "Added a **Combat Text Scaling Slider** through the Game Client Patch for high-resolution displays.",
+        "Added direct **GA CARDS** access for card drops, collections, and trading.",
+        "Updated the default interface scale to **130%** and refined the main page and Settings navigation."
+      ]
+    },
+    {
       "version": "0.1.21",
       "releasedOn": "2026-08-07",
       "changes": [

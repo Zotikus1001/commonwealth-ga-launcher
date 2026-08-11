@@ -17,6 +17,7 @@ import { createWinePrefix, listLinuxRuntimeOptions } from './services/LinuxRunti
 import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
+import { hasRequiredGameConfigFiles, validateGameExe } from './services/InstallLocator';
 
 export function registerIpc(
   getWindow: () => BrowserWindow | null,
@@ -346,8 +347,19 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.getSteamLaunchIntegration, () => steamLaunchIntegration.inspect());
-  ipcMain.handle(IPC.setSteamLaunchIntegration, (_event, enabled: unknown) => {
+  ipcMain.handle(IPC.setSteamLaunchIntegration, async (_event, enabled: unknown) => {
     if (typeof enabled !== 'boolean') throw new Error('Invalid Steam launch integration state.');
+    if (enabled) {
+      const install = await validateGameExe(config.get().gameExePath);
+      if (!install) {
+        throw new Error('Set a valid Global Agenda location before enabling Steam Integration.');
+      }
+      if (!(await hasRequiredGameConfigFiles(install))) {
+        throw new Error(
+          'Open Global Agenda normally from Steam once and reach the login screen before enabling Steam Integration.'
+        );
+      }
+    }
     return steamLaunchIntegration.setEnabled(enabled);
   });
   ipcMain.handle(IPC.shouldOfferSteamLaunchIntegration, () =>

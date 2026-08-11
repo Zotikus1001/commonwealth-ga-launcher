@@ -302,6 +302,8 @@ export interface LauncherState {
   selectedServerId: string;
   serverStatus: ServerStatus;
   gamePathValid: boolean;
+  /** True when the original launcher has created the active engine and UI configuration files. */
+  gameConfigReady: boolean;
   /** Exact saved path represented by gamePathValid. */
   validatedGameExePath: string;
   /** null off Linux; otherwise whether the selected compatibility runtime can launch. */

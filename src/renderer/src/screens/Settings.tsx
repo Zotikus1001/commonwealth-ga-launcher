@@ -92,6 +92,14 @@ const EMPTY_LINUX_RUNTIME_OPTIONS: LinuxRuntimeOptions = {
   steamPrefixPath: ''
 };
 
+function steamLaunchErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/close steam/i.test(message)) {
+    return 'Close Steam completely before enabling or disabling Steam Integration.';
+  }
+  return message.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '');
+}
+
 const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: string }> = {
   'high-fps-movement-stability': {
     title: 'High-FPS Movement Stability',
@@ -171,6 +179,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     let cancelled = false;
     setSteamLaunchStatus(null);
     setSteamLaunchError(null);
+    void window.api.refreshPatchStatuses();
     void window.api
       .getSteamLaunchIntegration()
       .then((status) => {
@@ -371,7 +380,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     try {
       setSteamLaunchStatus(await window.api.setSteamLaunchIntegration(enabled));
     } catch (error) {
-      setSteamLaunchError(error instanceof Error ? error.message : String(error));
+      setSteamLaunchError(steamLaunchErrorMessage(error));
     } finally {
       setSteamLaunchSaving(false);
     }
@@ -1263,7 +1272,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
               </div>
             </div>
 
-            <div className="panel-title">Steam Launch</div>
+            <div className="panel-title">Steam Integration</div>
             <div
               ref={steamLaunchCardRef}
               tabIndex={-1}
@@ -1278,10 +1287,32 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             >
               <div className={styles.steamLaunchCopy}>
                 <span className={styles.steamLaunchEyebrow}>Steam // Global Agenda</span>
-                <span className={styles.featureName}>Launch Through Commonwealth GA Launcher</span>
+                <span className={styles.featureName}>Use Commonwealth GA Launcher from Steam</span>
                 <span className={styles.featureDetail}>
-                  Keeps Steam playtime tracking and the Steam overlay available when starting the
-                  game from Steam.
+                  Opening Global Agenda from Steam launches this launcher instead of the Hi-Rez
+                  launcher, while keeping Steam playtime tracking and the in-game Steam overlay.
+                </span>
+                <span
+                  className={`${styles.steamLaunchPrerequisite} ${
+                    state.gameConfigReady
+                      ? styles.steamLaunchPrerequisiteReady
+                      : styles.steamLaunchPrerequisiteWarning
+                  }`}
+                >
+                  <strong>
+                    {state.gameConfigReady
+                      ? 'Game ready'
+                      : state.gamePathValid
+                        ? 'First launch required'
+                        : 'Game location required'}
+                  </strong>
+                  <span>
+                    {state.gameConfigReady
+                      ? 'Required Global Agenda configuration files were found.'
+                      : state.gamePathValid
+                        ? 'Open Global Agenda normally from Steam and reach the login screen before enabling this.'
+                        : 'Set your Global Agenda location before enabling this.'}
+                  </span>
                 </span>
                 <span
                   className={`${styles.steamLaunchState} ${
@@ -1303,13 +1334,13 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                     {!steamLaunchStatus
                       ? 'Checking'
                       : steamLaunchStatus.state === 'enabled'
-                        ? 'Applied'
+                        ? 'Enabled'
                         : steamLaunchStatus.state === 'needs-repair'
                           ? 'Update needed'
                           : steamLaunchStatus.state === 'conflict'
                             ? 'Changed'
                             : steamLaunchStatus.state === 'disabled'
-                              ? 'Not applied'
+                              ? 'Disabled'
                               : 'Unavailable'}
                   </strong>
                   <span>{steamLaunchStatus?.detail ?? 'Checking Steam launch options…'}</span>
@@ -1325,14 +1356,21 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                   <button
                     type="button"
                     className={styles.steamLaunchApply}
-                    disabled={steamLaunchSaving}
+                    disabled={steamLaunchSaving || !state.gameConfigReady}
+                    title={
+                      !state.gameConfigReady
+                        ? state.gamePathValid
+                          ? 'Open Global Agenda normally from Steam once first.'
+                          : 'Set your Global Agenda location first.'
+                        : undefined
+                    }
                     onClick={() => void configureSteamLaunch(true)}
                   >
                     {steamLaunchSaving
                       ? 'Working…'
                       : steamLaunchStatus.state === 'needs-repair'
-                        ? 'Update'
-                        : 'Apply'}
+                        ? 'Update Link'
+                        : 'Enable'}
                   </button>
                 )}
                 {steamLaunchStatus?.canRemove && (
@@ -1342,7 +1380,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                     disabled={steamLaunchSaving}
                     onClick={() => void configureSteamLaunch(false)}
                   >
-                    {steamLaunchSaving ? 'Working…' : 'Remove'}
+                    {steamLaunchSaving ? 'Working…' : 'Disable'}
                   </button>
                 )}
               </div>
@@ -1517,14 +1555,21 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
 
   const createProfile = async (): Promise<void> => {
     const validationError = validateGameProfileName(newName);
-    if (validationError || profileLimitReached || !state.gamePathValid) {
+    if (
+      validationError ||
+      profileLimitReached ||
+      !state.gamePathValid ||
+      !state.gameConfigReady
+    ) {
       setResult({
         ok: false,
         message:
           validationError ??
           (profileLimitReached
             ? `You can save up to ${MAX_GAME_PROFILES} profiles.`
-            : 'Set a valid Global Agenda installation first.')
+            : !state.gamePathValid
+              ? 'Set a valid Global Agenda installation first.'
+              : 'Open Global Agenda from Steam once first.')
       });
       return;
     }
@@ -1717,7 +1762,12 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
             value={newName}
             placeholder="Profile name"
             aria-label="New profile name"
-            disabled={controlsDisabled || profileLimitReached || !state.gamePathValid}
+            disabled={
+              controlsDisabled ||
+              profileLimitReached ||
+              !state.gamePathValid ||
+              !state.gameConfigReady
+            }
             onChange={(event) => setNewName(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') void createProfile();
@@ -1729,6 +1779,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
               controlsDisabled ||
               profileLimitReached ||
               !state.gamePathValid ||
+              !state.gameConfigReady ||
               !normalizeGameProfileName(newName) ||
               createNameError !== null
             }
@@ -1739,6 +1790,11 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
         </div>
         {!state.gamePathValid && (
           <span className={styles.profileCaptureNote}>A valid game location is required.</span>
+        )}
+        {state.gamePathValid && !state.gameConfigReady && (
+          <span className={styles.profileCaptureNote}>
+            Open Global Agenda from Steam once before saving profiles.
+          </span>
         )}
         {profileLimitReached && (
           <span className={styles.profileCaptureNote}>All five profile slots are in use.</span>

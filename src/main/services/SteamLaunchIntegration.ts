@@ -599,8 +599,8 @@ export class SteamLaunchIntegration {
     if (running !== false) {
       throw new Error(
         running
-          ? 'Close Steam completely before changing its Global Agenda launch options.'
-          : "Steam's running state could not be checked. Close Steam and try again."
+          ? 'Close Steam completely before enabling or disabling Steam Integration.'
+          : "Steam's running state could not be checked. Close Steam completely and try again."
       );
     }
   }
@@ -616,7 +616,7 @@ export class SteamLaunchIntegration {
       state,
       detail:
         steamRunning === true
-          ? `${detail} Close Steam before applying or removing.`
+          ? `${detail} Close Steam completely to enable or disable Steam Integration.`
           : steamRunning === null
             ? `${detail} Steam's running state could not be checked.`
             : detail,

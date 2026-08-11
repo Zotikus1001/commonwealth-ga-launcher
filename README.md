@@ -7,8 +7,8 @@ Europe (EU).
 
 ## Download and Install
 
-For a fresh game installation, start Global Agenda normally once and close it after the login
-screen appears. This creates the configuration files the launcher manages.
+For a fresh game installation, close this launcher and start Global Agenda normally from Steam
+once. Reach the login screen, close the game, then reopen this launcher.
 
 ### Windows
 
@@ -36,7 +36,8 @@ The launcher updates itself automatically.
 
 - Automatic updates and an in-launcher changelog
 - Easy game setup and one-click launching
-- Optional Steam launch integration for Steam playtime tracking and the in-game overlay
+- Optional Steam integration that replaces the Hi-Rez launcher when starting from Steam while
+  keeping playtime tracking and the in-game overlay
 - Live server status, player count, server selection, and Agenda Stats
 - Up to five optional profiles for quickly switching game settings, with change summaries and save protection
 - One-click performance and stability patches

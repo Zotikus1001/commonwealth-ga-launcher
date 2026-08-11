@@ -121,6 +121,55 @@ function SteamLaunchOfferDialog({
   );
 }
 
+function GameFirstRunDialog({
+  onClose
+}: {
+  onClose: () => void;
+}): JSX.Element {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.steamOfferDialog}
+      aria-labelledby="game-first-run-title"
+      aria-describedby="game-first-run-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <div className={styles.steamOfferReadout}>First-time game setup</div>
+      <div className={styles.steamOfferBody}>
+        <span className={styles.steamOfferMark} aria-hidden="true">
+          1
+        </span>
+        <div>
+          <h2 id="game-first-run-title">Run Global Agenda once first</h2>
+          <p id="game-first-run-description">
+            Close this launcher, then open Global Agenda from Steam once. Reach the login screen,
+            close the game, then reopen this launcher.
+          </p>
+        </div>
+      </div>
+      <div className={`${styles.steamOfferActions} ${styles.gameFirstRunActions}`}>
+        <button type="button" onClick={onClose} autoFocus>
+          OK
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export default function App(): JSX.Element {
   const [state, setState] = useState<LauncherState | null>(null);
   const [view, setView] = useState<'play' | 'settings'>('play');
@@ -129,6 +178,10 @@ export default function App(): JSX.Element {
     'automatic' | 'manual' | null
   >(null);
   const [steamLaunchOfferOpen, setSteamLaunchOfferOpen] = useState(false);
+  const [gameFirstRunOpen, setGameFirstRunOpen] = useState(false);
+  const [changelogStatusChecked, setChangelogStatusChecked] = useState(false);
+  const gameFirstRunShown = useRef(false);
+  const steamLaunchOfferChecked = useRef(false);
   const settingsRef = useRef<SettingsHandle>(null);
 
   const openSettings = (tab: SettingsTab): void => {
@@ -148,7 +201,10 @@ export default function App(): JSX.Element {
           setChangelogOpenMode((mode) => mode ?? 'automatic');
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setChangelogStatusChecked(true);
+      });
     const unsubscribe = window.api.onState((s) => setState(s));
     return () => {
       mounted = false;
@@ -156,21 +212,49 @@ export default function App(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    if (
+      !state ||
+      !changelogStatusChecked ||
+      changelogOpenMode ||
+      steamLaunchOfferOpen ||
+      gameFirstRunShown.current ||
+      !state.gamePathValid ||
+      state.gameConfigReady
+    ) {
+      return;
+    }
+    gameFirstRunShown.current = true;
+    setGameFirstRunOpen(true);
+  }, [changelogOpenMode, changelogStatusChecked, state, steamLaunchOfferOpen]);
+
+  useEffect(() => {
+    if (
+      !state ||
+      !changelogStatusChecked ||
+      changelogOpenMode ||
+      gameFirstRunOpen ||
+      steamLaunchOfferOpen ||
+      steamLaunchOfferChecked.current ||
+      !state.gameConfigReady
+    ) {
+      return;
+    }
+    steamLaunchOfferChecked.current = true;
+    void window.api
+      .shouldOfferSteamLaunchIntegration()
+      .then((shouldOffer) => setSteamLaunchOfferOpen(shouldOffer))
+      .catch(() => {});
+  }, [changelogOpenMode, changelogStatusChecked, gameFirstRunOpen, state, steamLaunchOfferOpen]);
+
   if (!state) {
     return <div className={styles.boot}>COMMONWEALTH GA</div>;
   }
   const launcherUpdate = launcherUpdateLabel(state);
   const updateDownloading = state.launcherUpdate === 'downloading';
   const closeChangelog = (): void => {
-    const wasAutomatic = changelogOpenMode === 'automatic';
     setChangelogOpenMode(null);
     void window.api.acknowledgeLauncherChangelog().catch(() => {});
-    if (wasAutomatic) {
-      void window.api
-        .shouldOfferSteamLaunchIntegration()
-        .then((shouldOffer) => setSteamLaunchOfferOpen(shouldOffer))
-        .catch(() => {});
-    }
   };
 
   const respondToSteamLaunchOffer = async (setUp: boolean): Promise<void> => {
@@ -250,6 +334,11 @@ export default function App(): JSX.Element {
       )}
       {steamLaunchOfferOpen && (
         <SteamLaunchOfferDialog onDecision={respondToSteamLaunchOffer} />
+      )}
+      {gameFirstRunOpen && (
+        <GameFirstRunDialog
+          onClose={() => setGameFirstRunOpen(false)}
+        />
       )}
     </div>
   );

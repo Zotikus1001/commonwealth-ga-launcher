@@ -22,7 +22,12 @@ import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import { DEFAULT_GAME_PROFILES_ENABLED } from '@shared/gameProfiles';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
-import { validateGameExe, autoDetectGame, type GameInstall } from './services/InstallLocator';
+import {
+  autoDetectGame,
+  hasRequiredGameConfigFiles,
+  validateGameExe,
+  type GameInstall
+} from './services/InstallLocator';
 import { GameLauncher } from './services/GameLauncher';
 import { probeServer, type ServerProbeStatus } from './services/ServerProbe';
 import { LauncherUpdater } from './services/LauncherUpdater';
@@ -61,6 +66,7 @@ const SERVER_PROBE_REFRESH_MS = 65_000;
 const SERVER_CHECKING_STATUS = 'Checking server availability…';
 const SERVER_OFFLINE_STATUS = 'Selected server is offline.';
 const SERVER_INVALID_STATUS = 'Selected server address is invalid or cannot be resolved.';
+const GAME_FIRST_RUN_STATUS = 'Open Global Agenda normally from Steam once before using this launcher.';
 const COMMIT_REFRESH_MS = 5 * 60_000;
 const AGENDA_STATS_REFRESH_MS = 60_000;
 const AUTO_CLOSE_DELAY_MS = 5_000;
@@ -148,6 +154,7 @@ export class Orchestrator {
       selectedServerId: DEFAULT_SERVER_ID,
       serverStatus: 'checking',
       gamePathValid: false,
+      gameConfigReady: false,
       validatedGameExePath: '',
       linuxRuntimeStatus: PLATFORM === 'linux' ? 'wine-runner-missing' : null,
       resolvedLinuxPrefix: '',
@@ -459,6 +466,7 @@ export class Orchestrator {
       !this.state.developerMode &&
       this.state.phase === 'ready' &&
       this.state.gamePathValid &&
+      this.state.gameConfigReady &&
       (PLATFORM !== 'linux' || this.state.linuxRuntimeStatus === 'ready');
     this.patch({
       serverStatus: 'checking',
@@ -481,6 +489,7 @@ export class Orchestrator {
       !this.state.developerMode &&
       this.state.phase === 'ready' &&
       this.state.gamePathValid &&
+      this.state.gameConfigReady &&
       (PLATFORM !== 'linux' || this.state.linuxRuntimeStatus === 'ready') &&
       (this.state.statusLine === 'Ready.' ||
         this.state.statusLine === SERVER_CHECKING_STATUS ||
@@ -549,6 +558,18 @@ export class Orchestrator {
       if (!install) {
         this.patch({
           gamePathValid: false,
+          gameConfigReady: false,
+          validatedGameExePath: settings.gameExePath,
+          clientPatches: unavailableClientPatches(),
+          gameClientDll: unavailableGameClientDllState()
+        });
+        return;
+      }
+      const gameConfigReady = await hasRequiredGameConfigFiles(install);
+      if (!gameConfigReady) {
+        this.patch({
+          gamePathValid: true,
+          gameConfigReady: false,
           validatedGameExePath: settings.gameExePath,
           clientPatches: unavailableClientPatches(),
           gameClientDll: unavailableGameClientDllState()
@@ -561,6 +582,7 @@ export class Orchestrator {
       ]);
       this.patch({
         gamePathValid: true,
+        gameConfigReady: true,
         validatedGameExePath: settings.gameExePath,
         clientPatches,
         gameClientDll
@@ -591,6 +613,7 @@ export class Orchestrator {
       validateGameExe(settings.gameExePath),
       PLATFORM === 'linux' ? inspectLinuxRuntime(settings, this.log) : Promise.resolve(null)
     ]);
+    const gameConfigReady = install ? await hasRequiredGameConfigFiles(install) : false;
     this.install = install;
     this.linuxRuntime = linuxRuntime;
     if (linuxRuntime?.suggestedPrefixPath) {
@@ -601,6 +624,7 @@ export class Orchestrator {
     const profileSnapshot = this.gameProfileManager.getSnapshot();
     this.patch({
       gamePathValid: install !== null,
+      gameConfigReady,
       validatedGameExePath: settings.gameExePath,
       linuxRuntimeStatus: linuxRuntime?.status ?? null,
       resolvedLinuxPrefix: linuxRuntime?.prefixPath ?? '',
@@ -633,6 +657,28 @@ export class Orchestrator {
             ? 'Game path is not a valid Global Agenda install — fix it in Settings.'
             : 'Set your Global Agenda install path in Settings.'
         });
+      }
+      return;
+    }
+
+    if (!gameConfigReady) {
+      this.dlcsPreparedGameExePath = '';
+      this.log.info('game configuration: first normal launch required');
+      this.patch({
+        gameClientDll: unavailableGameClientDllState(),
+        clientPatches: unavailableClientPatches(),
+        dlcs: unavailableDlcStatuses(),
+        dxvk: unavailableDxvkState(PLATFORM, settings.developer.dxvkVersion)
+      });
+      if (!selection.host) {
+        this.patch({
+          phase: 'error',
+          serverStatus: 'invalid',
+          statusLine: 'Server address unavailable. Retry after updating the launcher.',
+          errorDetails: 'No default server address is configured for this build.'
+        });
+      } else {
+        this.patch({ phase: 'ready', statusLine: GAME_FIRST_RUN_STATUS });
       }
       return;
     }
@@ -845,6 +891,20 @@ export class Orchestrator {
         this.patch({ phase: 'ready', statusLine: 'Set your Global Agenda install path in Settings first.' });
         return null;
       }
+      if (!(await hasRequiredGameConfigFiles(this.install))) {
+        this.dlcsPreparedGameExePath = '';
+        this.patch({
+          phase: 'ready',
+          statusLine: GAME_FIRST_RUN_STATUS,
+          errorDetails: null,
+          gameConfigReady: false,
+          gameClientDll: unavailableGameClientDllState(),
+          clientPatches: unavailableClientPatches(),
+          dlcs: unavailableDlcStatuses()
+        });
+        return null;
+      }
+      if (!this.state.gameConfigReady) this.patch({ gameConfigReady: true });
       if (PLATFORM === 'linux' && this.linuxRuntime?.status !== 'ready') {
         this.patch({ phase: 'ready', statusLine: 'Complete your Linux game setup in Settings.' });
         return null;
@@ -1149,6 +1209,7 @@ export class Orchestrator {
       if (!install) {
         this.patch({
           gamePathValid: false,
+          gameConfigReady: false,
           validatedGameExePath: settings.gameExePath,
           clientPatches: unavailableClientPatches()
         });
@@ -1157,6 +1218,20 @@ export class Orchestrator {
           message: enabled
             ? 'Patch enabled. It will apply after a valid game location is set.'
             : 'Patch removed.'
+        };
+      }
+      if (!(await hasRequiredGameConfigFiles(install))) {
+        this.patch({
+          gamePathValid: true,
+          gameConfigReady: false,
+          validatedGameExePath: settings.gameExePath,
+          clientPatches: unavailableClientPatches()
+        });
+        return {
+          ok: true,
+          message: enabled
+            ? 'Patch enabled. It will apply after Global Agenda has been opened normally once.'
+            : 'Patch preference removed.'
         };
       }
 
@@ -1175,6 +1250,7 @@ export class Orchestrator {
       const clientPatches = await inspectClientPatches(install);
       this.patch({
         gamePathValid: true,
+        gameConfigReady: true,
         validatedGameExePath: settings.gameExePath,
         clientPatches
       });
@@ -1255,6 +1331,10 @@ export class Orchestrator {
       const install = await validateGameExe(settings.gameExePath);
       this.install = install;
       if (!install) return { ok: false, message: 'Set a valid Global Agenda installation first.' };
+      if (!(await hasRequiredGameConfigFiles(install))) {
+        this.patch({ gamePathValid: true, gameConfigReady: false });
+        return { ok: false, message: GAME_FIRST_RUN_STATUS };
+      }
       const initialDetail = enabled
         ? `Preparing DXVK/Vulkan ${dxvkVersion}…`
         : 'Restoring the previous Direct3D configuration…';
@@ -1329,11 +1409,25 @@ export class Orchestrator {
       const install = await validateGameExe(settings.gameExePath);
       this.install = install;
       if (!install) {
+        this.patch({ gamePathValid: false, gameConfigReady: false });
         return {
           ok: true,
           message: enabled
             ? 'Game Client Patch enabled. It will apply after a valid game location is set.'
             : 'Game Client Patch removed.'
+        };
+      }
+      if (!(await hasRequiredGameConfigFiles(install))) {
+        this.patch({
+          gamePathValid: true,
+          gameConfigReady: false,
+          gameClientDll: unavailableGameClientDllState()
+        });
+        return {
+          ok: true,
+          message: enabled
+            ? 'Game Client Patch enabled. It will apply after Global Agenda has been opened normally once.'
+            : 'Game Client Patch preference removed.'
         };
       }
       const localDll = settings.developer.useLocalClientDll;
@@ -1661,6 +1755,7 @@ export class Orchestrator {
       this.dlcsPreparedGameExePath = '';
       this.patch({
         gamePathValid: false,
+        gameConfigReady: false,
         validatedGameExePath: settings.gameExePath,
         gameClientDll: unavailableGameClientDllState()
       });
@@ -1670,9 +1765,20 @@ export class Orchestrator {
       return;
     }
 
+    const gameConfigReady = await hasRequiredGameConfigFiles(install);
+    if (!gameConfigReady) {
+      this.patch({
+        gamePathValid: true,
+        gameConfigReady: false,
+        validatedGameExePath: settings.gameExePath,
+        gameClientDll: unavailableGameClientDllState()
+      });
+      return;
+    }
     const inspection = await this.inspectGameClientDll(install);
     this.patch({
       gamePathValid: true,
+      gameConfigReady: true,
       validatedGameExePath: settings.gameExePath,
       gameClientDll: inspection
     });
@@ -1712,6 +1818,18 @@ export class Orchestrator {
       if (!install) {
         this.patch({
           gamePathValid: false,
+          gameConfigReady: false,
+          validatedGameExePath: settings.gameExePath,
+          dlcs: unavailableDlcStatuses()
+        });
+        return;
+      }
+      if (!(await hasRequiredGameConfigFiles(install))) {
+        this.patch({
+          phase: 'ready',
+          statusLine: GAME_FIRST_RUN_STATUS,
+          gamePathValid: true,
+          gameConfigReady: false,
           validatedGameExePath: settings.gameExePath,
           dlcs: unavailableDlcStatuses()
         });
@@ -1733,6 +1851,7 @@ export class Orchestrator {
         phase: 'ready',
         statusLine: 'Ready.',
         gamePathValid: true,
+        gameConfigReady: true,
         validatedGameExePath: settings.gameExePath
       });
     } catch (error) {

@@ -183,6 +183,7 @@ function cta(
         !state.developerMode &&
         state.serverStatus === 'checking' &&
         state.gamePathValid &&
+        state.gameConfigReady &&
         (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready')
       ) {
         return {
@@ -198,6 +199,9 @@ function cta(
   }
   if (!state.gamePathValid) {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
+  }
+  if (!state.gameConfigReady) {
+    return { label: 'FIRST LAUNCH REQUIRED', disabled: true, action: () => {} };
   }
   if (state.platform === 'linux' && state.linuxRuntimeStatus !== 'ready') {
     return { label: 'SET UP GAME', disabled: false, action: onOpenGameSettings };
@@ -268,6 +272,7 @@ export default function Play({
     !state.launchCoolingDown &&
     !launchRequestPending &&
     state.gamePathValid &&
+    state.gameConfigReady &&
     (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready');
   const showsAgendaStats =
     state.selectedServerId === DEFAULT_SERVER_ID &&

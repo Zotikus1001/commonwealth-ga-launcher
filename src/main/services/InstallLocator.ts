@@ -66,6 +66,13 @@ export async function validateGameExe(exePath: string): Promise<GameInstall | nu
   return { exePath, binariesDir, rootDir, configDir };
 }
 
+export async function hasRequiredGameConfigFiles(install: GameInstall): Promise<boolean> {
+  const requiredFiles = ['TgEngine.ini', 'TgUI.ini'];
+  return (await Promise.all(requiredFiles.map((name) => isFile(join(install.configDir, name))))).every(
+    Boolean
+  );
+}
+
 // GA shipped under two Steam folder names ('Global Agenda Live' is the shape on the maintainer's
 // install); loose copies are common since the game is delisted, so Steam detection is an assist only.
 const GAME_DIR_NAMES = ['Global Agenda Live', 'Global Agenda'];

@@ -218,6 +218,10 @@
   color: #a9e2ff;
 }
 
+.gameFirstRunActions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 620px) {
   .steamOfferBody {
     grid-template-columns: minmax(0, 1fr);

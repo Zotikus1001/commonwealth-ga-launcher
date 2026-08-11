@@ -578,7 +578,7 @@ export default function Play({
             >
               <span className={styles.agendaStatsButtonCopy}>
                 <strong>GA CARDS</strong>
-                <small>Global Agenda card game</small>
+                <small>Drops · collections · trading</small>
               </span>
               <span className={`${styles.agendaStatsOpen} ${styles.gaCardsOpen}`}>
                 {gaCardsOpening ? 'OPENING…' : 'VISIT ↗'}

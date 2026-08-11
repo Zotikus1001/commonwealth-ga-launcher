@@ -46,7 +46,7 @@ const SHIFT_EDITING_KEYS = new Set([
 let mainWindow: BrowserWindow | null = null;
 
 // Prevent newer local settings schemas from making an installed launcher profile read-only.
-configureDevelopmentProfile(app);
+const installedUserDataDir = configureDevelopmentProfile(app);
 
 function shouldBlockBrowserInput(input: Input): boolean {
   if (input.type !== 'keyDown' || input.isComposing) return false;
@@ -150,7 +150,7 @@ if (!app.requestSingleInstanceLock()) {
     const [
       { ConfigStore, defaultSettings },
       { LauncherChangelogStore },
-      { SteamLaunchIntegration },
+      { SteamLaunchIntegration, resolveSteamIntegrationLauncherPath },
       { Orchestrator },
       { registerIpc }
     ] =
@@ -172,13 +172,13 @@ if (!app.requestSingleInstanceLock()) {
       app.getVersion(),
       log
     );
-    const installedLauncherPath = app.isPackaged
-      ? process.platform === 'linux'
-        ? process.env.APPIMAGE?.trim() || process.execPath
-        : process.execPath
-      : null;
+    const installedLauncherPath = resolveSteamIntegrationLauncherPath(
+      app.isPackaged,
+      process.platform,
+      process.execPath
+    );
     const steamLaunchIntegration = new SteamLaunchIntegration(
-      app.getPath('userData'),
+      installedUserDataDir ?? app.getPath('userData'),
       LAUNCHER_CONFIG.steamAppId,
       installedLauncherPath,
       process.platform,

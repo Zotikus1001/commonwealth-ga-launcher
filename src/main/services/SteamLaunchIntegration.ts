@@ -459,6 +459,29 @@ export function buildSteamLaunchOptions(
   return `"${launcherPath}" %command%`;
 }
 
+export function resolveSteamIntegrationLauncherPath(
+  isPackaged: boolean,
+  platform: NodeJS.Platform,
+  executablePath: string,
+  environment: NodeJS.ProcessEnv = process.env
+): string | null {
+  if (platform !== 'win32' && platform !== 'linux') return null;
+  if (isPackaged) {
+    return platform === 'linux'
+      ? environment.APPIMAGE?.trim() || executablePath
+      : executablePath;
+  }
+  const localAppData = environment.LOCALAPPDATA?.trim();
+  return platform === 'win32' && localAppData
+    ? join(
+        localAppData,
+        'Programs',
+        'commonwealth-ga-launcher',
+        'Commonwealth GA.exe'
+      )
+    : null;
+}
+
 export class SteamLaunchIntegration {
   private readonly markerPath: string;
   private readonly onboardingPath: string;

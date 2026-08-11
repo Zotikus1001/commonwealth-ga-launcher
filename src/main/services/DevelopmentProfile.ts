@@ -7,8 +7,8 @@ interface AppPathAccess {
   setPath(name: string, path: string): void;
 }
 
-export function configureDevelopmentProfile(app: AppPathAccess): void {
-  if (app.isPackaged) return;
+export function configureDevelopmentProfile(app: AppPathAccess): string | null {
+  if (app.isPackaged) return null;
 
   const defaultUserDataDir = app.getPath('userData');
   const developmentUserDataDir = join(
@@ -18,4 +18,5 @@ export function configureDevelopmentProfile(app: AppPathAccess): void {
   mkdirSync(developmentUserDataDir, { recursive: true });
   app.setPath('userData', developmentUserDataDir);
   app.setPath('sessionData', developmentUserDataDir);
+  return defaultUserDataDir;
 }

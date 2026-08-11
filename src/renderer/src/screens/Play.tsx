@@ -14,7 +14,7 @@ import {
   ProfileChangeSummary,
   ProfileSwitchDialog
 } from '../components/ProfileSwitchDialog';
-import ToastQueue, { type ToastNotification } from '../components/ToastQueue';
+import ToastStack, { type ToastNotification } from '../components/ToastStack';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -464,7 +464,7 @@ export default function Play({
 
   return (
     <div className={styles.play}>
-      <ToastQueue notifications={toastNotifications} />
+      <ToastStack notifications={toastNotifications} />
       <div className={`rise ${styles.utilityGrid}`} style={{ animationDelay: '40ms' }}>
         <div className={styles.discordWrap}>
           <button

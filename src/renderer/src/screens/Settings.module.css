@@ -354,6 +354,11 @@
   text-transform: uppercase;
 }
 
+.steamLaunchDescription strong {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
 .steamLaunchState {
   display: flex;
   align-items: center;

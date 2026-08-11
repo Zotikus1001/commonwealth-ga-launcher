@@ -1292,28 +1292,20 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                   Opening Global Agenda from Steam launches this launcher instead of the Hi-Rez
                   launcher, while keeping Steam playtime tracking and the in-game Steam overlay.
                 </span>
-                <span
-                  className={`${styles.steamLaunchPrerequisite} ${
-                    state.gameConfigReady
-                      ? styles.steamLaunchPrerequisiteReady
-                      : styles.steamLaunchPrerequisiteWarning
-                  }`}
-                >
-                  <strong>
-                    {state.gameConfigReady
-                      ? 'Game ready'
-                      : state.gamePathValid
-                        ? 'First launch required'
-                        : 'Game location required'}
-                  </strong>
-                  <span>
-                    {state.gameConfigReady
-                      ? 'Required Global Agenda configuration files were found.'
-                      : state.gamePathValid
+                {!state.gameConfigReady && (
+                  <span
+                    className={`${styles.steamLaunchPrerequisite} ${styles.steamLaunchPrerequisiteWarning}`}
+                  >
+                    <strong>
+                      {state.gamePathValid ? 'First launch required' : 'Game location required'}
+                    </strong>
+                    <span>
+                      {state.gamePathValid
                         ? 'Open Global Agenda normally from Steam and reach the login screen before enabling this.'
                         : 'Set your Global Agenda location before enabling this.'}
+                    </span>
                   </span>
-                </span>
+                )}
                 <span
                   className={`${styles.steamLaunchState} ${
                     steamLaunchStatus?.state === 'enabled'

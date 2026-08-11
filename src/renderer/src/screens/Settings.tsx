@@ -2595,7 +2595,7 @@ function PatchesTab({
             <div className={styles.patchFixDetails}>
               <div className={styles.patchFixHeader}>
                 <span>Features</span>
-                <span>1 shipped feature</span>
+                <span>2 shipped features</span>
               </div>
               <ul className={styles.patchFixList}>
                 <li>
@@ -2605,6 +2605,18 @@ function PatchesTab({
                   <span className={styles.patchFixCopy}>
                     <strong>In-game FOV slider</strong>
                     <small>Adds an FOV slider to the in-game Video settings.</small>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.patchFixIndex} aria-hidden="true">
+                    02
+                  </span>
+                  <span className={styles.patchFixCopy}>
+                    <strong>Combat Text Scaling Slider</strong>
+                    <small>
+                      Scales damage and healing numbers, crosshair HP and Power, warnings, and the
+                      triangles above enemy players for high-resolution displays.
+                    </small>
                   </span>
                 </li>
               </ul>

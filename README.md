@@ -44,6 +44,7 @@ The launcher updates itself automatically.
 - An optional Game Client Patch with:
     - Smoother scope transitions
     - An FOV slider in the in-game Video Settings
+    - Combat text and enemy-player marker scaling for high-resolution displays
 - Optional PvP and PvE map packs with simple install, remove, and matchmaking controls
 - Useful game, graphics, and launch options in one place
 - Performance tips, account help, and copyable in-game commands

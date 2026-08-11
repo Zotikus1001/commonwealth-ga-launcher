@@ -215,6 +215,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   const tabs = useMemo<{ id: SettingsTab; label: string }[]>(() => {
     const t: { id: SettingsTab; label: string }[] = [
       { id: 'game', label: 'Game' },
+      { id: 'launcher', label: 'Launcher' },
       { id: 'profiles', label: 'Profiles' },
       { id: 'servers', label: 'Servers' },
       { id: 'patches', label: 'Patches' },
@@ -224,7 +225,6 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
     // Account tab is built but gated off until Phase 4 auto-login works (plan §11b decision #4).
     if (state.accountTabEnabled) t.push({ id: 'account', label: 'Account' });
     t.push(
-      { id: 'launcher', label: 'Launcher' },
       ...((draft?.developer.enabled || devUnlocked) ? [{ id: 'dev' as const, label: 'Dev' }] : []),
       { id: 'diagnostics', label: 'Diagnostics' },
       { id: 'about', label: 'About' }

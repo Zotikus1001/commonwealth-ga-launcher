@@ -8,6 +8,27 @@ function displayIniValue(value: string | null): JSX.Element {
   return <code>{value}</code>;
 }
 
+interface ProfileIniFileGroup {
+  fileName: string;
+  changes: ProfileIniChange[];
+}
+
+function groupChangesByFile(changes: readonly ProfileIniChange[]): ProfileIniFileGroup[] {
+  const groups: ProfileIniFileGroup[] = [];
+  const indexes = new Map<string, number>();
+  for (const change of changes) {
+    const fileKey = change.fileName.toLowerCase();
+    const existingIndex = indexes.get(fileKey);
+    if (existingIndex === undefined) {
+      indexes.set(fileKey, groups.length);
+      groups.push({ fileName: change.fileName, changes: [change] });
+    } else {
+      groups[existingIndex].changes.push(change);
+    }
+  }
+  return groups;
+}
+
 export function ProfileIniDiffTable({
   changes,
   profileNumber
@@ -15,35 +36,48 @@ export function ProfileIniDiffTable({
   changes: readonly ProfileIniChange[];
   profileNumber: number;
 }): JSX.Element {
+  const fileGroups = groupChangesByFile(changes);
   return (
     <div className={styles.profileIniDiff} aria-label="Changed INI settings">
       <div className={styles.profileIniDiffHeading}>
         <strong>Changed settings</strong>
-        <span>{changes.length} {changes.length === 1 ? 'change' : 'changes'}</span>
+        <span>
+          {changes.length} {changes.length === 1 ? 'change' : 'changes'}
+        </span>
       </div>
       <div className={styles.profileIniDiffScroll} tabIndex={0}>
         <table>
           <thead>
             <tr>
-              <th scope="col">INI setting</th>
+              <th scope="col">Setting</th>
               <th scope="col">Before · Profile #{profileNumber}</th>
               <th scope="col">After · Current game</th>
             </tr>
           </thead>
-          <tbody>
-            {changes.map((change, index) => (
-              <tr key={`${change.fileName}:${change.section ?? ''}:${change.key}:${index}`}>
-                <th scope="row">
-                  <span className={styles.profileIniLocation}>
-                    {change.fileName} · [{change.section ?? 'Global'}]
+          {fileGroups.map((group) => (
+            <tbody key={group.fileName.toLowerCase()}>
+              <tr className={styles.profileIniFileRow}>
+                <th scope="rowgroup" colSpan={3}>
+                  <span className={styles.profileIniFileName}>{group.fileName}</span>
+                  <span className={styles.profileIniFileCount}>
+                    {group.changes.length} {group.changes.length === 1 ? 'setting' : 'settings'}
                   </span>
-                  <code className={styles.profileIniKey}>{change.key}</code>
                 </th>
-                <td className={styles.profileIniBefore}>{displayIniValue(change.beforeValue)}</td>
-                <td className={styles.profileIniAfter}>{displayIniValue(change.afterValue)}</td>
               </tr>
-            ))}
-          </tbody>
+              {group.changes.map((change, index) => (
+                <tr key={`${change.section ?? ''}:${change.key}:${index}`}>
+                  <th scope="row">
+                    <span className={styles.profileIniSection}>
+                      [{change.section ?? 'Global'}]
+                    </span>
+                    <code className={styles.profileIniKey}>{change.key}</code>
+                  </th>
+                  <td className={styles.profileIniBefore}>{displayIniValue(change.beforeValue)}</td>
+                  <td className={styles.profileIniAfter}>{displayIniValue(change.afterValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
       </div>
     </div>

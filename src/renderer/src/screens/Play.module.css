@@ -934,7 +934,7 @@
   border-right: 0;
 }
 
-.profileIniDiff tbody tr:last-child > * {
+.profileIniDiff tbody:last-child tr:last-child > * {
   border-bottom: 0;
 }
 
@@ -956,7 +956,50 @@
   font-weight: 400;
 }
 
-.profileIniLocation {
+.profileIniDiff .profileIniFileRow th {
+  padding: 7px 10px;
+  border-right: 0;
+  background:
+    linear-gradient(90deg, rgba(69, 200, 218, 0.11), transparent 52%),
+    #0c131c;
+}
+
+.profileIniDiff tbody + tbody .profileIniFileRow th {
+  border-top: 1px solid rgba(69, 200, 218, 0.24);
+}
+
+.profileIniFileName,
+.profileIniFileCount {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.profileIniFileName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--cyan);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.profileIniFileName::before {
+  width: 5px;
+  height: 5px;
+  border: 1px solid rgba(69, 200, 218, 0.72);
+  background: rgba(69, 200, 218, 0.22);
+  content: '';
+}
+
+.profileIniFileCount {
+  float: right;
+  color: var(--text-faint);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.profileIniSection {
   display: block;
   margin-bottom: 4px;
   overflow: hidden;

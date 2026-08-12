@@ -1752,7 +1752,7 @@ export class Orchestrator {
           this.install,
           ignoreDxvkRenderer
         );
-        if (changes && changes.profileId !== target.id) {
+        if (changes) {
           const prompt: ProfileSwitchPrompt = {
             ...changes,
             targetProfileId: target.id,

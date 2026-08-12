@@ -1833,9 +1833,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                 : `Profile ${index + 1}`;
           return (
             <article
-              className={`${styles.gameProfile} ${
-                applied ? styles.gameProfileActive : ''
-              } ${pending ? styles.gameProfilePending : ''} ${paused ? styles.gameProfilePaused : ''}`}
+              className={`${styles.gameProfile} ${applied ? styles.gameProfileActive : ''}`}
               key={profile.id}
             >
               <div className={styles.gameProfileIndex}>{String(index + 1).padStart(2, '0')}</div>
@@ -1843,7 +1841,11 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                 <div className={styles.gameProfileTitleRow}>
                   <span>{profileHeading}</span>
                   {profileStatus && (
-                    <span className={styles.gameProfileActiveBadge}>
+                    <span
+                      className={`${styles.gameProfileStatusBadge} ${
+                        applied ? styles.gameProfileActiveBadge : ''
+                      }`}
+                    >
                       {profileStatus}
                     </span>
                   )}

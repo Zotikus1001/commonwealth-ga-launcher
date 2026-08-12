@@ -553,11 +553,7 @@ export default function Play({
                   <button
                     key={profile.id}
                     className={`${styles.profileNumber} ${
-                      applied
-                        ? styles.profileNumberApplied
-                        : pending
-                          ? styles.profileNumberPending
-                          : ''
+                      applied ? styles.profileNumberApplied : ''
                     }`}
                     data-profile-name={`${profile.name}${profileState ? ` · ${profileState}` : ''}`}
                     title={`${profile.name}${profileState ? ` · ${profileState}` : ''}`}

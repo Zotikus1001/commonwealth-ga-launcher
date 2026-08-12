@@ -526,7 +526,7 @@
   height: 24px;
   min-height: 0;
   padding: 0;
-  border-color: rgba(69, 200, 218, 0.38);
+  border-color: var(--line-bright);
   background: rgba(8, 13, 20, 0.76);
   color: var(--text-dim);
   font-family: var(--font-mono);
@@ -553,16 +553,6 @@
     rgba(8, 13, 20, 0.82);
   color: var(--green);
   box-shadow: inset 0 -1px 0 rgba(70, 192, 109, 0.45);
-}
-
-.profileNumberPending,
-.profileNumberPending:hover:not(:disabled) {
-  border-color: var(--cyan);
-  background:
-    linear-gradient(145deg, rgba(69, 200, 218, 0.18), rgba(69, 200, 218, 0.05)),
-    rgba(8, 13, 20, 0.82);
-  color: var(--cyan);
-  box-shadow: inset 0 -1px 0 rgba(69, 200, 218, 0.42);
 }
 
 .profileNumber::after {

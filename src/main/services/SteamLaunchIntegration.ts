@@ -9,6 +9,7 @@ import type { Log } from './Log';
 
 const execFileP = promisify(execFile);
 const MARKER_SCHEMA_VERSION = 1;
+const ONBOARDING_SCHEMA_VERSION = 2;
 const MAX_VDF_BYTES = 64 * 1024 * 1024;
 
 interface VdfToken {
@@ -38,9 +39,10 @@ interface SteamLaunchMarker {
   originalLaunchOptions: string | null;
 }
 
-interface SteamLaunchIntegrationTestOptions {
+interface SteamLaunchIntegrationOptions {
   steamRoots?: string[];
   steamRunning?: () => Promise<boolean | null>;
+  onboardingEnabled?: boolean;
 }
 
 function decodeEscape(character: string): string {
@@ -493,14 +495,20 @@ export class SteamLaunchIntegration {
     private readonly launcherPath: string | null,
     private readonly platform: NodeJS.Platform,
     private readonly log: Log,
-    private readonly testOptions: SteamLaunchIntegrationTestOptions = {}
+    private readonly options: SteamLaunchIntegrationOptions = {}
   ) {
     this.markerPath = join(userDataDir, 'steam-launch-integration.json');
     this.onboardingPath = join(userDataDir, 'steam-launch-integration-offer.json');
   }
 
   async shouldOfferOnboarding(): Promise<boolean> {
-    if ((this.platform !== 'win32' && this.platform !== 'linux') || !this.launcherPath) return false;
+    if (
+      this.options.onboardingEnabled === false ||
+      (this.platform !== 'win32' && this.platform !== 'linux') ||
+      !this.launcherPath
+    ) {
+      return false;
+    }
     try {
       if (!(await stat(this.launcherPath)).isFile()) return false;
     } catch {
@@ -512,7 +520,8 @@ export class SteamLaunchIntegration {
         parsed &&
         typeof parsed === 'object' &&
         !Array.isArray(parsed) &&
-        (parsed as Record<string, unknown>).schemaVersion === 1 &&
+        ((parsed as Record<string, unknown>).schemaVersion === 1 ||
+          (parsed as Record<string, unknown>).schemaVersion === ONBOARDING_SCHEMA_VERSION) &&
         (parsed as Record<string, unknown>).acknowledged === true
       );
     } catch (error) {
@@ -523,13 +532,41 @@ export class SteamLaunchIntegration {
     }
   }
 
+  async prepareOnboardingForAutomaticChangelog(): Promise<void> {
+    if (this.options.onboardingEnabled === false) return;
+    try {
+      const parsed: unknown = JSON.parse(
+        await readFile(this.onboardingPath, { encoding: 'utf-8' })
+      );
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        (parsed as Record<string, unknown>).schemaVersion === 1 &&
+        (parsed as Record<string, unknown>).acknowledged === true
+      ) {
+        await rm(this.onboardingPath, { force: true });
+        this.log.info('legacy Steam launch offer acknowledgement re-armed for packaged update');
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.log.warn(`Steam launch offer migration failed: ${(error as Error).message}`);
+      }
+    }
+  }
+
   async acknowledgeOnboarding(): Promise<void> {
+    if (this.options.onboardingEnabled === false) return;
     await mkdir(dirname(this.onboardingPath), { recursive: true });
     const temporary = `${this.onboardingPath}.${randomUUID()}.tmp`;
     try {
       await writeFile(
         temporary,
-        `${JSON.stringify({ schemaVersion: 1, acknowledged: true }, null, 2)}\n`,
+        `${JSON.stringify(
+          { schemaVersion: ONBOARDING_SCHEMA_VERSION, acknowledged: true },
+          null,
+          2
+        )}\n`,
         { encoding: 'utf-8' }
       );
       await rename(temporary, this.onboardingPath);
@@ -576,7 +613,7 @@ export class SteamLaunchIntegration {
     const launcherDetails = await stat(this.launcherPath).catch(() => null);
     if (!launcherDetails) throw new Error('The installed launcher could not be found.');
     if (!launcherDetails.isFile()) throw new Error('The installed launcher could not be found.');
-    const roots = this.testOptions.steamRoots ?? (await steamRoots(this.platform));
+    const roots = this.options.steamRoots ?? (await steamRoots(this.platform));
     const configPath = await locateLocalConfig(this.platform, roots);
     if (!configPath) {
       throw new Error('Steam user settings were not found. Install or open Global Agenda in Steam first.');
@@ -591,7 +628,7 @@ export class SteamLaunchIntegration {
   }
 
   private async steamRunning(): Promise<boolean | null> {
-    return this.testOptions.steamRunning?.() ?? detectSteamRunning(this.platform);
+    return this.options.steamRunning?.() ?? detectSteamRunning(this.platform);
   }
 
   private async requireSteamClosed(): Promise<void> {

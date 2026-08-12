@@ -39,7 +39,13 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.getState, () => orchestrator.getState());
-  ipcMain.handle(IPC.getLauncherChangelogStatus, () => launcherChangelog.getStatus());
+  ipcMain.handle(IPC.getLauncherChangelogStatus, async () => {
+    const status = launcherChangelog.getStatus();
+    if (status.showOnStartup) {
+      await steamLaunchIntegration.prepareOnboardingForAutomaticChangelog();
+    }
+    return status;
+  });
   ipcMain.handle(IPC.acknowledgeLauncherChangelog, () => launcherChangelog.acknowledge());
   ipcMain.handle(IPC.getSettings, () => config.get());
 

@@ -182,7 +182,8 @@ if (!app.requestSingleInstanceLock()) {
       LAUNCHER_CONFIG.steamAppId,
       installedLauncherPath,
       process.platform,
-      log
+      log,
+      { onboardingEnabled: app.isPackaged }
     );
     await Promise.all([config.load(), launcherChangelog.load()]);
 

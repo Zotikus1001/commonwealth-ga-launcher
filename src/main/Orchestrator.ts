@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import type { ChildProcess } from 'child_process';
+import { performance } from 'perf_hooks';
 import {
   DLC_SETTING_KEY_BY_ID,
   type ActionResult,
@@ -93,6 +94,11 @@ interface CandidateProbeResult {
   status: ServerProbeStatus;
 }
 
+interface StartupPhaseTiming {
+  checkpoint: number;
+  phases: string[];
+}
+
 function enabledDlcDefinitions(settings: Settings) {
   return LAUNCHER_CONFIG.dlcs.filter(
     (definition) => settings.dlcs[DLC_SETTING_KEY_BY_ID[definition.id]]
@@ -128,6 +134,10 @@ export class Orchestrator {
   private readonly activeGameProcesses = new Set<ChildProcess>();
   private gameProcessTimer: NodeJS.Timeout | null = null;
   private gameProcessRefreshInFlight: Promise<number> | null = null;
+  private startupReadinessStartedAt: number | null = null;
+  private startupLocalDurationMs: number | null = null;
+  private startupServerDurationMs: number | null = null;
+  private startupPhaseTiming: StartupPhaseTiming | null = null;
 
   constructor(
     private readonly config: ConfigStore,
@@ -200,6 +210,61 @@ export class Orchestrator {
 
   getState(): LauncherState {
     return this.state;
+  }
+
+  private beginStartupReadinessTiming(): void {
+    const now = performance.now();
+    this.startupReadinessStartedAt = now;
+    this.startupLocalDurationMs = null;
+    this.startupServerDurationMs = null;
+    this.startupPhaseTiming = { checkpoint: now, phases: [] };
+  }
+
+  private markStartupPhase(label: string): void {
+    if (!this.startupPhaseTiming) return;
+    const now = performance.now();
+    this.startupPhaseTiming.phases.push(
+      `${label}=${Math.round(now - this.startupPhaseTiming.checkpoint)} ms`
+    );
+    this.startupPhaseTiming.checkpoint = now;
+  }
+
+  private finishStartupLocalTiming(): void {
+    if (this.startupReadinessStartedAt === null || !this.startupPhaseTiming) return;
+    this.startupLocalDurationMs = Math.round(performance.now() - this.startupReadinessStartedAt);
+    this.log.info(
+      `startup readiness phases: ${this.startupPhaseTiming.phases.join(', ')}; ` +
+        `local total=${this.startupLocalDurationMs} ms`
+    );
+    this.startupPhaseTiming = null;
+    this.reportStartupReadinessTotal();
+  }
+
+  private finishStartupServerTiming(status: ServerProbeStatus): void {
+    if (this.startupReadinessStartedAt === null || this.startupServerDurationMs !== null) return;
+    this.startupServerDurationMs = Math.round(performance.now() - this.startupReadinessStartedAt);
+    this.log.info(
+      `startup readiness server probe=${this.startupServerDurationMs} ms (${status})`
+    );
+    this.reportStartupReadinessTotal();
+  }
+
+  private reportStartupReadinessTotal(): void {
+    if (
+      this.startupLocalDurationMs === null ||
+      this.startupServerDurationMs === null
+    ) {
+      return;
+    }
+    this.log.info(
+      `startup readiness completed in ${Math.max(
+        this.startupLocalDurationMs,
+        this.startupServerDurationMs
+      )} ms (local=${this.startupLocalDurationMs} ms, server=${this.startupServerDurationMs} ms)`
+    );
+    this.startupReadinessStartedAt = null;
+    this.startupLocalDurationMs = null;
+    this.startupServerDurationMs = null;
   }
 
   private patch(patch: Partial<LauncherState>): void {
@@ -330,13 +395,18 @@ export class Orchestrator {
   }
 
   async start(startupUpdateChecked = false): Promise<void> {
+    this.beginStartupReadinessTiming();
     this.applyServerSelection(this.config.get());
     void this.refreshServerCommits();
     void this.refreshAgendaStats(true);
-    if (startupUpdateChecked) {
-      await this.refreshRuntimeState();
-    } else {
-      await this.refresh();
+    try {
+      if (startupUpdateChecked) {
+        await this.refreshRuntimeState();
+      } else {
+        await this.refresh();
+      }
+    } finally {
+      this.finishStartupLocalTiming();
     }
     if (!this.probeTimer) {
       this.probeTimer = setInterval(
@@ -460,6 +530,7 @@ export class Orchestrator {
     const candidates = this.hostCandidates(selection);
     if (candidates.length === 0) {
       if (this.state.serverStatus !== 'invalid') this.patch({ serverStatus: 'invalid' });
+      this.finishStartupServerTiming('invalid');
       return false;
     }
     const showServerStatus =
@@ -473,6 +544,7 @@ export class Orchestrator {
       ...(showServerStatus ? { statusLine: SERVER_CHECKING_STATUS } : {})
     });
     const result = await this.probeCandidates(candidates);
+    this.finishStartupServerTiming(result.status);
     const currentSettings = this.config.get();
     const currentSelection = this.resolveServer(currentSettings);
     if (
@@ -608,11 +680,13 @@ export class Orchestrator {
     this.patch({ phase: 'checking', statusLine: 'Checking local configuration…', errorDetails: null });
     await this.gameProfileManager.load();
     await this.refreshTrackedGameProcesses();
+    this.markStartupPhase('profiles/processes');
     let settings = this.config.get();
     const [install, linuxRuntime] = await Promise.all([
       validateGameExe(settings.gameExePath),
       PLATFORM === 'linux' ? inspectLinuxRuntime(settings, this.log) : Promise.resolve(null)
     ]);
+    this.markStartupPhase('install/runtime');
     const gameConfigReady = install ? await hasRequiredGameConfigFiles(install) : false;
     this.install = install;
     this.linuxRuntime = linuxRuntime;
@@ -634,6 +708,7 @@ export class Orchestrator {
       selectedGameProfileId: profileSnapshot.selectedProfileId
     });
     const selection = this.applyServerSelection(settings);
+    this.markStartupPhase('configuration readiness');
     if (!install) {
       this.dlcsPreparedGameExePath = '';
       this.log.info('game install validation: invalid or unset');
@@ -705,6 +780,7 @@ export class Orchestrator {
         }
       }
     }
+    this.markStartupPhase('DXVK recovery');
 
     const dlcPreparationErrors = new Map<DlcId, string>();
     const preparedDlcs = new Map<DlcId, DlcStatus>();
@@ -725,12 +801,14 @@ export class Orchestrator {
       }
       this.dlcsPreparedGameExePath = install.exePath;
     }
+    this.markStartupPhase('DLC readiness');
     const [clientPatches, gameIniSettings, gameClientDll, inspectedDlcs] = await Promise.all([
       inspectClientPatches(install),
       inspectGameIniSettings(install),
       this.inspectGameClientDll(install),
       this.dlcManager.inspectAll(install, preparedDlcs)
     ]);
+    this.markStartupPhase('patch/INI/DLL inspection');
     let dlcs = inspectedDlcs;
     if (dlcPreparationErrors.size > 0) {
       dlcs = dlcs.map((dlc) =>
@@ -740,6 +818,7 @@ export class Orchestrator {
       );
     }
     await this.config.syncGameIniSettings(settings.gameExePath, gameIniSettings);
+    this.markStartupPhase('settings sync');
     this.log.info('game install validation: valid');
     this.patch({
       gameClientDll,

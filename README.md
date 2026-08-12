@@ -41,7 +41,7 @@ The launcher updates itself automatically.
   Steam playtime tracking and the in-game overlay
 - Live server status, player count, server selection, Agenda Stats, and GA CARDS access
 - Compact, non-blocking notifications for launcher feedback
-- Up to five optional profiles for quickly switching game settings, with change summaries and save protection
+- Up to five optional profiles for quickly switching game settings, with exact before/after comparisons and save protection
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions

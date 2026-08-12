@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'fs/promises';
 import { basename, dirname, join, resolve } from 'path';
-import type { GameProfileSummary, ProfilePlayPrompt } from '@shared/types';
+import type { GameProfileSummary, ProfileIniChange, ProfilePlayPrompt } from '@shared/types';
 import {
   DEFAULT_GAME_PROFILES_ENABLED,
   MAX_GAME_PROFILES,
@@ -20,16 +20,6 @@ const MAX_PROFILE_FILES = 32;
 const MAX_PROFILE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_PROFILE_TOTAL_BYTES = 16 * 1024 * 1024;
 const MAX_STORED_PROFILE_BYTES = Math.ceil((MAX_PROFILE_TOTAL_BYTES * 4) / 3) + 1024 * 1024;
-const PROFILE_CHANGE_CATEGORIES = [
-  'Graphics, display, audio, or engine settings',
-  'Controls or key bindings',
-  'Interface or HUD settings',
-  'Gameplay settings',
-  'Other game settings'
-] as const;
-
-type ProfileChangeCategory = (typeof PROFILE_CHANGE_CATEGORIES)[number];
-
 interface StoredProfileIndex {
   schemaVersion: number;
   enabled: boolean;
@@ -73,7 +63,17 @@ interface RestoreTarget {
 
 interface ProfileComparisonEntry {
   name: string;
+  displayName: string;
   sha256: string;
+  contents: Buffer;
+}
+
+interface ProfileIniEntry {
+  fileName: string;
+  section: string | null;
+  key: string;
+  value: string;
+  identity: string;
 }
 
 function sha256(contents: Buffer): string {
@@ -87,47 +87,85 @@ function comparisonManifest(
   return files
     .map((file) => {
       const contents = decodeBase64(file.contents)!;
+      const canonicalContents = canonicalizeProfileIniForComparison(
+        file.name,
+        contents,
+        ignoreDxvkRenderer
+      );
       return {
         name: file.name.toLowerCase(),
-        sha256: sha256(
-          canonicalizeProfileIniForComparison(file.name, contents, ignoreDxvkRenderer)
-        )
+        displayName: file.name,
+        sha256: sha256(canonicalContents),
+        contents: canonicalContents
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function profileChangeCategory(fileName: string): ProfileChangeCategory {
-  switch (fileName.toLowerCase()) {
-    case 'tgengine.ini':
-      return PROFILE_CHANGE_CATEGORIES[0];
-    case 'tginput.ini':
-      return PROFILE_CHANGE_CATEGORIES[1];
-    case 'tgui.ini':
-      return PROFILE_CHANGE_CATEGORIES[2];
-    case 'tggame.ini':
-      return PROFILE_CHANGE_CATEGORIES[3];
-    default:
-      return PROFILE_CHANGE_CATEGORIES[4];
+function profileIniEntries(file: ProfileComparisonEntry): ProfileIniEntry[] {
+  const entries: ProfileIniEntry[] = [];
+  const occurrences = new Map<string, number>();
+  let section: string | null = null;
+
+  for (const line of file.contents.toString('utf-8').split('\n')) {
+    const sectionMatch = line.match(/^\[([^\]]+)]$/);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+    if (!line) continue;
+    const equals = line.indexOf('=');
+    const key = (equals < 0 ? line : line.slice(0, equals)).trim();
+    const value = equals < 0 ? '' : line.slice(equals + 1).trim();
+    const directive = `${section?.toLowerCase() ?? ''}\u0000${key.toLowerCase()}`;
+    const occurrence = occurrences.get(directive) ?? 0;
+    occurrences.set(directive, occurrence + 1);
+    entries.push({
+      fileName: file.displayName,
+      section,
+      key,
+      value,
+      identity: `${file.name}\u0000${directive}\u0000${occurrence}`
+    });
   }
+
+  return entries;
 }
 
-function profileChangeSummary(
+function profileIniChanges(
   currentManifest: readonly ProfileComparisonEntry[],
   savedManifest: readonly ProfileComparisonEntry[]
-): string[] {
-  const currentHashes = new Map(currentManifest.map((file) => [file.name, file.sha256]));
-  const savedHashes = new Map(savedManifest.map((file) => [file.name, file.sha256]));
-  const changedNames = new Set([...currentHashes.keys(), ...savedHashes.keys()]);
-  const categories = new Set<ProfileChangeCategory>();
+): ProfileIniChange[] {
+  const currentEntries = new Map(
+    currentManifest.flatMap(profileIniEntries).map((entry) => [entry.identity, entry])
+  );
+  const savedEntries = new Map(
+    savedManifest.flatMap(profileIniEntries).map((entry) => [entry.identity, entry])
+  );
+  const identities = new Set([...savedEntries.keys(), ...currentEntries.keys()]);
 
-  for (const name of changedNames) {
-    if (currentHashes.get(name) !== savedHashes.get(name)) {
-      categories.add(profileChangeCategory(name));
-    }
-  }
-
-  return PROFILE_CHANGE_CATEGORIES.filter((category) => categories.has(category));
+  return [...identities]
+    .flatMap((identity): ProfileIniChange[] => {
+      const before = savedEntries.get(identity);
+      const after = currentEntries.get(identity);
+      if (before?.value === after?.value) return [];
+      const display = after ?? before!;
+      return [
+        {
+          fileName: display.fileName,
+          section: display.section,
+          key: display.key,
+          beforeValue: before?.value ?? null,
+          afterValue: after?.value ?? null
+        }
+      ];
+    })
+    .sort(
+      (left, right) =>
+        left.fileName.localeCompare(right.fileName) ||
+        (left.section ?? '').localeCompare(right.section ?? '') ||
+        left.key.localeCompare(right.key)
+    );
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -523,7 +561,8 @@ export class GameProfileManager {
       ignoreDxvkRenderer
     );
     const savedManifest = comparisonManifest(profile.files, ignoreDxvkRenderer);
-    if (JSON.stringify(currentManifest) === JSON.stringify(savedManifest)) return null;
+    const changes = profileIniChanges(currentManifest, savedManifest);
+    if (changes.length === 0) return null;
 
     const installKey = resolve(install.exePath).replace(/\\/g, '/').toLowerCase();
     const comparisonToken = sha256(
@@ -531,8 +570,8 @@ export class GameProfileManager {
         JSON.stringify({
           profileId: profile.id,
           installKey,
-          currentFiles: currentManifest,
-          savedFiles: savedManifest
+          currentFiles: currentManifest.map(({ name, sha256 }) => ({ name, sha256 })),
+          savedFiles: savedManifest.map(({ name, sha256 }) => ({ name, sha256 }))
         }),
         'utf-8'
       )
@@ -542,7 +581,7 @@ export class GameProfileManager {
       profileName: profile.name,
       profileNumber: this.index.profileIds.indexOf(profile.id) + 1,
       comparisonToken,
-      changeSummary: profileChangeSummary(currentManifest, savedManifest)
+      changes
     };
   }
 

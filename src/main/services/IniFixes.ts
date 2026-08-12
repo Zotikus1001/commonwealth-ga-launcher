@@ -960,7 +960,7 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
   'defaultinput.ini': [{ sectionName: 'engine.console', keys: ['ConsoleKey'] }]
 };
 
-/** Removes only launcher-owned INI directives before comparing saved and current profiles. */
+/** Removes launcher-owned directives and non-setting formatting before profile comparison. */
 export function canonicalizeProfileIniForComparison(
   fileName: string,
   contents: Buffer,
@@ -973,13 +973,11 @@ export function canonicalizeProfileIniForComparison(
         (target) =>
           target.sectionName !== 'systemsettings' || !target.keys.includes('AllowD3D10')
       );
-  if (!targets) return contents;
-
   const text = contents.toString('utf-8');
   if (!Buffer.from(text, 'utf-8').equals(contents)) return contents;
 
   const patterns = new Map(
-    targets.map((target) => [target.sectionName, patchDirectivePattern(target.keys)])
+    (targets ?? []).map((target) => [target.sectionName, patchDirectivePattern(target.keys)])
   );
   const canonicalLines: string[] = [];
   for (const block of splitIniSectionBlocks(text)) {

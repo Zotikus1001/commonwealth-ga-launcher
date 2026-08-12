@@ -11,7 +11,7 @@ import type {
 } from '@shared/types';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import {
-  ProfileChangeSummary,
+  ProfileIniDiffTable,
   ProfileSwitchDialog
 } from '../components/ProfileSwitchDialog';
 import ToastStack, { type ToastNotification } from '../components/ToastStack';
@@ -124,7 +124,7 @@ export function ProfilePlayDialog({
           </p>
         </div>
       </div>
-      <ProfileChangeSummary items={prompt.changeSummary} />
+      <ProfileIniDiffTable changes={prompt.changes} profileNumber={prompt.profileNumber} />
       <p id="profile-play-consequence" className={styles.profilePlayConsequence}>
         <span aria-hidden="true">!</span>
         <span>

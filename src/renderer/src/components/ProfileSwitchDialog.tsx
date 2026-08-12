@@ -1,16 +1,51 @@
 import { useEffect, useRef } from 'react';
-import type { ProfileSwitchAction, ProfileSwitchPrompt } from '@shared/types';
+import type { ProfileIniChange, ProfileSwitchAction, ProfileSwitchPrompt } from '@shared/types';
 import styles from '../screens/Play.module.css';
 
-export function ProfileChangeSummary({ items }: { items: readonly string[] }): JSX.Element {
+function displayIniValue(value: string | null): JSX.Element {
+  if (value === null) return <span className={styles.profileIniMissing}>Not set</span>;
+  if (value === '') return <span className={styles.profileIniEmpty}>Empty</span>;
+  return <code>{value}</code>;
+}
+
+export function ProfileIniDiffTable({
+  changes,
+  profileNumber
+}: {
+  changes: readonly ProfileIniChange[];
+  profileNumber: number;
+}): JSX.Element {
   return (
-    <div className={styles.profileChangeSummary} aria-label="Changed settings summary">
-      <strong>What changed</strong>
-      <ul>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
+    <div className={styles.profileIniDiff} aria-label="Changed INI settings">
+      <div className={styles.profileIniDiffHeading}>
+        <strong>Changed settings</strong>
+        <span>{changes.length} {changes.length === 1 ? 'change' : 'changes'}</span>
+      </div>
+      <div className={styles.profileIniDiffScroll} tabIndex={0}>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">INI setting</th>
+              <th scope="col">Before · Profile #{profileNumber}</th>
+              <th scope="col">After · Current game</th>
+            </tr>
+          </thead>
+          <tbody>
+            {changes.map((change, index) => (
+              <tr key={`${change.fileName}:${change.section ?? ''}:${change.key}:${index}`}>
+                <th scope="row">
+                  <span className={styles.profileIniLocation}>
+                    {change.fileName} · [{change.section ?? 'Global'}]
+                  </span>
+                  <code className={styles.profileIniKey}>{change.key}</code>
+                </th>
+                <td className={styles.profileIniBefore}>{displayIniValue(change.beforeValue)}</td>
+                <td className={styles.profileIniAfter}>{displayIniValue(change.afterValue)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -67,7 +102,7 @@ export function ProfileSwitchDialog({
           </p>
         </div>
       </div>
-      <ProfileChangeSummary items={prompt.changeSummary} />
+      <ProfileIniDiffTable changes={prompt.changes} profileNumber={prompt.profileNumber} />
       <div className={styles.profilePlayActions}>
         <button
           type="button"

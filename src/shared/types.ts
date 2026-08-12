@@ -43,12 +43,20 @@ export interface GameProfileSummary {
   fileCount: number;
 }
 
+export interface ProfileIniChange {
+  fileName: string;
+  section: string | null;
+  key: string;
+  beforeValue: string | null;
+  afterValue: string | null;
+}
+
 export interface ProfilePlayPrompt {
   profileId: string;
   profileName: string;
   profileNumber: number;
   comparisonToken: string;
-  changeSummary: string[];
+  changes: ProfileIniChange[];
 }
 
 export type ProfilePlayAction = 'save-current' | 'use-saved';

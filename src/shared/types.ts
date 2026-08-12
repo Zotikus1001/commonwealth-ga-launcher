@@ -362,6 +362,29 @@ export interface ActionResult {
   message: string;
 }
 
+export interface RendererErrorReport {
+  name: string;
+  message: string;
+  stack: string;
+  componentStack: string;
+}
+
+const RENDERER_ERROR_FIELD_LIMITS: Readonly<Record<keyof RendererErrorReport, number>> = {
+  name: 128,
+  message: 4_096,
+  stack: 16_384,
+  componentStack: 16_384
+};
+
+export function isRendererErrorReport(value: unknown): value is RendererErrorReport {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return Object.entries(RENDERER_ERROR_FIELD_LIMITS).every(
+    ([key, limit]) =>
+      typeof candidate[key] === 'string' && (candidate[key] as string).length <= limit
+  );
+}
+
 export interface SteamLaunchIntegrationStatus {
   state: 'enabled' | 'disabled' | 'needs-repair' | 'conflict' | 'unavailable';
   detail: string;
@@ -423,6 +446,8 @@ export interface LauncherApi {
   openLauncherLogs(): Promise<ActionResult>;
   copyChatCommand(command: string): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;
+  reportRendererError(report: RendererErrorReport): Promise<void>;
+  reloadRenderer(): Promise<ActionResult>;
   getLogTail(): Promise<string[]>;
   resetLauncher(): Promise<ActionResult>;
   onState(cb: (state: LauncherState) => void): () => void;

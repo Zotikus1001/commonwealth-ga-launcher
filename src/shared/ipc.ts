@@ -39,6 +39,8 @@ export const IPC = {
   openLauncherLogs: 'launcher:open-launcher-logs',
   copyChatCommand: 'launcher:copy-chat-command',
   copyDiagnostics: 'launcher:copy-diagnostics',
+  reportRendererError: 'launcher:report-renderer-error',
+  reloadRenderer: 'launcher:reload-renderer',
   getLogTail: 'launcher:get-log-tail',
   resetLauncher: 'launcher:reset-launcher',
   // main -> renderer events

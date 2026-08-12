@@ -3,6 +3,7 @@ import {
   DLC_SETTING_KEY_BY_ID,
   isDlcId,
   isProfilePlayDecision,
+  isRendererErrorReport,
   isProfileSwitchDecision,
   type DeepPartial,
   type Settings
@@ -405,6 +406,30 @@ export function registerIpc(
     const report = buildDiagnosticsReport(orchestrator.getState(), config.get(), log.tail());
     clipboard.writeText(report);
     return { ok: true, message: 'Diagnostics copied to clipboard.' };
+  });
+
+  ipcMain.handle(IPC.reportRendererError, (_event, report: unknown) => {
+    if (!isRendererErrorReport(report)) throw new Error('Invalid renderer error report.');
+    log.error(
+      [
+        `renderer interface failure: ${report.name}: ${report.message}`,
+        report.stack,
+        report.componentStack
+      ]
+        .filter(Boolean)
+        .join('\n')
+    );
+  });
+
+  ipcMain.handle(IPC.reloadRenderer, () => {
+    const mainWindow = getWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { ok: false, message: 'Launcher window is unavailable.' };
+    }
+    setTimeout(() => {
+      if (!mainWindow.isDestroyed()) mainWindow.webContents.reload();
+    }, 0);
+    return { ok: true, message: 'Reloading launcher…' };
   });
 
   ipcMain.handle(IPC.getLogTail, () => log.tail());

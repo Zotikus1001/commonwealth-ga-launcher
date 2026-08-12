@@ -7,6 +7,7 @@ import type {
   LauncherState,
   ProfilePlayDecision,
   ProfileSwitchDecision,
+  RendererErrorReport,
   Settings
 } from '@shared/types';
 import { IPC } from '@shared/ipc';
@@ -63,6 +64,9 @@ const api: LauncherApi = {
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
   copyChatCommand: (command: string) => ipcRenderer.invoke(IPC.copyChatCommand, command),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),
+  reportRendererError: (report: RendererErrorReport) =>
+    ipcRenderer.invoke(IPC.reportRendererError, report),
+  reloadRenderer: () => ipcRenderer.invoke(IPC.reloadRenderer),
   getLogTail: () => ipcRenderer.invoke(IPC.getLogTail),
   resetLauncher: () => ipcRenderer.invoke(IPC.resetLauncher),
   onState: (cb: (state: LauncherState) => void) => {

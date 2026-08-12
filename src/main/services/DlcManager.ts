@@ -1070,10 +1070,19 @@ export class DlcManager {
     }
   }
 
-  async inspectAll(install: GameInstall): Promise<DlcStatus[]> {
+  async inspectAll(
+    install: GameInstall,
+    // Only reuse results produced by ensureInstalled earlier in this same refresh.
+    verifiedThisRefresh: ReadonlyMap<DlcId, DlcStatus> = new Map()
+  ): Promise<DlcStatus[]> {
     await this.clearArchiveDownloads();
     const statuses: DlcStatus[] = [];
     for (const definition of this.definitions) {
+      const verified = verifiedThisRefresh.get(definition.id);
+      if (verified) {
+        statuses.push(verified);
+        continue;
+      }
       try {
         const storedState = await this.readStoredState(install, definition);
         statuses.push(

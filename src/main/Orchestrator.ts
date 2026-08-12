@@ -707,13 +707,16 @@ export class Orchestrator {
     }
 
     const dlcPreparationErrors = new Map<DlcId, string>();
+    const preparedDlcs = new Map<DlcId, DlcStatus>();
     if (
       !this.dlcsPreparedGameExePath ||
       !sameGameExecutable(this.dlcsPreparedGameExePath, install.exePath)
     ) {
       for (const definition of enabledDlcDefinitions(settings)) {
         try {
-          this.patchDlcStatus(await this.ensureDlcInstalled(install, definition.id));
+          const prepared = await this.ensureDlcInstalled(install, definition.id);
+          preparedDlcs.set(definition.id, prepared);
+          this.patchDlcStatus(prepared);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           dlcPreparationErrors.set(definition.id, message);
@@ -726,7 +729,7 @@ export class Orchestrator {
       inspectClientPatches(install),
       inspectGameIniSettings(install),
       this.inspectGameClientDll(install),
-      this.dlcManager.inspectAll(install)
+      this.dlcManager.inspectAll(install, preparedDlcs)
     ]);
     let dlcs = inspectedDlcs;
     if (dlcPreparationErrors.size > 0) {

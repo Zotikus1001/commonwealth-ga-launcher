@@ -2594,7 +2594,7 @@ function PatchesTab({
             <div className={styles.patchFixDetails}>
               <div className={styles.patchFixHeader}>
                 <span>Current fixes</span>
-                <span>1 shipped fix</span>
+                <span>2 shipped fixes</span>
               </div>
               <ul className={styles.patchFixList}>
                 <li>
@@ -2605,6 +2605,18 @@ function PatchesTab({
                     <strong>Smoother scope transitions</strong>
                     <small>
                       Fixes <strong>client stutters</strong> when scoping in or out.
+                    </small>
+                  </span>
+                </li>
+                <li>
+                  <span className={styles.patchFixIndex} aria-hidden="true">
+                    02
+                  </span>
+                  <span className={styles.patchFixCopy}>
+                    <strong>Flying Aim Drift Fix</strong>
+                    <small>
+                      Fixes the legacy <strong>aim drift while flying</strong> across all classes,
+                      especially when using sniper rifles.
                     </small>
                   </span>
                 </li>

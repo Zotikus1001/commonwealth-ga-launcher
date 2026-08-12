@@ -46,6 +46,7 @@ The launcher updates itself automatically.
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions
+    - Fixed aim drift while flying across all classes, especially with sniper rifles
     - An FOV Slider in the in-game Video Settings
     - A Combat Text Scaling Slider for high-resolution displays
 - Optional PvP and PvE map packs with simple install, remove, and matchmaking controls

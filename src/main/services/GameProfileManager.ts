@@ -74,7 +74,7 @@ interface ProfileIniEntry {
   section: string | null;
   key: string;
   value: string;
-  identity: string;
+  directive: string;
 }
 
 function sha256(contents: Buffer): string {
@@ -105,7 +105,6 @@ function comparisonManifest(
 
 function profileIniEntries(file: ProfileComparisonEntry): ProfileIniEntry[] {
   const entries: ProfileIniEntry[] = [];
-  const occurrences = new Map<string, number>();
   let section: string | null = null;
 
   for (const line of file.contents.toString('utf-8').split('\n')) {
@@ -119,48 +118,119 @@ function profileIniEntries(file: ProfileComparisonEntry): ProfileIniEntry[] {
     const key = (equals < 0 ? line : line.slice(0, equals)).trim();
     const value = equals < 0 ? '' : line.slice(equals + 1).trim();
     const directive = `${section?.toLowerCase() ?? ''}\u0000${key.toLowerCase()}`;
-    const occurrence = occurrences.get(directive) ?? 0;
-    occurrences.set(directive, occurrence + 1);
     entries.push({
       fileName: file.displayName,
       section,
       key,
       value,
-      identity: `${file.name}\u0000${directive}\u0000${occurrence}`
+      directive: `${file.name}\u0000${directive}`
     });
   }
 
   return entries;
 }
 
+function unrealStructName(value: string): string | null {
+  const match = value.match(/^\(\s*Name\s*=\s*(?:"([^"]*)"|([^,)]+))/i);
+  return (match?.[1] ?? match?.[2])?.trim().toLowerCase() || null;
+}
+
+function profileIniChange(
+  before: ProfileIniEntry | undefined,
+  after: ProfileIniEntry | undefined
+): ProfileIniChange {
+  const display = after ?? before!;
+  return {
+    fileName: display.fileName,
+    section: display.section,
+    key: display.key,
+    beforeValue: before?.value ?? null,
+    afterValue: after?.value ?? null
+  };
+}
+
+function repeatedProfileIniChanges(
+  saved: readonly ProfileIniEntry[],
+  current: readonly ProfileIniEntry[]
+): ProfileIniChange[] {
+  const remainingSaved = [...saved];
+  const remainingCurrent = [...current];
+
+  // Unreal arrays repeat one key. Cancel exact values first so an insertion cannot shift every row.
+  for (let savedIndex = remainingSaved.length - 1; savedIndex >= 0; savedIndex--) {
+    const currentIndex = remainingCurrent.findIndex(
+      (entry) => entry.value === remainingSaved[savedIndex].value
+    );
+    if (currentIndex < 0) continue;
+    remainingSaved.splice(savedIndex, 1);
+    remainingCurrent.splice(currentIndex, 1);
+  }
+
+  const changes: ProfileIniChange[] = [];
+  for (let savedIndex = 0; savedIndex < remainingSaved.length; ) {
+    const name = unrealStructName(remainingSaved[savedIndex].value);
+    const currentIndex = name
+      ? remainingCurrent.findIndex((entry) => unrealStructName(entry.value) === name)
+      : -1;
+    if (currentIndex < 0) {
+      savedIndex++;
+      continue;
+    }
+    changes.push(
+      profileIniChange(
+        remainingSaved.splice(savedIndex, 1)[0],
+        remainingCurrent.splice(currentIndex, 1)[0]
+      )
+    );
+  }
+
+  const namedSaved = remainingSaved.filter((entry) => unrealStructName(entry.value) !== null);
+  const namedCurrent = remainingCurrent.filter((entry) => unrealStructName(entry.value) !== null);
+  const unnamedSaved = remainingSaved.filter((entry) => unrealStructName(entry.value) === null);
+  const unnamedCurrent = remainingCurrent.filter((entry) => unrealStructName(entry.value) === null);
+  for (const before of namedSaved) changes.push(profileIniChange(before, undefined));
+  for (const after of namedCurrent) changes.push(profileIniChange(undefined, after));
+
+  const pairedCount = Math.min(unnamedSaved.length, unnamedCurrent.length);
+  for (let index = 0; index < pairedCount; index++) {
+    changes.push(profileIniChange(unnamedSaved[index], unnamedCurrent[index]));
+  }
+  for (const before of unnamedSaved.slice(pairedCount)) {
+    changes.push(profileIniChange(before, undefined));
+  }
+  for (const after of unnamedCurrent.slice(pairedCount)) {
+    changes.push(profileIniChange(undefined, after));
+  }
+  return changes;
+}
+
+function profileIniEntryGroups(
+  manifest: readonly ProfileComparisonEntry[]
+): Map<string, ProfileIniEntry[]> {
+  const groups = new Map<string, ProfileIniEntry[]>();
+  for (const entry of manifest.flatMap(profileIniEntries)) {
+    const group = groups.get(entry.directive);
+    if (group) group.push(entry);
+    else groups.set(entry.directive, [entry]);
+  }
+  return groups;
+}
+
 function profileIniChanges(
   currentManifest: readonly ProfileComparisonEntry[],
   savedManifest: readonly ProfileComparisonEntry[]
 ): ProfileIniChange[] {
-  const currentEntries = new Map(
-    currentManifest.flatMap(profileIniEntries).map((entry) => [entry.identity, entry])
-  );
-  const savedEntries = new Map(
-    savedManifest.flatMap(profileIniEntries).map((entry) => [entry.identity, entry])
-  );
-  const identities = new Set([...savedEntries.keys(), ...currentEntries.keys()]);
+  const currentEntries = profileIniEntryGroups(currentManifest);
+  const savedEntries = profileIniEntryGroups(savedManifest);
+  const directives = new Set([...savedEntries.keys(), ...currentEntries.keys()]);
 
-  return [...identities]
-    .flatMap((identity): ProfileIniChange[] => {
-      const before = savedEntries.get(identity);
-      const after = currentEntries.get(identity);
-      if (before?.value === after?.value) return [];
-      const display = after ?? before!;
-      return [
-        {
-          fileName: display.fileName,
-          section: display.section,
-          key: display.key,
-          beforeValue: before?.value ?? null,
-          afterValue: after?.value ?? null
-        }
-      ];
-    })
+  return [...directives]
+    .flatMap((directive) =>
+      repeatedProfileIniChanges(
+        savedEntries.get(directive) ?? [],
+        currentEntries.get(directive) ?? []
+      )
+    )
     .sort(
       (left, right) =>
         left.fileName.localeCompare(right.fileName) ||

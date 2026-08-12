@@ -335,8 +335,6 @@ export interface LauncherState {
   gameProfilesEnabled: boolean;
   gameProfiles: GameProfileSummary[];
   selectedGameProfileId: string | null;
-  /** Profile whose saved files were most recently applied to the game configuration. */
-  appliedGameProfileId: string | null;
   serverCommits: ServerCommit[];
   serverCommitsStatus: 'loading' | 'ready' | 'error';
   agendaStatsText: string | null;

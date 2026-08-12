@@ -184,7 +184,6 @@ export class Orchestrator {
       gameProfilesEnabled: DEFAULT_GAME_PROFILES_ENABLED,
       gameProfiles: [],
       selectedGameProfileId: null,
-      appliedGameProfileId: null,
       serverCommits: [],
       serverCommitsStatus: 'loading',
       agendaStatsText: null,
@@ -706,8 +705,7 @@ export class Orchestrator {
       gameModeAvailable: linuxRuntime ? !!linuxRuntime.gameModePath : null,
       gameProfilesEnabled: profileSnapshot.enabled,
       gameProfiles: profileSnapshot.profiles,
-      selectedGameProfileId: profileSnapshot.selectedProfileId,
-      appliedGameProfileId: profileSnapshot.appliedProfileId
+      selectedGameProfileId: profileSnapshot.selectedProfileId
     });
     const selection = this.applyServerSelection(settings);
     this.markStartupPhase('configuration readiness');
@@ -1022,8 +1020,7 @@ export class Orchestrator {
             this.patch({
               gameProfilesEnabled: snapshot.enabled,
               gameProfiles: snapshot.profiles,
-              selectedGameProfileId: snapshot.selectedProfileId,
-              appliedGameProfileId: snapshot.appliedProfileId
+              selectedGameProfileId: snapshot.selectedProfileId
             });
           }
         }
@@ -1081,9 +1078,6 @@ export class Orchestrator {
           errorDetails: null
         });
         await this.gameProfileManager.applySelected(this.install);
-        this.patch({
-          appliedGameProfileId: this.gameProfileManager.getSnapshot().appliedProfileId
-        });
         const backupDirectory = managedIniBackupDirectory(app.getPath('userData'), this.install);
         if (!settings.patches.highFpsMovementStability) {
           await removeIniClientPatch(
@@ -1626,8 +1620,7 @@ export class Orchestrator {
       errorDetails: null,
       gameProfilesEnabled: snapshot.enabled,
       gameProfiles: snapshot.profiles,
-      selectedGameProfileId: snapshot.selectedProfileId,
-      appliedGameProfileId: snapshot.appliedProfileId
+      selectedGameProfileId: snapshot.selectedProfileId
     });
   }
 
@@ -1752,7 +1745,11 @@ export class Orchestrator {
       const targetIndex = snapshot.profiles.findIndex((profile) => profile.id === id);
       if (targetIndex < 0) throw new Error('Unknown game profile.');
       const target = snapshot.profiles[targetIndex];
-      if (this.install && snapshot.enabled) {
+      if (
+        this.install &&
+        snapshot.enabled &&
+        snapshot.selectedProfileId === snapshot.appliedProfileId
+      ) {
         const ignoreDxvkRenderer =
           PLATFORM === 'win32' && this.state.dxvk.canRestore;
         const changes = await this.gameProfileManager.inspectAppliedChanges(
@@ -1777,15 +1774,11 @@ export class Orchestrator {
       }
       await this.gameProfileManager.select(id);
       const profile = this.gameProfileManager.getSelectedSummary();
-      const latestSnapshot = this.gameProfileManager.getSnapshot();
-      const enabled = latestSnapshot.enabled;
-      const applied = profile?.id === latestSnapshot.appliedProfileId;
+      const enabled = this.gameProfileManager.getSnapshot().enabled;
       this.patchProfileSnapshot(
         profile
           ? enabled
-            ? applied
-              ? `Profile ${profile.name} is active.`
-              : `Profile ${profile.name} selected for next Play.`
+            ? `Profile ${profile.name} selected.`
             : `Profile ${profile.name} selected. Profiles remain off.`
           : 'Ready.'
       );

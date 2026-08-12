@@ -545,22 +545,19 @@ export default function Play({
           {state.gameProfilesEnabled && state.gameProfiles.length > 0 && (
             <div className={styles.profileNumbers} aria-label="Game settings profiles">
               {state.gameProfiles.map((profile, index) => {
-                const selectedForPlay = profile.id === state.selectedGameProfileId;
-                const applied = profile.id === state.appliedGameProfileId;
-                const pending = selectedForPlay && !applied;
-                const profileState = applied ? 'Active' : pending ? 'Next Play' : null;
+                const selected = profile.id === state.selectedGameProfileId;
                 return (
                   <button
                     key={profile.id}
                     className={`${styles.profileNumber} ${
-                      applied ? styles.profileNumberApplied : ''
+                      selected ? styles.profileNumberActive : ''
                     }`}
-                    data-profile-name={`${profile.name}${profileState ? ` · ${profileState}` : ''}`}
-                    title={`${profile.name}${profileState ? ` · ${profileState}` : ''}`}
+                    data-profile-name={profile.name}
+                    title={profile.name}
                     aria-label={`Profile ${index + 1}: ${profile.name}${
-                      applied ? ', active' : pending ? ', selected for next Play' : ''
+                      selected ? ', active' : ''
                     }`}
-                    aria-pressed={selectedForPlay}
+                    aria-pressed={selected}
                     disabled={profileSelectionDisabled}
                     onClick={() => void selectProfile(profile.id)}
                   >

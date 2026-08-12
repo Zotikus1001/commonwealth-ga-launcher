@@ -396,7 +396,10 @@ export class GameProfileManager {
         const profile = await this.readProfile(id);
         summaries.set(id, profileSummary(profile));
       }
-      this.index = index;
+      this.index = {
+        ...index,
+        selectedProfileId: index.appliedProfileId ?? index.selectedProfileId
+      };
       this.summaries = summaries;
       this.loaded = true;
       this.log.info(`game profiles loaded (${index.profileIds.length})`);
@@ -490,13 +493,17 @@ export class GameProfileManager {
     await this.ensureWritable();
     await this.requireProfile(id);
     const profileIds = this.index.profileIds.filter((candidate) => candidate !== id);
+    const appliedProfileId =
+      this.index.appliedProfileId === id ? null : this.index.appliedProfileId;
+    const retainedSelectedProfileId =
+      this.index.selectedProfileId !== id &&
+      profileIds.includes(this.index.selectedProfileId ?? '')
+        ? this.index.selectedProfileId
+        : (profileIds[0] ?? null);
     const nextIndex: StoredProfileIndex = {
       ...this.index,
-      selectedProfileId:
-        this.index.selectedProfileId === id
-          ? (profileIds[0] ?? null)
-          : this.index.selectedProfileId,
-      appliedProfileId: this.index.appliedProfileId === id ? null : this.index.appliedProfileId,
+      selectedProfileId: appliedProfileId ?? retainedSelectedProfileId,
+      appliedProfileId,
       profileIds
     };
     await writeJsonAtomic(this.indexPath, nextIndex);
@@ -512,16 +519,18 @@ export class GameProfileManager {
     await this.ensureWritable();
     if (!this.summaries.has(id)) throw new Error('Unknown game profile.');
     if (this.index.selectedProfileId === id) return;
-    const nextIndex = { ...this.index, selectedProfileId: id };
-    await writeJsonAtomic(this.indexPath, nextIndex);
-    this.index = nextIndex;
+    this.index = { ...this.index, selectedProfileId: id };
     this.log.info('active game profile changed');
   }
 
   async setEnabled(enabled: boolean): Promise<void> {
     await this.ensureWritable();
     if (this.index.enabled === enabled) return;
-    const nextIndex = { ...this.index, enabled };
+    const nextIndex = {
+      ...this.index,
+      enabled,
+      selectedProfileId: this.index.appliedProfileId ?? this.index.selectedProfileId
+    };
     await writeJsonAtomic(this.indexPath, nextIndex);
     this.index = nextIndex;
     this.log.info(`game profiles ${enabled ? 'enabled' : 'disabled'}`);
@@ -652,8 +661,8 @@ export class GameProfileManager {
       throw new Error(`Could not apply game profile: ${(error as Error).message}.${suffix}`);
     }
 
-    if (this.index.appliedProfileId !== id) {
-      const nextIndex = { ...this.index, appliedProfileId: id };
+    if (this.index.appliedProfileId !== id || this.index.selectedProfileId !== id) {
+      const nextIndex = { ...this.index, selectedProfileId: id, appliedProfileId: id };
       try {
         await writeJsonAtomic(this.indexPath, nextIndex);
       } catch (error) {

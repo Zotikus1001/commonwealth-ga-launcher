@@ -1518,11 +1518,6 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
   const selectedProfile = state.gameProfiles.find(
     (profile) => profile.id === state.selectedGameProfileId
   );
-  const appliedProfile = state.gameProfiles.find(
-    (profile) => profile.id === state.appliedGameProfileId
-  );
-  const pendingProfile =
-    selectedProfile && selectedProfile.id !== appliedProfile?.id ? selectedProfile : null;
 
   useEffect(() => {
     setNames((current) =>
@@ -1629,9 +1624,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
         setResult({
           ok: true,
           message: state.gameProfilesEnabled
-            ? profile.id === state.appliedGameProfileId
-              ? `Profile ${profile.name} remains active.`
-              : `Profile ${profile.name} selected for next Play.`
+            ? `Profile ${profile.name} selected.`
             : `Profile ${profile.name} is selected. Profiles remain off.`
         });
       }
@@ -1689,22 +1682,16 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
           </span>
           <strong>
             {state.gameProfilesEnabled
-              ? pendingProfile
-                ? `Next Play: ${pendingProfile.name}`
-                : appliedProfile
-                  ? `${appliedProfile.name} is active`
-                  : selectedProfile
-                    ? `Next Play: ${selectedProfile.name}`
-                    : 'Choose a saved profile to use on Play'
+              ? selectedProfile
+                ? `${selectedProfile.name} is active`
+                : 'Choose a saved profile'
               : 'The game keeps your settings as you leave them'}
           </strong>
           <p>
             {state.gameProfilesEnabled
-              ? pendingProfile && appliedProfile
-                ? `Currently using ${appliedProfile.name}. You can save its latest changes before switching.`
-                : selectedProfile
-                  ? 'Changes made in-game are not saved automatically. You can save them before switching profiles.'
-                : 'Profiles are enabled, but nothing will be restored until a profile is saved and selected.'
+              ? selectedProfile
+                ? 'Changes made in-game are not saved automatically. You can save them before switching profiles.'
+                : 'Profiles are enabled, but no profile is selected.'
               : 'No saved profile is applied. Your profiles and selected slot remain saved for whenever you turn this back on.'}
           </p>
         </div>
@@ -1816,24 +1803,16 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
       <div className={styles.gameProfiles}>
         {state.gameProfiles.map((profile, index) => {
           const selected = profile.id === state.selectedGameProfileId;
-          const applied =
-            state.gameProfilesEnabled && profile.id === state.appliedGameProfileId;
-          const pending = state.gameProfilesEnabled && selected && !applied;
+          const active = state.gameProfilesEnabled && selected;
           const paused = selected && !state.gameProfilesEnabled;
           const name = names[profile.id] ?? profile.name;
           const nameError = validateGameProfileName(name);
           const confirming = confirmation?.id === profile.id ? confirmation.kind : null;
-          const profileStatus = applied ? 'Active' : pending ? 'Next Play' : paused ? 'Paused' : null;
-          const profileHeading = applied
-            ? 'Current profile'
-            : pending
-              ? 'Selected profile'
-              : selected
-                ? 'Selected profile'
-                : `Profile ${index + 1}`;
+          const profileStatus = active ? 'Active' : paused ? 'Paused' : null;
+          const profileHeading = selected ? 'Selected profile' : `Profile ${index + 1}`;
           return (
             <article
-              className={`${styles.gameProfile} ${applied ? styles.gameProfileActive : ''}`}
+              className={`${styles.gameProfile} ${active ? styles.gameProfileActive : ''}`}
               key={profile.id}
             >
               <div className={styles.gameProfileIndex}>{String(index + 1).padStart(2, '0')}</div>
@@ -1843,7 +1822,7 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                   {profileStatus && (
                     <span
                       className={`${styles.gameProfileStatusBadge} ${
-                        applied ? styles.gameProfileActiveBadge : ''
+                        active ? styles.gameProfileActiveBadge : ''
                       }`}
                     >
                       {profileStatus}
@@ -1935,13 +1914,9 @@ function ProfilesTab({ state }: { state: LauncherState }): JSX.Element {
                   {action === `select:${profile.id}`
                     ? 'Selecting…'
                     : selected
-                      ? pending
-                        ? 'Next Play'
-                        : applied
-                          ? 'Active'
-                          : 'Selected'
-                      : applied
-                        ? 'Keep Active'
+                      ? active
+                        ? 'Active'
+                        : 'Selected'
                       : 'Select'}
                 </button>
                 <button

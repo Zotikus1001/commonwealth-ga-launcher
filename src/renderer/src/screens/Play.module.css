@@ -545,8 +545,8 @@
   opacity: 1;
 }
 
-.profileNumberApplied,
-.profileNumberApplied:hover:not(:disabled) {
+.profileNumberActive,
+.profileNumberActive:hover:not(:disabled) {
   border-color: var(--green);
   background:
     linear-gradient(145deg, rgba(70, 192, 109, 0.2), rgba(70, 192, 109, 0.06)),

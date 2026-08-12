@@ -42,7 +42,7 @@ The launcher updates itself automatically.
 - Live server status, player count, server selection, Agenda Stats, and GA CARDS access
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
-- Up to five optional profiles for quickly switching game settings, with exact before/after comparisons and save protection
+- Up to five optional profiles for quickly switching game settings, clearly showing what is active now and selected for the next Play, with exact before/after comparisons and save protection
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions

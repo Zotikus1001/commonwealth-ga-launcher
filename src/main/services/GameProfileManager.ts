@@ -48,6 +48,7 @@ export interface GameProfileSnapshot {
   enabled: boolean;
   profiles: GameProfileSummary[];
   selectedProfileId: string | null;
+  appliedProfileId: string | null;
 }
 
 export interface AppliedGameProfile extends GameProfileSummary {
@@ -408,7 +409,8 @@ export class GameProfileManager {
     return {
       enabled: this.index.enabled,
       profiles: this.index.profileIds.map((id) => structuredClone(this.summaries.get(id)!)),
-      selectedProfileId: this.index.selectedProfileId
+      selectedProfileId: this.index.selectedProfileId,
+      appliedProfileId: this.index.appliedProfileId
     };
   }
 

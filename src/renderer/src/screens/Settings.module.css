@@ -1024,6 +1024,14 @@
     rgba(15, 19, 28, 0.72);
 }
 
+.gameProfilePending {
+  border-color: rgba(69, 200, 218, 0.35);
+  border-left-color: var(--cyan);
+  background:
+    linear-gradient(100deg, rgba(69, 200, 218, 0.07), transparent 54%),
+    rgba(15, 19, 28, 0.72);
+}
+
 .gameProfilePaused {
   border-color: rgba(69, 200, 218, 0.3);
   border-left-color: var(--cyan);
@@ -1045,6 +1053,11 @@
 .gameProfileActive .gameProfileIndex {
   border-right-color: rgba(70, 192, 109, 0.24);
   color: var(--green);
+}
+
+.gameProfilePending .gameProfileIndex {
+  border-right-color: rgba(69, 200, 218, 0.24);
+  color: var(--cyan);
 }
 
 .gameProfilePaused .gameProfileIndex {
@@ -1081,6 +1094,11 @@
 
 .gameProfilePaused .gameProfileActiveBadge {
   border-color: rgba(69, 200, 218, 0.32);
+  color: var(--cyan);
+}
+
+.gameProfilePending .gameProfileActiveBadge {
+  border-color: rgba(69, 200, 218, 0.38);
   color: var(--cyan);
 }
 
@@ -1141,6 +1159,11 @@
 }
 
 .gameProfilePaused .profileSelectButton:disabled {
+  border-color: rgba(69, 200, 218, 0.32);
+  color: var(--cyan);
+}
+
+.gameProfilePending .profileSelectButton:disabled {
   border-color: rgba(69, 200, 218, 0.32);
   color: var(--cyan);
 }

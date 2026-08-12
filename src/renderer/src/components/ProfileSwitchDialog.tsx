@@ -104,7 +104,6 @@ export function ProfileSwitchDialog({
     };
   }, []);
 
-  const returningToAppliedProfile = prompt.profileId === prompt.targetProfileId;
   const currentLabel = `Profile #${prompt.profileNumber}`;
   const targetLabel = `Profile #${prompt.targetProfileNumber}`;
   return (
@@ -121,9 +120,8 @@ export function ProfileSwitchDialog({
       <div className={styles.profilePlayReadout}>
         <span className={styles.profilePlaySignal} aria-hidden="true" />
         <span>
-          {returningToAppliedProfile
-            ? `Profile settings // ${String(prompt.profileNumber).padStart(2, '0')}`
-            : `Profile switch // ${String(prompt.profileNumber).padStart(2, '0')} → ${String(prompt.targetProfileNumber).padStart(2, '0')}`}
+          Profile switch // {String(prompt.profileNumber).padStart(2, '0')} →{' '}
+          {String(prompt.targetProfileNumber).padStart(2, '0')}
         </span>
       </div>
       <div className={styles.profilePlayBody}>
@@ -131,20 +129,9 @@ export function ProfileSwitchDialog({
           {String(prompt.targetProfileNumber).padStart(2, '0')}
         </div>
         <div className={styles.profilePlayCopy}>
-          <h2 id="profile-switch-title">
-            {returningToAppliedProfile
-              ? `Save changes to ${currentLabel}?`
-              : 'Save changes before switching?'}
-          </h2>
+          <h2 id="profile-switch-title">Switch to {targetLabel}?</h2>
           <p id="profile-switch-description">
-            {returningToAppliedProfile ? (
-              <>Your in-game settings changed. Save them before selecting {currentLabel}?</>
-            ) : (
-              <>
-                Your in-game settings changed while {currentLabel} was active. Save them before
-                switching to {targetLabel}?
-              </>
-            )}
+            Do you want to save your latest in-game settings to {currentLabel} before switching?
           </p>
         </div>
       </div>
@@ -156,14 +143,14 @@ export function ProfileSwitchDialog({
           autoFocus
           onClick={() => onDecision('save-current')}
         >
-          {returningToAppliedProfile ? 'Save & Select' : 'Save & Switch'}
+          Save &amp; Switch
         </button>
         <button
           type="button"
           className={styles.profilePlayUseSaved}
           onClick={() => onDecision('switch-without-saving')}
         >
-          {returningToAppliedProfile ? 'Select Without Saving' : 'Switch Without Saving'}
+          Switch Without Saving
         </button>
         <button type="button" className={styles.profilePlayCancel} onClick={onCancel}>
           Cancel

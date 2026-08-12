@@ -1148,6 +1148,16 @@
   }
 }
 
+@media (min-width: 1180px) and (min-height: 700px) {
+  .profilePlayDialog {
+    width: min(1360px, calc(100vw - 64px));
+  }
+
+  .profileIniDiffScroll {
+    max-height: min(58vh, 620px);
+  }
+}
+
 @media (max-height: 640px) {
   .serverName {
     margin-bottom: 12px;

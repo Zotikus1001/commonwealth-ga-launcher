@@ -66,7 +66,8 @@ interface IniFileEdit {
 
 interface IniPatchTarget {
   sectionName: string;
-  keys: readonly string[];
+  keys?: readonly string[];
+  directivePattern?: RegExp;
 }
 
 export interface DeveloperConsoleSettings {
@@ -74,10 +75,13 @@ export interface DeveloperConsoleSettings {
   key: DeveloperConsoleKey;
 }
 
-const DEVELOPER_CONSOLE_TARGET: IniPatchTarget = {
-  sectionName: 'Engine.Console',
-  keys: ['ConsoleKey']
-};
+const CONSOLE_TOGGLE_BINDING_PATTERN =
+  /^\s*[+.]?Bindings\s*=\s*\((?=[^\r\n]*\bCommand\s*=\s*"ConsoleToggle"\s*(?:,|\)))[^\r\n]*\)\s*(?:[;#].*)?$/i;
+const DEVELOPER_CONSOLE_TARGETS: readonly IniPatchTarget[] = [
+  { sectionName: 'Engine.Console', keys: ['ConsoleKey'] },
+  { sectionName: 'TgGame.TgPlayerInput', directivePattern: CONSOLE_TOGGLE_BINDING_PATTERN },
+  { sectionName: 'Engine.PlayerInput', directivePattern: CONSOLE_TOGGLE_BINDING_PATTERN }
+];
 
 interface IniSectionBlock {
   name: string | null;
@@ -367,6 +371,99 @@ function patchSectionValue(
     }`
   );
   return { text: lines.join(''), changed: true };
+}
+
+const PLAYER_INPUT_SECTIONS = ['tggame.tgplayerinput', 'engine.playerinput'] as const;
+
+function consoleToggleBindingKey(line: string): string | null {
+  const ending = trailingLineEnding(line);
+  const content = ending ? line.slice(0, -ending.length) : line;
+  if (!CONSOLE_TOGGLE_BINDING_PATTERN.test(content)) return null;
+  const name = content.match(/\bName\s*=\s*(?:"([^"]+)"|([^,\s)]+))/i);
+  return name?.[1] ?? name?.[2] ?? '';
+}
+
+function preferredPlayerInputSection(blocks: readonly IniSectionBlock[]): string {
+  return (
+    PLAYER_INPUT_SECTIONS.find((sectionName) =>
+      blocks.some((block) => block.name === sectionName)
+    ) ?? 'engine.playerinput'
+  );
+}
+
+function patchConsoleToggleBinding(text: string, key: DeveloperConsoleKey): TextPatchResult {
+  const blocks = splitIniSectionBlocks(text);
+  const preferredSection = preferredPlayerInputSection(blocks);
+  const bindings = blocks.flatMap((block) =>
+    PLAYER_INPUT_SECTIONS.includes(block.name as (typeof PLAYER_INPUT_SECTIONS)[number])
+      ? block.lines.slice(1).flatMap((line) => {
+          const bindingKey = consoleToggleBindingKey(line);
+          return bindingKey === null ? [] : [{ section: block.name, key: bindingKey }];
+        })
+      : []
+  );
+  if (
+    bindings.length === 1 &&
+    bindings[0].section === preferredSection &&
+    bindings[0].key.toLowerCase() === key.toLowerCase()
+  ) {
+    return { text, changed: false };
+  }
+
+  for (const block of blocks) {
+    if (!PLAYER_INPUT_SECTIONS.includes(block.name as (typeof PLAYER_INPUT_SECTIONS)[number])) {
+      continue;
+    }
+    block.lines = [
+      block.lines[0],
+      ...block.lines.slice(1).filter((line) => consoleToggleBindingKey(line) === null)
+    ];
+  }
+
+  const preferredLineEnding =
+    blocks.flatMap((block) => block.lines).map(trailingLineEnding).find(Boolean) || '\r\n';
+  const directive = `Bindings=(Name="${key}",Command="ConsoleToggle")`;
+  const preferredBlock = blocks.find((block) => block.name === preferredSection);
+  if (preferredBlock) {
+    const headerHasLineEnding = trailingLineEnding(preferredBlock.lines[0]) !== '';
+    preferredBlock.lines.splice(
+      1,
+      0,
+      `${headerHasLineEnding ? '' : preferredLineEnding}${directive}${preferredLineEnding}`
+    );
+  } else {
+    const current = blocks.flatMap((block) => block.lines).join('');
+    let separator = '';
+    if (current.length > 0) {
+      const endsWithLineEnding = trailingLineEnding(current) !== '';
+      const lastLine = current.split(/\r\n|\n|\r/).at(endsWithLineEnding ? -2 : -1) ?? '';
+      if (!endsWithLineEnding) separator += preferredLineEnding;
+      if (lastLine.trim() !== '') separator += preferredLineEnding;
+    }
+    blocks.push({
+      name: preferredSection,
+      lines: [
+        `${separator}[Engine.PlayerInput]${preferredLineEnding}`,
+        `${directive}${preferredLineEnding}`
+      ]
+    });
+  }
+
+  return { text: blocks.flatMap((block) => block.lines).join(''), changed: true };
+}
+
+function effectiveConsoleToggleBindings(
+  text: string
+): Array<{ section: string; key: string }> {
+  const blocks = splitIniSectionBlocks(text);
+  return blocks.flatMap((block) =>
+    PLAYER_INPUT_SECTIONS.includes(block.name as (typeof PLAYER_INPUT_SECTIONS)[number])
+      ? block.lines.slice(1).flatMap((line) => {
+          const key = consoleToggleBindingKey(line);
+          return key === null ? [] : [{ section: block.name!, key }];
+        })
+      : []
+  );
 }
 
 function effectiveSectionValues(text: string, sectionName: string, keyName: string): string[] {
@@ -935,6 +1032,12 @@ function patchDirectivePattern(keys: readonly string[]): RegExp {
   );
 }
 
+function targetDirectivePattern(target: IniPatchTarget): RegExp {
+  if (target.directivePattern) return target.directivePattern;
+  if (target.keys && target.keys.length > 0) return patchDirectivePattern(target.keys);
+  throw new Error(`INI patch target [${target.sectionName}] has no directives`);
+}
+
 const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarget[]>> = {
   'tgengine.ini': [
     { sectionName: 'engine.player', keys: NET_SPEED_KEYS },
@@ -956,8 +1059,8 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
       keys: ['m_bSuppressOverhealing']
     }
   ],
-  'tginput.ini': [{ sectionName: 'engine.console', keys: ['ConsoleKey'] }],
-  'defaultinput.ini': [{ sectionName: 'engine.console', keys: ['ConsoleKey'] }]
+  'tginput.ini': DEVELOPER_CONSOLE_TARGETS,
+  'defaultinput.ini': DEVELOPER_CONSOLE_TARGETS
 };
 
 /** Removes launcher-owned directives and non-setting formatting before profile comparison. */
@@ -971,23 +1074,33 @@ export function canonicalizeProfileIniForComparison(
     ? configuredTargets
     : configuredTargets?.filter(
         (target) =>
-          target.sectionName !== 'systemsettings' || !target.keys.includes('AllowD3D10')
+          target.sectionName !== 'systemsettings' || !target.keys?.includes('AllowD3D10')
       );
   const text = contents.toString('utf-8');
   if (!Buffer.from(text, 'utf-8').equals(contents)) return contents;
 
-  const patterns = new Map(
-    (targets ?? []).map((target) => [target.sectionName, patchDirectivePattern(target.keys)])
-  );
+  const patterns = new Map<string, RegExp[]>();
+  for (const target of targets ?? []) {
+    const sectionName = target.sectionName.toLowerCase();
+    const sectionPatterns = patterns.get(sectionName) ?? [];
+    sectionPatterns.push(targetDirectivePattern(target));
+    patterns.set(sectionName, sectionPatterns);
+  }
   const canonicalLines: string[] = [];
   for (const block of splitIniSectionBlocks(text)) {
     const body = block.name === null ? block.lines : block.lines.slice(1);
-    const ownedDirective = block.name === null ? undefined : patterns.get(block.name);
+    const ownedDirectives = block.name === null ? undefined : patterns.get(block.name);
     const meaningfulLines = body.flatMap((line) => {
       const ending = trailingLineEnding(line);
       const content = ending ? line.slice(0, -ending.length) : line;
       const trimmed = content.trim();
-      if (trimmed === '' || /^[;#]/.test(trimmed) || ownedDirective?.test(content)) return [];
+      if (
+        trimmed === '' ||
+        /^[;#]/.test(trimmed) ||
+        ownedDirectives?.some((pattern) => pattern.test(content))
+      ) {
+        return [];
+      }
       return [trimmed];
     });
     if (meaningfulLines.length === 0) continue;
@@ -1042,7 +1155,7 @@ function restoreTargetBlock(
 }
 
 function targetSignature(blocks: IniSectionBlock[], target: IniPatchTarget): string[] {
-  const pattern = patchDirectivePattern(target.keys);
+  const pattern = targetDirectivePattern(target);
   return blocks
     .filter((block) => block.name === target.sectionName.toLowerCase())
     .flatMap((block) => targetDirectiveLines(block, pattern))
@@ -1061,7 +1174,7 @@ function restorePatchTarget(
   const backupBlocks = splitIniSectionBlocks(backupText).filter(
     (block) => block.name === target.sectionName.toLowerCase()
   );
-  const pattern = patchDirectivePattern(target.keys);
+  const pattern = targetDirectivePattern(target);
   let occurrence = 0;
   const restoredBlocks: IniSectionBlock[] = [];
   for (const block of currentBlocks) {
@@ -1492,6 +1605,7 @@ async function patchIniFile(
   }
   if (options.kind === 'developer-console') {
     apply(patchSectionValue(patchedText, 'Engine.Console', 'ConsoleKey', options.key));
+    apply(patchConsoleToggleBinding(patchedText, options.key));
   }
   if (options.kind === 'adaptive-performance') {
     apply(patchSectionValue(patchedText, 'TextureStreaming', 'PoolSize', String(options.texturePoolMb)));
@@ -1547,6 +1661,15 @@ async function patchIniFile(
       const values = effectiveSectionValues(text, 'Engine.Console', 'ConsoleKey');
       if (values.length === 0 || values.some((value) => value !== options.key)) {
         throw new Error(`${fileName} did not retain ConsoleKey=${options.key}`);
+      }
+      const bindings = effectiveConsoleToggleBindings(text);
+      const preferredSection = preferredPlayerInputSection(splitIniSectionBlocks(text));
+      if (
+        bindings.length !== 1 ||
+        bindings[0].section !== preferredSection ||
+        bindings[0].key.toLowerCase() !== options.key.toLowerCase()
+      ) {
+        throw new Error(`${fileName} did not retain ${options.key}=ConsoleToggle`);
       }
     }
     if (options.kind === 'adaptive-performance') {
@@ -1786,13 +1909,17 @@ async function restoreDeveloperConsoleFile(
   }
 
   const currentText = await readFile(path, { encoding: 'utf-8' });
-  if (targetSignature(splitIniSectionBlocks(currentText), DEVELOPER_CONSOLE_TARGET).length === 0) {
+  const currentBlocks = splitIniSectionBlocks(currentText);
+  if (
+    DEVELOPER_CONSOLE_TARGETS.every(
+      (target) => targetSignature(currentBlocks, target).length === 0
+    )
+  ) {
     return false;
   }
-  const restoredText = restorePatchTarget(
-    currentText,
-    backupText,
-    DEVELOPER_CONSOLE_TARGET
+  const restoredText = DEVELOPER_CONSOLE_TARGETS.reduceRight(
+    (text, target) => restorePatchTarget(text, backupText, target),
+    currentText
   );
   if (restoredText === currentText) return false;
 
@@ -1807,7 +1934,11 @@ async function restoreDeveloperConsoleFile(
   }
 
   const verified = await readFile(path, { encoding: 'utf-8' });
-  if (restorePatchTarget(verified, backupText, DEVELOPER_CONSOLE_TARGET) !== verified) {
+  const verifiedRestore = DEVELOPER_CONSOLE_TARGETS.reduceRight(
+    (text, target) => restorePatchTarget(text, backupText, target),
+    verified
+  );
+  if (verifiedRestore !== verified) {
     throw new Error(`${basename(path)} did not retain the restored console setting.`);
   }
   return true;
@@ -1837,7 +1968,7 @@ export async function ensureDeveloperConsole(
       backupDirectory
     );
     log.info(
-      `Developer console: ConsoleKey=${settings.key} verified in ` +
+      `Developer console: ${settings.key}=ConsoleToggle verified in ` +
         `${result.checkedFiles.length} file(s); ${result.changedFiles.length} changed`
     );
     return result;

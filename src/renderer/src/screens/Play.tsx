@@ -277,8 +277,9 @@ export default function Play({
     state.gamePathValid &&
     state.gameConfigReady &&
     (state.platform !== 'linux' || state.linuxRuntimeStatus === 'ready');
+  const showsCommonwealthResources = state.selectedServerId === DEFAULT_SERVER_ID;
   const showsAgendaStats =
-    state.selectedServerId === DEFAULT_SERVER_ID &&
+    showsCommonwealthResources &&
     state.agendaStatsStatus === 'ready' &&
     state.agendaStatsText !== null;
   const profileSelectionDisabled =
@@ -500,45 +501,54 @@ export default function Play({
         </button>
       </div>
 
-      <div className={styles.grid}>
-        <section className={`panel rise ${styles.updates}`} style={{ animationDelay: '100ms' }}>
-          <div className="panel-title">Server Updates</div>
-          {state.progress && (
-            <div className={styles.progressWrap}>
-              <div className={styles.progressTrack}>
-                <div
-                  className={`${styles.progressFill} ${state.progress.percent < 0 ? styles.progressIndeterminate : ''}`}
-                  style={state.progress.percent >= 0 ? { width: `${state.progress.percent}%` } : undefined}
-                />
+      <div
+        className={`${styles.grid} ${
+          showsCommonwealthResources ? '' : styles.gridServerOnly
+        }`}
+      >
+        {showsCommonwealthResources && (
+          <section className={`panel rise ${styles.updates}`} style={{ animationDelay: '100ms' }}>
+            <div className="panel-title">Server Updates</div>
+            {state.progress && (
+              <div className={styles.progressWrap}>
+                <div className={styles.progressTrack}>
+                  <div
+                    className={`${styles.progressFill} ${state.progress.percent < 0 ? styles.progressIndeterminate : ''}`}
+                    style={state.progress.percent >= 0 ? { width: `${state.progress.percent}%` } : undefined}
+                  />
+                </div>
+                <span className={`mono ${styles.progressLabel}`}>
+                  {state.progress.percent >= 0 ? `${state.progress.percent}%` : 'working'}
+                </span>
               </div>
-              <span className={`mono ${styles.progressLabel}`}>
-                {state.progress.percent >= 0 ? `${state.progress.percent}%` : 'working'}
-              </span>
-            </div>
-          )}
-          <div className={styles.historyLabel}>Recent server changes</div>
-          {state.serverCommits.length > 0 ? (
-            <ol className={styles.commitList}>
-              {state.serverCommits.map((commit) => (
-                <li key={commit.sha}>
-                  <span className={styles.commitMark} aria-hidden="true" />
-                  <span className={styles.commitMessage}>{commit.message}</span>
-                  <time dateTime={commit.committedAt} title={new Date(commit.committedAt).toLocaleString()}>
-                    {relativeTime(commit.committedAt)}
-                  </time>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className={styles.historyEmpty}>
-              {state.serverCommitsStatus === 'error'
-                ? 'Server history is temporarily unavailable.'
-                : state.serverCommitsStatus === 'ready'
-                  ? 'No recent server changes found.'
-                  : 'Reading server history…'}
-            </p>
-          )}
-        </section>
+            )}
+            <div className={styles.historyLabel}>Recent server changes</div>
+            {state.serverCommits.length > 0 ? (
+              <ol className={styles.commitList}>
+                {state.serverCommits.map((commit) => (
+                  <li key={commit.sha}>
+                    <span className={styles.commitMark} aria-hidden="true" />
+                    <span className={styles.commitMessage}>{commit.message}</span>
+                    <time
+                      dateTime={commit.committedAt}
+                      title={new Date(commit.committedAt).toLocaleString()}
+                    >
+                      {relativeTime(commit.committedAt)}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className={styles.historyEmpty}>
+                {state.serverCommitsStatus === 'error'
+                  ? 'Server history is temporarily unavailable.'
+                  : state.serverCommitsStatus === 'ready'
+                    ? 'No recent server changes found.'
+                    : 'Reading server history…'}
+              </p>
+            )}
+          </section>
+        )}
 
         <section className={`panel rise ${styles.server}`} style={{ animationDelay: '160ms' }}>
           <div className="panel-title">Server</div>
@@ -590,58 +600,60 @@ export default function Play({
                     : 'PROBING'}
             </span>
           </div>
-          <div className={styles.serverResources}>
-            {showsAgendaStats && (
-              <div className={styles.agendaStats}>
-                <div className={styles.agendaStatsPopulation}>
-                  <span className={styles.agendaStatsLabel}>Live population</span>
-                  <span
-                    className={`${styles.agendaStatsValue} ${styles.agendaStatsReady}`}
-                    role="status"
-                    aria-live="polite"
+          {showsCommonwealthResources && (
+            <div className={styles.serverResources}>
+              {showsAgendaStats && (
+                <div className={styles.agendaStats}>
+                  <div className={styles.agendaStatsPopulation}>
+                    <span className={styles.agendaStatsLabel}>Live population</span>
+                    <span
+                      className={`${styles.agendaStatsValue} ${styles.agendaStatsReady}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span className={styles.agendaStatsSignal} aria-hidden="true" />
+                      <span className={styles.agendaStatsText}>{state.agendaStatsText}</span>
+                    </span>
+                  </div>
+                  <button
+                    className={styles.agendaStatsButton}
+                    disabled={agendaStatsOpening}
+                    title="View recorded PvP, PvE, mission, and player statistics"
+                    onClick={() => void openAgendaStats()}
                   >
-                    <span className={styles.agendaStatsSignal} aria-hidden="true" />
-                    <span className={styles.agendaStatsText}>{state.agendaStatsText}</span>
-                  </span>
+                    <span className={styles.agendaStatsButtonCopy}>
+                      <strong>Agenda Stats</strong>
+                      <small>PvP · PvE · player records</small>
+                    </span>
+                    <span className={styles.agendaStatsOpen}>
+                      {agendaStatsOpening ? 'OPENING…' : 'VIEW ↗'}
+                    </span>
+                  </button>
+                  {agendaStatsOpenError && (
+                    <p className={styles.agendaStatsOpenError}>{agendaStatsOpenError}</p>
+                  )}
                 </div>
-                <button
-                  className={styles.agendaStatsButton}
-                  disabled={agendaStatsOpening}
-                  title="View recorded PvP, PvE, mission, and player statistics"
-                  onClick={() => void openAgendaStats()}
-                >
-                  <span className={styles.agendaStatsButtonCopy}>
-                    <strong>Agenda Stats</strong>
-                    <small>PvP · PvE · player records</small>
-                  </span>
-                  <span className={styles.agendaStatsOpen}>
-                    {agendaStatsOpening ? 'OPENING…' : 'VIEW ↗'}
-                  </span>
-                </button>
-                {agendaStatsOpenError && (
-                  <p className={styles.agendaStatsOpenError}>{agendaStatsOpenError}</p>
-                )}
-              </div>
-            )}
-            <button
-              className={`${styles.agendaStatsButton} ${styles.gaCardsButton}`}
-              disabled={gaCardsOpening}
-              title="Open the GA CARDS website"
-              aria-label="Open the GA CARDS website"
-              onClick={() => void openGaCards()}
-            >
-              <span className={styles.agendaStatsButtonCopy}>
-                <strong>GA CARDS</strong>
-                <small>Drops · collections · trading</small>
-              </span>
-              <span className={`${styles.agendaStatsOpen} ${styles.gaCardsOpen}`}>
-                {gaCardsOpening ? 'OPENING…' : 'VISIT ↗'}
-              </span>
-            </button>
-            {gaCardsOpenError && (
-              <p className={styles.agendaStatsOpenError}>{gaCardsOpenError}</p>
-            )}
-          </div>
+              )}
+              <button
+                className={`${styles.agendaStatsButton} ${styles.gaCardsButton}`}
+                disabled={gaCardsOpening}
+                title="Open the GA CARDS website"
+                aria-label="Open the GA CARDS website"
+                onClick={() => void openGaCards()}
+              >
+                <span className={styles.agendaStatsButtonCopy}>
+                  <strong>GA CARDS</strong>
+                  <small>Drops · collections · trading</small>
+                </span>
+                <span className={`${styles.agendaStatsOpen} ${styles.gaCardsOpen}`}>
+                  {gaCardsOpening ? 'OPENING…' : 'VISIT ↗'}
+                </span>
+              </button>
+              {gaCardsOpenError && (
+                <p className={styles.agendaStatsOpenError}>{gaCardsOpenError}</p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 

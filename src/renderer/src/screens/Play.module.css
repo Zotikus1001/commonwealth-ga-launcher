@@ -177,6 +177,10 @@
   margin-bottom: 6px;
 }
 
+.gridServerOnly {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .updates {
   min-height: 252px;
 }

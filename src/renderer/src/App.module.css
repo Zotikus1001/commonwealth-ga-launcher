@@ -138,6 +138,12 @@
   border: 0;
 }
 
+@media (max-height: 640px) {
+  .header {
+    padding: 8px 28px 6px;
+  }
+}
+
 .steamOfferDialog {
   width: min(560px, calc(100vw - 48px));
   margin: auto;

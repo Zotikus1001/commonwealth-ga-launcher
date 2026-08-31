@@ -1172,7 +1172,11 @@
 
 @media (max-height: 640px) {
   .play {
-    padding-bottom: 6px;
+    padding: 6px 32px;
+  }
+
+  .utilityGrid {
+    margin-bottom: 12px;
   }
 
   section.updates {

@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "version": "0.1.25",
+      "releasedOn": "2026-08-31",
+      "changes": [
+        "Added a **Weekly Events** countdown for **PvP Merc** and **PvP Challenge Night**. Open it for notifications, event details, and PvP Day summaries.",
+        "Added optional **Windows and Linux system reminders** for each weekly event. They work while the launcher is closed."
+      ]
+    },
+    {
       "version": "0.1.24",
       "releasedOn": "2026-08-12",
       "changes": [

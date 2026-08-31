@@ -8,8 +8,8 @@ Europe (EU).
 ## Launcher Preview
 
 <p align="center">
-  <a href="images/launcher-main.png">
-    <img src="images/launcher-main.png" alt="Commonwealth GA Launcher main page with the weekly PvP event countdown, server updates, server resources, server selection, and Play button" width="100%">
+  <a href="images/launcher-main.jpg">
+    <img src="images/launcher-main.jpg" alt="Commonwealth GA Launcher main page with the weekly PvP event countdown, server updates, server resources, server selection, and Play button" width="100%">
   </a>
   <br>
   <sub>Server health, community events, recent updates, resources, server choice, and Play in one view.</sub>
@@ -20,15 +20,15 @@ Europe (EU).
     <td width="50%" valign="top">
       <strong>Game setup</strong><br>
       <sub>Find the game and tune login, graphics, FPS, and startup settings.</sub><br><br>
-      <a href="images/launcher-game-settings.png">
-        <img src="images/launcher-game-settings.png" alt="Game settings tab in Commonwealth GA Launcher" width="100%">
+      <a href="images/launcher-game-settings.jpg">
+        <img src="images/launcher-game-settings.jpg" alt="Game settings tab in Commonwealth GA Launcher" width="100%">
       </a>
     </td>
     <td width="50%" valign="top">
       <strong>Patches</strong><br>
       <sub>Apply verified client, stability, and performance fixes independently.</sub><br><br>
-      <a href="images/launcher-patches.png">
-        <img src="images/launcher-patches.png" alt="Patches tab in Commonwealth GA Launcher" width="100%">
+      <a href="images/launcher-patches.jpg">
+        <img src="images/launcher-patches.jpg" alt="Patches tab in Commonwealth GA Launcher" width="100%">
       </a>
     </td>
   </tr>
@@ -36,15 +36,15 @@ Europe (EU).
     <td width="50%" valign="top">
       <strong>Optional content</strong><br>
       <sub>Install PvP and PvE maps and copy their matchmaking commands.</sub><br><br>
-      <a href="images/launcher-dlcs.png">
-        <img src="images/launcher-dlcs.png" alt="Optional DLC map packs tab in Commonwealth GA Launcher" width="100%">
+      <a href="images/launcher-dlcs.jpg">
+        <img src="images/launcher-dlcs.jpg" alt="Optional DLC map packs tab in Commonwealth GA Launcher" width="100%">
       </a>
     </td>
     <td width="50%" valign="top">
       <strong>Player guide</strong><br>
       <sub>Quick answers for performance, graphics, first login, and in-game commands.</sub><br><br>
-      <a href="images/launcher-player-guide.png">
-        <img src="images/launcher-player-guide.png" alt="Player guide and in-game commands tab in Commonwealth GA Launcher" width="100%">
+      <a href="images/launcher-player-guide.jpg">
+        <img src="images/launcher-player-guide.jpg" alt="Player guide and in-game commands tab in Commonwealth GA Launcher" width="100%">
       </a>
     </td>
   </tr>
@@ -52,8 +52,8 @@ Europe (EU).
     <td colspan="2" valign="top">
       <strong>Launcher and Steam integration</strong><br>
       <sub>Keep Steam playtime tracking and the in-game overlay without modifying game or original Hi-Rez launcher files.</sub><br><br>
-      <a href="images/launcher-steam-integration.png">
-        <img src="images/launcher-steam-integration.png" alt="Launcher settings tab showing interface scaling and safe optional Steam integration" width="100%">
+      <a href="images/launcher-steam-integration.jpg">
+        <img src="images/launcher-steam-integration.jpg" alt="Launcher settings tab showing interface scaling and safe optional Steam integration" width="100%">
       </a>
     </td>
   </tr>

@@ -25,7 +25,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 28px 14px;
+  padding: 14px 28px 10px;
   border-bottom: 1px solid var(--line);
   background: rgba(11, 14, 20, 0.6);
 }
@@ -38,7 +38,7 @@
 
 .wordmark {
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.18em;
   color: var(--text);

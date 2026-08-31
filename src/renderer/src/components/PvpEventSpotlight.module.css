@@ -7,10 +7,24 @@
   border-left: 4px solid var(--amber);
   background:
     linear-gradient(100deg, rgba(240, 166, 60, 0.18), transparent 48%),
-    repeating-linear-gradient(90deg, transparent 0 59px, rgba(240, 166, 60, 0.035) 59px 60px),
-    #11151d;
+    rgba(17, 21, 29, 0.78);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24), inset 0 -1px 0 rgba(240, 166, 60, 0.11);
   animation-delay: 0ms;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease,
+    box-shadow 130ms ease,
+    transform 130ms ease;
+}
+
+.spotlight:hover,
+.spotlight:focus-within {
+  border-color: var(--amber-hi);
+  background:
+    linear-gradient(100deg, rgba(240, 166, 60, 0.24), transparent 54%),
+    rgba(20, 23, 31, 0.86);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.3), 0 0 24px rgba(240, 166, 60, 0.09);
+  transform: translateY(-1px);
 }
 
 .spotlight::after {
@@ -126,7 +140,6 @@
   flex-direction: column;
   align-items: stretch;
   padding: 5px 12px 5px 18px;
-  border-left: 1px solid rgba(240, 166, 60, 0.25);
 }
 
 .timingBlock small {
@@ -219,9 +232,17 @@
   border-left-color: var(--green);
   background:
     linear-gradient(100deg, rgba(70, 192, 109, 0.2), transparent 52%),
-    repeating-linear-gradient(90deg, transparent 0 59px, rgba(70, 192, 109, 0.035) 59px 60px),
-    #101820;
+    rgba(16, 24, 32, 0.78);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.26), 0 0 30px rgba(70, 192, 109, 0.07);
+}
+
+.spotlightLive:hover,
+.spotlightLive:focus-within {
+  border-color: #84e4a4;
+  background:
+    linear-gradient(100deg, rgba(70, 192, 109, 0.26), transparent 58%),
+    rgba(17, 28, 36, 0.86);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.32), 0 0 28px rgba(70, 192, 109, 0.12);
 }
 
 .spotlightLive::after {
@@ -241,10 +262,6 @@
 .spotlightLive .liveReadout,
 .spotlightLive .detailsCue {
   color: var(--green);
-}
-
-.spotlightLive .timingBlock {
-  border-left-color: rgba(70, 192, 109, 0.26);
 }
 
 .spotlightLive .liveReadout {

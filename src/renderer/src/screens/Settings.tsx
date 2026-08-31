@@ -1295,9 +1295,11 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
                 <span className={styles.steamLaunchEyebrow}>Steam // Global Agenda</span>
                 <span className={styles.featureName}>Use Commonwealth GA Launcher from Steam</span>
                 <span className={`${styles.featureDetail} ${styles.steamLaunchDescription}`}>
-                  Replaces the <strong>Hi-Rez launcher</strong> when starting Global Agenda from
-                  Steam, while enabling <strong>Steam playtime tracking</strong> and the{' '}
-                  <strong>in-game Steam overlay</strong>.
+                  Starts Commonwealth GA Launcher instead of the <strong>Hi-Rez launcher</strong>{' '}
+                  when opening Global Agenda from Steam, enabling{' '}
+                  <strong>Steam playtime tracking</strong> and the{' '}
+                  <strong>in-game Steam overlay</strong>. It does <strong>not modify or replace</strong>{' '}
+                  any game files or original Hi-Rez launcher files.
                 </span>
                 {!state.gameConfigReady && (
                   <span

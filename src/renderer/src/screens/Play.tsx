@@ -580,28 +580,30 @@ export default function Play({
               })}
             </div>
           )}
-          <div className={styles.serverName}>{state.serverName || 'Unavailable'}</div>
-          <div className={styles.serverRow}>
-            <span
-              className={`${styles.dot} ${
-                serverStatus === 'online'
-                  ? styles.dotOn
+          <div className={styles.serverIdentity}>
+            <div className={styles.serverName}>{state.serverName || 'Unavailable'}</div>
+            <div className={styles.serverRow}>
+              <span
+                className={`${styles.dot} ${
+                  serverStatus === 'online'
+                    ? styles.dotOn
+                    : serverStatus === 'offline'
+                      ? styles.dotOff
+                      : serverStatus === 'invalid'
+                        ? styles.dotInvalid
+                        : styles.dotUnknown
+                }`}
+              />
+              <span className={styles.serverStatus}>
+                {serverStatus === 'online'
+                  ? 'ONLINE'
                   : serverStatus === 'offline'
-                    ? styles.dotOff
+                    ? 'OFFLINE'
                     : serverStatus === 'invalid'
-                      ? styles.dotInvalid
-                      : styles.dotUnknown
-              }`}
-            />
-            <span className={styles.serverStatus}>
-              {serverStatus === 'online'
-                ? 'ONLINE'
-                : serverStatus === 'offline'
-                  ? 'OFFLINE'
-                  : serverStatus === 'invalid'
-                    ? 'INVALID ADDRESS'
-                    : 'PROBING'}
-            </span>
+                      ? 'INVALID ADDRESS'
+                      : 'PROBING'}
+              </span>
+            </div>
           </div>
           {showsCommonwealthResources && (
             <div className={styles.serverResources}>
@@ -664,7 +666,7 @@ export default function Play({
         <div className={styles.playControls}>
           {state.serverChoices.length > 1 && (
             <label className={styles.serverPicker}>
-              <span>Launch Server</span>
+              <span>Choose Server</span>
               <select
                 value={state.selectedServerId}
                 disabled={selectingServer || state.phase === 'checking' || state.phase === 'launching'}

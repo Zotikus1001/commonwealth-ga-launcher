@@ -304,6 +304,14 @@
   border-bottom: 2px solid var(--amber);
 }
 
+.serverIdentity {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .serverName {
   margin: 6px 0 18px;
   overflow: hidden;
@@ -1163,25 +1171,56 @@
 }
 
 @media (max-height: 640px) {
+  .play {
+    padding-bottom: 6px;
+  }
+
+  section.updates {
+    min-height: 0;
+    padding: 6px 18px 1px;
+  }
+
+  section.server {
+    padding-block: 6px;
+  }
+
+  .grid {
+    margin-bottom: 2px;
+  }
+
+  .updates :global(.panel-title) {
+    margin-bottom: 2px;
+  }
+
+  .server :global(.panel-title) {
+    margin-bottom: 4px;
+  }
+
+  .historyLabel {
+    margin-top: 0;
+    padding-bottom: 1px;
+  }
+
   .serverName {
-    margin-bottom: 12px;
+    margin: 0 0 6px;
   }
 
   .serverRow {
-    margin-bottom: 12px;
+    margin-bottom: 0;
   }
 
-  .serverResources,
   .agendaStats {
-    gap: 7px;
+    gap: 6px;
   }
 
   .serverResources {
-    padding-top: 9px;
+    gap: 8px;
+    margin-top: 0;
+    padding-top: 3px;
   }
 
   .agendaStatsButton {
-    min-height: 42px;
+    min-height: 48px;
     padding-block: 5px;
   }
 }

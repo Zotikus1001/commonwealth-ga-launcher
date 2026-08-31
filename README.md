@@ -5,6 +5,53 @@ Europe (EU).
 
 ---
 
+## Launcher Preview
+
+<p align="center">
+  <a href="images/launcher-main.png">
+    <img src="images/launcher-main.png" alt="Commonwealth GA Launcher main page with the weekly PvP event countdown, server updates, server resources, server selection, and Play button" width="100%">
+  </a>
+  <br>
+  <sub>Server health, community events, recent updates, resources, server choice, and Play in one view.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Game setup</strong><br>
+      <sub>Find the game and tune login, graphics, FPS, and startup settings.</sub><br><br>
+      <a href="images/launcher-game-settings.png">
+        <img src="images/launcher-game-settings.png" alt="Game settings tab in Commonwealth GA Launcher" width="100%">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Patches</strong><br>
+      <sub>Apply verified client, stability, and performance fixes independently.</sub><br><br>
+      <a href="images/launcher-patches.png">
+        <img src="images/launcher-patches.png" alt="Patches tab in Commonwealth GA Launcher" width="100%">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Optional content</strong><br>
+      <sub>Install PvP and PvE maps and copy their matchmaking commands.</sub><br><br>
+      <a href="images/launcher-dlcs.png">
+        <img src="images/launcher-dlcs.png" alt="Optional DLC map packs tab in Commonwealth GA Launcher" width="100%">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Player guide</strong><br>
+      <sub>Quick answers for performance, graphics, first login, and in-game commands.</sub><br><br>
+      <a href="images/launcher-player-guide.png">
+        <img src="images/launcher-player-guide.png" alt="Player guide and in-game commands tab in Commonwealth GA Launcher" width="100%">
+      </a>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Download and Install
 
 For a fresh game installation, close this launcher and start Global Agenda normally from Steam
@@ -36,8 +83,9 @@ The launcher updates itself automatically.
 
 - Automatic updates and an in-launcher changelog
 - Easy game setup and one-click launching
-- Optional Steam integration that replaces the Hi-Rez launcher when starting from Steam, enabling
-  Steam playtime tracking and the in-game overlay
+- Optional Steam integration that starts the Commonwealth launcher instead of the Hi-Rez launcher
+  from Steam, enabling Steam playtime tracking and the in-game overlay without modifying or
+  replacing any game files or original Hi-Rez launcher files
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
 - A prominent local-time countdown for Commonwealth's weekly PvP events, with event details, PvP

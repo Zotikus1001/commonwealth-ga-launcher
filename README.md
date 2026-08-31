@@ -98,7 +98,8 @@ The launcher updates itself automatically.
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
 - A prominent local-time countdown for Commonwealth's weekly PvP events, with event details, PvP
-  Day summaries, and optional Windows or Linux system reminders that work while the launcher is closed
+  Day summaries, and optional Windows or Linux system reminders that work while the launcher is closed;
+  clicking one opens the launcher, or Global Agenda through Steam when Steam integration is enabled
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
 - Up to five optional profiles for quickly switching game settings, with one clearly marked active choice, exact before/after comparisons, and save protection

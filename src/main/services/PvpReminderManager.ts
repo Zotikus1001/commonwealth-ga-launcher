@@ -7,7 +7,6 @@ import {
   getNextPvpReminderEventStart,
   getPvpEvent,
   PVP_EVENTS,
-  PVP_REMINDER_LEAD_MS,
   type PvpEventDefinition,
   type PvpEventId
 } from '@shared/pvpEvents';
@@ -72,7 +71,7 @@ export function buildWindowsReminderTask(
   executablePath: string,
   reminderAt: number
 ): string {
-  const description = `Notify the user 15 minutes before ${event.name}.`;
+  const description = `Notify the user when ${event.name} starts.`;
   return `\uFEFF<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -238,7 +237,7 @@ export class PvpReminderManager {
     if (this.options.platform === 'win32') {
       return {
         supported: true,
-        detail: 'Windows will notify you 15 minutes before enabled events.'
+        detail: 'Windows will notify you when enabled events start.'
       };
     }
     if (this.options.platform === 'linux') {
@@ -253,7 +252,7 @@ export class PvpReminderManager {
         return {
           supported: true,
           detail:
-            'Linux will notify you 15 minutes before enabled events. Disable reminders before moving or deleting this AppImage.'
+            'Linux will notify you when enabled events start. Disable reminders before moving or deleting this AppImage.'
         };
       } catch {
         return {
@@ -275,7 +274,7 @@ export class PvpReminderManager {
 
   private async scheduleNext(eventId: PvpEventId, after: number): Promise<void> {
     const event = getPvpEvent(eventId);
-    const reminderAt = getNextPvpReminderEventStart(eventId, after) - PVP_REMINDER_LEAD_MS;
+    const reminderAt = getNextPvpReminderEventStart(eventId, after);
     if (this.options.platform === 'win32') {
       await mkdir(this.stateDirectory, { recursive: true });
       const xmlPath = this.windowsXmlPath(eventId);

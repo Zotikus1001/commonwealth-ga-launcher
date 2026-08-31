@@ -17,6 +17,11 @@
     transform 130ms ease;
 }
 
+/* Outrank the shared .rise shorthand and release its transform after entry. */
+section.spotlight {
+  animation-fill-mode: backwards;
+}
+
 .spotlight:hover,
 .spotlight:focus-within {
   border-color: var(--amber-hi);
@@ -403,6 +408,7 @@
 
 .eventCard {
   position: relative;
+  display: flex;
   min-height: 142px;
   overflow: hidden;
   border: 1px solid rgba(69, 200, 218, 0.24);
@@ -426,6 +432,9 @@
 .eventCardCopy {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   padding: 17px 18px;
 }
 
@@ -451,6 +460,7 @@
 }
 
 .eventCardCopy p {
+  margin-bottom: 14px;
   color: var(--text-dim);
   font-size: 10px;
   line-height: 1.5;
@@ -461,7 +471,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: auto;
   padding-top: 11px;
   border-top: 1px solid rgba(69, 200, 218, 0.15);
 }

@@ -1,5 +1,5 @@
 const LONDON_TIME_ZONE = 'Europe/London';
-export const PVP_REMINDER_LEAD_MS = 15 * 60 * 1_000;
+const PVP_LIVE_LEAD_MS = 15 * 60 * 1_000;
 
 export type PvpEventId = 'mercenary-fun' | 'challenge-night';
 
@@ -168,7 +168,7 @@ export function getPvpEventStatus(now = Date.now()): PvpEventStatus {
   if (todaysEvent) {
     const startsAt = eventStart(todaysEvent, today);
     const liveUntil = londonWallClockToTimestamp(addCalendarDays(today, 1), 0, 0);
-    if (now >= startsAt - PVP_REMINDER_LEAD_MS && now < liveUntil) {
+    if (now >= startsAt - PVP_LIVE_LEAD_MS && now < liveUntil) {
       return { mode: 'live', event: todaysEvent, startsAt, liveUntil };
     }
   }
@@ -217,7 +217,7 @@ export function getNextPvpReminderEventStart(
   eventId: PvpEventId,
   after = Date.now()
 ): number {
-  return findNextPvpEventStart(eventId, after, PVP_REMINDER_LEAD_MS);
+  return findNextPvpEventStart(eventId, after, 0);
 }
 
 export function getPvpCountdownParts(startsAt: number, now = Date.now()): PvpCountdownParts {

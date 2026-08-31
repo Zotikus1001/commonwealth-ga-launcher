@@ -152,7 +152,7 @@ function PvpEventDetailsDialog({
               <h3>{event.name}</h3>
               <p>{event.summary}</p>
               <div className={styles.reminderRow}>
-                <span>System alert · 15m before</span>
+                <span>System alert · At event start</span>
                 {(() => {
                   const enabled =
                     reminders?.reminders.find((item) => item.eventId === event.id)?.enabled ?? false;
@@ -166,7 +166,7 @@ function PvpEventDetailsDialog({
                       title={
                         enabled
                           ? `Disable the ${event.name} system reminder`
-                          : `Notify me 15 minutes before ${event.name}`
+                          : `Notify me when ${event.name} starts`
                       }
                       onClick={() => void toggleReminder(event.id)}
                     >

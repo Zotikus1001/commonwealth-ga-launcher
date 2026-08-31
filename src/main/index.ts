@@ -129,11 +129,11 @@ function showPvpReminder(eventId: PvpEventId, log: Log): void {
   }
   const event = getPvpEvent(eventId);
   const notification = new Notification({
-    title: `${event.name} starts in 15 minutes`,
-    body: 'Commonwealth PvP is about to go LIVE. Open the launcher and join the fun.',
+    title: `Weekly Event — ${event.name}`,
+    body: 'Starting now. Open the launcher and join the fun.',
     icon: launcherIconPath(),
     urgency: 'normal',
-    timeoutType: 'default'
+    timeoutType: 'never'
   });
   activePvpNotification = notification;
   notification.on('click', focusMainWindow);

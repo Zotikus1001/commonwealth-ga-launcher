@@ -49,6 +49,12 @@ Var pid
       SetShellVarContext current
     ${endif}
 
+    ; A manual reinstall resets reminder preferences, so remove their exact scheduled tasks too.
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Merc Fun" /F'
+    Pop $R0
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Challenge Night" /F'
+    Pop $R0
+
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
       RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
@@ -60,5 +66,15 @@ Var pid
     ${if} $installMode == "all"
       SetShellVarContext all
     ${endif}
+  ${endIf}
+!macroend
+
+!macro customUnInstall
+  ; Auto-updates retain reminders; a manual uninstall must not leave orphaned scheduled tasks.
+  ${ifNot} ${isUpdated}
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Merc Fun" /F'
+    Pop $R0
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Challenge Night" /F'
+    Pop $R0
   ${endIf}
 !macroend

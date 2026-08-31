@@ -19,6 +19,8 @@ import { buildDiagnosticsReport } from './services/Diagnostics';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import { hasRequiredGameConfigFiles, validateGameExe } from './services/InstallLocator';
+import { isPvpEventId } from '@shared/pvpEvents';
+import type { PvpReminderManager } from './services/PvpReminderManager';
 
 export function registerIpc(
   getWindow: () => BrowserWindow | null,
@@ -26,7 +28,8 @@ export function registerIpc(
   config: ConfigStore,
   log: Log,
   launcherChangelog: LauncherChangelogStore,
-  steamLaunchIntegration: SteamLaunchIntegration
+  steamLaunchIntegration: SteamLaunchIntegration,
+  pvpReminders?: PvpReminderManager
 ): void {
   let resetInProgress = false;
 
@@ -336,12 +339,46 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.openGaCards, async () => {
+    if (config.get().servers.selectedServerId !== DEFAULT_SERVER_ID) {
+      return { ok: false, message: 'GA CARDS is available only for the Commonwealth server.' };
+    }
     try {
       await shell.openExternal(LAUNCHER_CONFIG.gaCardsUrl);
       return { ok: true, message: 'GA CARDS opened.' };
     } catch (error) {
       return { ok: false, message: `Could not open GA CARDS: ${(error as Error).message}` };
     }
+  });
+
+  ipcMain.handle(IPC.openPvpReports, async () => {
+    if (config.get().servers.selectedServerId !== DEFAULT_SERVER_ID) {
+      return {
+        ok: false,
+        message: 'PvP Day summaries are available only for the Commonwealth server.'
+      };
+    }
+    try {
+      await shell.openExternal(LAUNCHER_CONFIG.pvpReportsUrl);
+      return { ok: true, message: 'PvP Day summaries opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open PvP Day summaries: ${(error as Error).message}` };
+    }
+  });
+
+  ipcMain.handle(IPC.getPvpReminderState, () =>
+    pvpReminders
+      ? pvpReminders.getState()
+      : {
+          supported: false,
+          detail: 'System reminders are unavailable in this launcher session.',
+          reminders: []
+        }
+  );
+  ipcMain.handle(IPC.setPvpEventReminder, (_event, eventId: unknown, enabled: unknown) => {
+    if (!isPvpEventId(eventId)) throw new Error('Invalid PvP event identifier.');
+    if (typeof enabled !== 'boolean') throw new Error('Invalid PvP reminder state.');
+    if (!pvpReminders) throw new Error('System reminders are unavailable in this launcher session.');
+    return pvpReminders.setEnabled(eventId, enabled);
   });
 
   ipcMain.handle(IPC.openSteamStore, async () => {

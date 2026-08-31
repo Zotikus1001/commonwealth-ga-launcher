@@ -15,6 +15,7 @@ import {
   ProfileSwitchDialog
 } from '../components/ProfileSwitchDialog';
 import ToastStack, { type ToastNotification } from '../components/ToastStack';
+import { PvpEventSpotlight } from '../components/PvpEventSpotlight';
 import styles from './Play.module.css';
 
 function relativeTime(value: string): string {
@@ -500,6 +501,8 @@ export default function Play({
           <span className={styles.infoOpen}>OPEN →</span>
         </button>
       </div>
+
+      {showsCommonwealthResources && <PvpEventSpotlight />}
 
       <div
         className={`${styles.grid} ${

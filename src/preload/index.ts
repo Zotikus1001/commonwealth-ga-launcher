@@ -52,6 +52,10 @@ const api: LauncherApi = {
   openDiscordSupport: () => ipcRenderer.invoke(IPC.openDiscordSupport),
   openAgendaStats: () => ipcRenderer.invoke(IPC.openAgendaStats),
   openGaCards: () => ipcRenderer.invoke(IPC.openGaCards),
+  openPvpReports: () => ipcRenderer.invoke(IPC.openPvpReports),
+  getPvpReminderState: () => ipcRenderer.invoke(IPC.getPvpReminderState),
+  setPvpEventReminder: (eventId, enabled) =>
+    ipcRenderer.invoke(IPC.setPvpEventReminder, eventId, enabled),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),
   openSteamInstall: () => ipcRenderer.invoke(IPC.openSteamInstall),
   getSteamLaunchIntegration: () => ipcRenderer.invoke(IPC.getSteamLaunchIntegration),

@@ -1,10 +1,12 @@
-import { app, BrowserWindow, Menu, type Input } from 'electron';
+import { app, BrowserWindow, Menu, Notification, type Input } from 'electron';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Log } from './services/Log';
 import { LauncherUpdater } from './services/LauncherUpdater';
 import { configureDevelopmentProfile } from './services/DevelopmentProfile';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
+import { getPvpEvent, isPvpEventId, type PvpEventId } from '@shared/pvpEvents';
+import { PvpReminderManager } from './services/PvpReminderManager';
 
 const BROWSER_KEYS = new Set([
   'browserback',
@@ -43,7 +45,13 @@ const SHIFT_EDITING_KEYS = new Set([
   'z'
 ]);
 
+const APP_USER_MODEL_ID = 'gg.commonwealth.ga-launcher';
+const PVP_REMINDER_ARGUMENT = '--pvp-event-reminder=';
+
 let mainWindow: BrowserWindow | null = null;
+let pvpReminderManager: PvpReminderManager | null = null;
+let pendingPvpReminder: PvpEventId | null = null;
+let activePvpNotification: Notification | null = null;
 
 // Prevent newer local settings schemas from making an installed launcher profile read-only.
 const installedUserDataDir = configureDevelopmentProfile(app);
@@ -100,6 +108,54 @@ function launcherIconPath(): string {
     : join(app.getAppPath(), 'build', 'icon.png');
 }
 
+function pvpReminderFromArguments(argumentsList: readonly string[]): PvpEventId | null {
+  const argument = argumentsList.find((candidate) => candidate.startsWith(PVP_REMINDER_ARGUMENT));
+  if (!argument) return null;
+  const eventId = argument.slice(PVP_REMINDER_ARGUMENT.length);
+  return isPvpEventId(eventId) ? eventId : null;
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+}
+
+function showPvpReminder(eventId: PvpEventId, log: Log): void {
+  if (!Notification.isSupported()) {
+    log.warn('PvP reminder reached its start time, but system notifications are unavailable.');
+    return;
+  }
+  const event = getPvpEvent(eventId);
+  const notification = new Notification({
+    title: `${event.name} starts in 15 minutes`,
+    body: 'Commonwealth PvP is about to go LIVE. Open the launcher and join the fun.',
+    icon: launcherIconPath(),
+    urgency: 'normal',
+    timeoutType: 'default'
+  });
+  activePvpNotification = notification;
+  notification.on('click', focusMainWindow);
+  notification.on('close', () => {
+    if (activePvpNotification === notification) activePvpNotification = null;
+  });
+  notification.show();
+}
+
+async function handlePvpReminder(eventId: PvpEventId, log: Log): Promise<void> {
+  if (!pvpReminderManager) {
+    pendingPvpReminder = eventId;
+    return;
+  }
+  try {
+    const event = await pvpReminderManager.consumeTriggeredReminder(eventId);
+    if (event) showPvpReminder(event.id, log);
+  } catch (error) {
+    log.error(`PvP reminder delivery failed: ${(error as Error).message}`);
+  }
+}
+
 async function resolveDefaultServerHosts(log: Log): Promise<{
   primary: string;
   fallback: string;
@@ -129,21 +185,53 @@ async function resolveDefaultServerHosts(log: Log): Promise<{
   }
 }
 
-// One launcher instance: a second copy focuses the first instead.
-if (!app.requestSingleInstanceLock()) {
+if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+const launchPvpReminder = pvpReminderFromArguments(process.argv);
+
+// One launcher instance: reminder invocations notify the existing process without stealing focus.
+if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpReminder } : {})) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
+  app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
+    const additionalReminder =
+      typeof additionalData === 'object' && additionalData !== null
+        ? (additionalData as Record<string, unknown>)['pvpReminder']
+        : null;
+    const eventId = isPvpEventId(additionalReminder)
+      ? additionalReminder
+      : pvpReminderFromArguments(argv);
+    if (eventId) {
+      const log = new Log(app.getPath('userData'));
+      void handlePvpReminder(eventId, log);
+      return;
     }
+    focusMainWindow();
   });
 
   void app.whenReady().then(async () => {
     const log = new Log(app.getPath('userData'));
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
+
+    pvpReminderManager = new PvpReminderManager(
+      {
+        platform: process.platform,
+        packaged: app.isPackaged,
+        executablePath: process.execPath,
+        appImagePath: process.env['APPIMAGE']?.trim() || undefined,
+        userDataDir: app.getPath('userData')
+      },
+      log
+    );
+    if (launchPvpReminder) {
+      await handlePvpReminder(launchPvpReminder, log);
+      setTimeout(() => app.quit(), 5_000);
+      return;
+    }
+    if (pendingPvpReminder) {
+      const eventId = pendingPvpReminder;
+      pendingPvpReminder = null;
+      void handlePvpReminder(eventId, log);
+    }
 
     const launcherUpdater = new LauncherUpdater(log);
 
@@ -201,7 +289,8 @@ if (!app.requestSingleInstanceLock()) {
       config,
       log,
       launcherChangelog,
-      steamLaunchIntegration
+      steamLaunchIntegration,
+      pvpReminderManager
     );
 
     Menu.setApplicationMenu(null);

@@ -401,6 +401,17 @@ export type DeepPartial<T> = {
       : T[K];
 };
 
+export interface PvpReminderItem {
+  eventId: import('./pvpEvents').PvpEventId;
+  enabled: boolean;
+}
+
+export interface PvpReminderState {
+  supported: boolean;
+  detail: string;
+  reminders: PvpReminderItem[];
+}
+
 // The surface preload exposes as window.api.
 export interface LauncherApi {
   platform: 'win32' | 'linux' | 'darwin';
@@ -437,6 +448,12 @@ export interface LauncherApi {
   openDiscordSupport(): Promise<ActionResult>;
   openAgendaStats(): Promise<ActionResult>;
   openGaCards(): Promise<ActionResult>;
+  openPvpReports(): Promise<ActionResult>;
+  getPvpReminderState(): Promise<PvpReminderState>;
+  setPvpEventReminder(
+    eventId: import('./pvpEvents').PvpEventId,
+    enabled: boolean
+  ): Promise<PvpReminderState>;
   openSteamStore(): Promise<ActionResult>;
   openSteamInstall(): Promise<ActionResult>;
   getSteamLaunchIntegration(): Promise<SteamLaunchIntegrationStatus>;

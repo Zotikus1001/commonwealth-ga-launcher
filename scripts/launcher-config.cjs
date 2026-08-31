@@ -9,6 +9,7 @@ const CONFIG_KEYS = new Set([
   'agenda_stats_url',
   'agenda_stats_status_url',
   'ga_cards_url',
+  'pvp_reports_url',
   'discord_invite_url',
   'discord_support_thread_url',
   'steam_store_url',
@@ -309,10 +310,12 @@ function loadLauncherConfig(options = {}) {
   }
 
   let gaCardsUrl;
+  let pvpReportsUrl;
   try {
     gaCardsUrl = new URL(raw.ga_cards_url);
+    pvpReportsUrl = new URL(raw.pvp_reports_url);
   } catch {
-    throw new Error('ga_cards_url must be a valid URL');
+    throw new Error('GA community URLs must be valid URLs');
   }
   if (
     gaCardsUrl.protocol !== 'https:' ||
@@ -324,6 +327,17 @@ function loadLauncherConfig(options = {}) {
     gaCardsUrl.hash
   ) {
     throw new Error('ga_cards_url must use https://gatcg.net/');
+  }
+  if (
+    pvpReportsUrl.protocol !== 'https:' ||
+    pvpReportsUrl.hostname !== 'gatcg.net' ||
+    pvpReportsUrl.pathname !== '/pvp-report' ||
+    pvpReportsUrl.username ||
+    pvpReportsUrl.password ||
+    pvpReportsUrl.search ||
+    pvpReportsUrl.hash
+  ) {
+    throw new Error('pvp_reports_url must use https://gatcg.net/pvp-report');
   }
 
   let discordUrl;
@@ -664,6 +678,7 @@ function loadLauncherConfig(options = {}) {
     agendaStatsUrl: agendaStatsUrl.toString(),
     agendaStatsStatusUrl: agendaStatsStatusUrl.toString(),
     gaCardsUrl: gaCardsUrl.toString(),
+    pvpReportsUrl: pvpReportsUrl.toString(),
     discordInviteUrl: raw.discord_invite_url,
     discordSupportThreadUrl: discordSupportThreadUrl.toString(),
     steamStoreUrl: raw.steam_store_url,

@@ -1,0 +1,636 @@
+.spotlight {
+  position: relative;
+  flex: none;
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(240, 166, 60, 0.7);
+  border-left: 4px solid var(--amber);
+  background:
+    linear-gradient(100deg, rgba(240, 166, 60, 0.18), transparent 48%),
+    repeating-linear-gradient(90deg, transparent 0 59px, rgba(240, 166, 60, 0.035) 59px 60px),
+    #11151d;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24), inset 0 -1px 0 rgba(240, 166, 60, 0.11);
+  animation-delay: 0ms;
+}
+
+.spotlight::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 54px;
+  height: 1px;
+  background: var(--amber);
+  box-shadow: 0 -5px 0 rgba(240, 166, 60, 0.18), 0 -10px 0 rgba(240, 166, 60, 0.08);
+  content: '';
+  pointer-events: none;
+}
+
+.spotlightButton {
+  display: grid;
+  width: 100%;
+  min-height: 82px;
+  grid-template-columns: 62px minmax(190px, 1fr) minmax(248px, auto) 92px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px 10px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.spotlightButton:hover:not(:disabled),
+.spotlightButton:focus-visible {
+  border: 0;
+  background: linear-gradient(90deg, rgba(240, 166, 60, 0.09), transparent 72%);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 189, 87, 0.42);
+  outline: none;
+}
+
+.signalColumn {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.signalBox {
+  display: flex;
+  width: 60px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(240, 166, 60, 0.66);
+  background: rgba(240, 166, 60, 0.1);
+  box-shadow: inset 0 -2px 0 rgba(240, 166, 60, 0.18);
+  color: var(--amber-hi);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.signalCaption,
+.eventCopy small,
+.timingBlock small,
+.dialogKicker,
+.reportsLabel {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.signalCaption {
+  color: var(--amber);
+}
+
+.eventCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding-left: 14px;
+}
+
+.eventCopy small {
+  margin-bottom: 1px;
+  color: var(--amber);
+}
+
+.eventCopy strong {
+  overflow: hidden;
+  color: #edf1f7;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.eventCopy > span {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timingBlock {
+  display: flex;
+  min-width: 248px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 5px 12px 5px 18px;
+  border-left: 1px solid rgba(240, 166, 60, 0.25);
+}
+
+.timingBlock small {
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.countdownGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(43px, 1fr));
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.countdownUnit {
+  display: grid;
+  min-width: 0;
+  padding: 3px 4px 2px;
+  border: 1px solid rgba(240, 166, 60, 0.25);
+  background: rgba(4, 7, 11, 0.38);
+  place-items: center;
+}
+
+.countdownUnit strong,
+.liveReadout {
+  color: var(--amber-hi);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.countdownUnit > span {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.timingBlockLive {
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+}
+
+.timingBlockLive small {
+  text-align: center;
+}
+
+.liveCallout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.liveJoinNow {
+  padding-left: 12px;
+  border-left: 1px solid rgba(70, 192, 109, 0.38);
+  color: #84e4a4;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.detailsCue {
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+}
+
+.detailsCue b {
+  margin-left: 4px;
+  font-size: 13px;
+}
+
+.spotlightLive {
+  border-color: rgba(70, 192, 109, 0.78);
+  border-left-color: var(--green);
+  background:
+    linear-gradient(100deg, rgba(70, 192, 109, 0.2), transparent 52%),
+    repeating-linear-gradient(90deg, transparent 0 59px, rgba(70, 192, 109, 0.035) 59px 60px),
+    #101820;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.26), 0 0 30px rgba(70, 192, 109, 0.07);
+}
+
+.spotlightLive::after {
+  background: var(--green);
+  box-shadow: 0 -5px 0 rgba(70, 192, 109, 0.18), 0 -10px 0 rgba(70, 192, 109, 0.08);
+}
+
+.spotlightLive .signalBox {
+  border-color: rgba(70, 192, 109, 0.72);
+  background: rgba(70, 192, 109, 0.12);
+  box-shadow: inset 0 -2px 0 rgba(70, 192, 109, 0.2), 0 0 18px rgba(70, 192, 109, 0.1);
+  color: #84e4a4;
+}
+
+.spotlightLive .signalCaption,
+.spotlightLive .eventCopy small,
+.spotlightLive .liveReadout,
+.spotlightLive .detailsCue {
+  color: var(--green);
+}
+
+.spotlightLive .timingBlock {
+  border-left-color: rgba(70, 192, 109, 0.26);
+}
+
+.spotlightLive .liveReadout {
+  font-size: 24px;
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 14px rgba(70, 192, 109, 0.34);
+  animation: livePulse 1.8s ease-in-out infinite;
+}
+
+.dialog {
+  width: min(780px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--line-bright);
+  border-left: 4px solid var(--amber);
+  background:
+    linear-gradient(135deg, rgba(240, 166, 60, 0.08), transparent 42%),
+    #0d121a;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72), 0 0 42px rgba(240, 166, 60, 0.08);
+  color: var(--text);
+  animation: dialogIn 150ms ease-out;
+}
+
+.dialog::backdrop {
+  background: rgba(3, 5, 9, 0.84);
+  backdrop-filter: blur(3px);
+}
+
+.dialog:focus {
+  outline: none;
+}
+
+.dialogReadout {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px 0 18px;
+  border-bottom: 1px solid rgba(240, 166, 60, 0.27);
+  background: rgba(240, 166, 60, 0.045);
+  color: var(--amber-hi);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.readoutSignal {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border: 1px solid var(--amber-hi);
+  background: var(--amber);
+  box-shadow: 0 0 10px rgba(240, 166, 60, 0.62);
+}
+
+.closeButton {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  margin-left: auto;
+  place-items: center;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.closeButton:hover:not(:disabled),
+.closeButton:focus-visible {
+  border-color: rgba(240, 166, 60, 0.54);
+  background: rgba(240, 166, 60, 0.07);
+  color: var(--amber-hi);
+  outline: none;
+}
+
+.dialogHero {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  padding: 25px 26px 21px;
+}
+
+.dialogIndex {
+  display: grid;
+  width: 84px;
+  height: 74px;
+  place-items: center;
+  border: 1px solid rgba(240, 166, 60, 0.42);
+  background:
+    linear-gradient(145deg, rgba(240, 166, 60, 0.13), transparent 64%),
+    rgba(7, 11, 17, 0.78);
+  color: var(--amber-hi);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  box-shadow: inset 0 -2px 0 rgba(240, 166, 60, 0.22);
+}
+
+.dialogKicker {
+  margin-bottom: 5px;
+  color: var(--amber);
+}
+
+.dialogHero h2 {
+  margin-bottom: 6px;
+  color: #edf1f7;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.dialogHero p:last-child {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 26px 22px;
+}
+
+.eventCard {
+  position: relative;
+  min-height: 142px;
+  overflow: hidden;
+  border: 1px solid rgba(69, 200, 218, 0.24);
+  border-top: 2px solid var(--cyan);
+  background:
+    linear-gradient(145deg, rgba(69, 200, 218, 0.08), transparent 54%),
+    rgba(9, 14, 22, 0.82);
+}
+
+.eventOrdinal {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  color: rgba(69, 200, 218, 0.1);
+  font-family: var(--font-mono);
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.eventCardCopy {
+  position: relative;
+  z-index: 1;
+  padding: 17px 18px;
+}
+
+.eventCardCopy > span {
+  display: block;
+  margin-bottom: 15px;
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.eventCardCopy h3 {
+  margin-bottom: 7px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.eventCardCopy p {
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.reminderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(69, 200, 218, 0.15);
+}
+
+.reminderRow > span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reminderRow button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border-color: rgba(69, 200, 218, 0.42);
+  background: rgba(69, 200, 218, 0.05);
+  color: var(--cyan);
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reminderRow button:hover:not(:disabled),
+.reminderRow button:focus-visible {
+  border-color: var(--cyan);
+  background: rgba(69, 200, 218, 0.11);
+  color: #8fe4f0;
+  outline: none;
+}
+
+.reminderRow .reminderEnabled {
+  border-color: rgba(70, 192, 109, 0.62);
+  background: rgba(70, 192, 109, 0.1);
+  color: #84e4a4;
+}
+
+.reminderDetail,
+.reminderError {
+  margin: -8px 26px 20px;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.reminderError {
+  margin-top: -13px;
+  color: var(--red);
+}
+
+.reportsBlock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 17px 26px 19px;
+  border-top: 1px solid var(--line);
+  background: rgba(6, 9, 14, 0.5);
+}
+
+.reportsLabel {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-faint);
+}
+
+.reportsBlock strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reportsBlock p {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.reportsBlock button {
+  min-height: 40px;
+  border-color: rgba(240, 166, 60, 0.68);
+  background: rgba(240, 166, 60, 0.08);
+  color: var(--amber-hi);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.reportsBlock button:hover:not(:disabled),
+.reportsBlock button:focus-visible {
+  border-color: var(--amber);
+  background: rgba(240, 166, 60, 0.14);
+  color: var(--amber-hi);
+  outline: none;
+}
+
+.reportsError {
+  margin: -8px 26px 17px;
+  color: var(--red);
+  font-size: 10px;
+}
+
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight,
+  .spotlightLive .liveReadout,
+  .dialog {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .spotlightButton {
+    grid-template-columns: 54px minmax(160px, 1fr) minmax(218px, auto) 76px;
+    gap: 10px;
+  }
+
+  .timingBlock {
+    min-width: 238px;
+    padding-right: 7px;
+    padding-left: 16px;
+  }
+}
+
+@media (max-width: 680px) {
+  .spotlightButton {
+    grid-template-columns: 50px minmax(120px, 1fr) minmax(210px, auto) 68px;
+    min-height: 74px;
+    gap: 10px;
+  }
+
+  .signalBox {
+    width: 46px;
+  }
+
+  .eventCopy strong {
+    font-size: 15px;
+  }
+
+  .eventCopy > span {
+    display: none;
+  }
+
+  .timingBlock {
+    min-width: 210px;
+    padding-left: 12px;
+  }
+
+  .countdownUnit strong {
+    font-size: 15px;
+  }
+
+  .scheduleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reportsBlock {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reminderRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -384,7 +384,7 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
 
     mainWindow = new BrowserWindow({
       width: 1180,
-      height: 760,
+      height: 765,
       minWidth: 1060,
       minHeight: 690,
       show: false,

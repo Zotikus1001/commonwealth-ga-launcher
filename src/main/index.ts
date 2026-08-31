@@ -305,6 +305,7 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
         platform: process.platform,
         packaged: app.isPackaged,
         executablePath: process.execPath,
+        developmentAppPath: app.isPackaged ? undefined : app.getAppPath(),
         appImagePath: process.env['APPIMAGE']?.trim() || undefined,
         userDataDir: app.getPath('userData')
       },

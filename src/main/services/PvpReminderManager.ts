@@ -34,6 +34,7 @@ export interface PvpReminderManagerOptions {
   platform: NodeJS.Platform;
   packaged: boolean;
   executablePath: string;
+  developmentAppPath?: string;
   appImagePath?: string;
   userDataDir: string;
   homeDirectory?: string;
@@ -49,8 +50,18 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
+function windowsArgument(value: string): string {
+  if (/\0|\r|\n|"/.test(value)) {
+    throw new Error('Reminder launch argument contains an invalid character');
+  }
+  if (value !== '' && !/[ \t]/.test(value)) return value;
+  return `"${value.replace(/\\+$/, (slashes) => `${slashes}${slashes}`)}"`;
+}
+
 function systemdArgument(value: string): string {
-  if (/\r|\n/.test(value)) throw new Error('Reminder executable path contains a line break');
+  if (/\0|\r|\n/.test(value)) {
+    throw new Error('Reminder launch argument contains an invalid character');
+  }
   return `"${value
     .replaceAll('\\', '\\\\')
     .replaceAll('"', '\\"')
@@ -66,12 +77,30 @@ function systemdCalendar(timestamp: number): string {
   return `${new Date(timestamp).toISOString().slice(0, 19).replace('T', ' ')} UTC`;
 }
 
+export function windowsReminderTaskName(eventId: PvpEventId, packaged: boolean): string {
+  const name = WINDOWS_TASK_NAMES[eventId];
+  return packaged ? name : name.replace('Commonwealth GA ', 'Commonwealth GA Development ');
+}
+
+export function linuxReminderUnitNames(
+  eventId: PvpEventId,
+  packaged: boolean
+): { service: string; timer: string } {
+  const scope = packaged ? '' : 'development-';
+  const prefix = `commonwealth-ga-${scope}pvp-${eventId}`;
+  return { service: `${prefix}.service`, timer: `${prefix}.timer` };
+}
+
 export function buildWindowsReminderTask(
   event: PvpEventDefinition,
   executablePath: string,
-  reminderAt: number
+  reminderAt: number,
+  launchArguments: readonly string[] = []
 ): string {
   const description = `Notify the user when ${event.name} starts.`;
+  const argumentsValue = [...launchArguments, `--pvp-event-reminder=${event.id}`]
+    .map(windowsArgument)
+    .join(' ');
   return `\uFEFF<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -107,7 +136,7 @@ export function buildWindowsReminderTask(
   <Actions Context="Author">
     <Exec>
       <Command>${escapeXml(executablePath)}</Command>
-      <Arguments>--pvp-event-reminder=${event.id}</Arguments>
+      <Arguments>${escapeXml(argumentsValue)}</Arguments>
     </Exec>
   </Actions>
 </Task>
@@ -117,16 +146,20 @@ export function buildWindowsReminderTask(
 export function buildLinuxReminderUnits(
   event: PvpEventDefinition,
   executablePath: string,
-  reminderAt: number
+  reminderAt: number,
+  launchArguments: readonly string[] = [],
+  serviceUnitName = linuxReminderUnitNames(event.id, true).service
 ): { service: string; timer: string } {
-  const unitName = `commonwealth-ga-pvp-${event.id}.service`;
+  const argumentsValue = [...launchArguments, `--pvp-event-reminder=${event.id}`]
+    .map(systemdArgument)
+    .join(' ');
   return {
     service: `[Unit]
 Description=Commonwealth GA reminder for ${event.name}
 
 [Service]
 Type=oneshot
-ExecStart=${systemdArgument(executablePath)} ${systemdArgument(`--pvp-event-reminder=${event.id}`)}
+ExecStart=${systemdArgument(executablePath)} ${argumentsValue}
 `,
     timer: `# ScheduledAt=${new Date(reminderAt).toISOString()}
 [Unit]
@@ -136,7 +169,7 @@ Description=Commonwealth GA reminder timer for ${event.name}
 OnCalendar=${systemdCalendar(reminderAt)}
 AccuracySec=1s
 Persistent=false
-Unit=${unitName}
+Unit=${serviceUnitName}
 
 [Install]
 WantedBy=timers.target
@@ -228,10 +261,10 @@ export class PvpReminderManager {
   }
 
   private async detectSupport(): Promise<ReminderSupport> {
-    if (!this.options.packaged) {
+    if (!this.options.packaged && !this.options.developmentAppPath) {
       return {
         supported: false,
-        detail: 'System reminders are available in installed launcher builds.'
+        detail: 'System reminders cannot locate this development build.'
       };
     }
     if (this.options.platform === 'win32') {
@@ -241,7 +274,7 @@ export class PvpReminderManager {
       };
     }
     if (this.options.platform === 'linux') {
-      if (!this.options.appImagePath) {
+      if (this.options.packaged && !this.options.appImagePath) {
         return {
           supported: false,
           detail: 'System reminders require launching the packaged AppImage directly.'
@@ -264,29 +297,44 @@ export class PvpReminderManager {
     return { supported: false, detail: 'System reminders are not supported on this platform.' };
   }
 
-  private launcherExecutable(): string {
+  private launcherCommand(): { executablePath: string; launchArguments: string[] } {
+    if (!this.options.packaged) {
+      if (!this.options.developmentAppPath) {
+        throw new Error('The development application path is unavailable');
+      }
+      return {
+        executablePath: this.options.executablePath,
+        launchArguments: [this.options.developmentAppPath]
+      };
+    }
     if (this.options.platform === 'linux') {
       if (!this.options.appImagePath) throw new Error('The AppImage path is unavailable');
-      return this.options.appImagePath;
+      return { executablePath: this.options.appImagePath, launchArguments: [] };
     }
-    return this.options.executablePath;
+    return { executablePath: this.options.executablePath, launchArguments: [] };
   }
 
   private async scheduleNext(eventId: PvpEventId, after: number): Promise<void> {
     const event = getPvpEvent(eventId);
     const reminderAt = getNextPvpReminderEventStart(eventId, after);
+    const command = this.launcherCommand();
     if (this.options.platform === 'win32') {
       await mkdir(this.stateDirectory, { recursive: true });
       const xmlPath = this.windowsXmlPath(eventId);
       await writeFile(
         xmlPath,
-        buildWindowsReminderTask(event, this.launcherExecutable(), reminderAt),
+        buildWindowsReminderTask(
+          event,
+          command.executablePath,
+          reminderAt,
+          command.launchArguments
+        ),
         { encoding: 'utf-16le' }
       );
       await this.run('schtasks.exe', [
         '/Create',
         '/TN',
-        WINDOWS_TASK_NAMES[eventId],
+        windowsReminderTaskName(eventId, this.options.packaged),
         '/XML',
         xmlPath,
         '/F'
@@ -296,7 +344,13 @@ export class PvpReminderManager {
 
     if (this.options.platform === 'linux') {
       const names = this.linuxUnitNames(eventId);
-      const units = buildLinuxReminderUnits(event, this.launcherExecutable(), reminderAt);
+      const units = buildLinuxReminderUnits(
+        event,
+        command.executablePath,
+        reminderAt,
+        command.launchArguments,
+        names.service
+      );
       await mkdir(this.systemdDirectory, { recursive: true });
       await Promise.all([
         writeFile(join(this.systemdDirectory, names.service), units.service, { encoding: 'utf-8' }),
@@ -314,7 +368,12 @@ export class PvpReminderManager {
   private async removeSchedule(eventId: PvpEventId): Promise<void> {
     if (this.options.platform === 'win32') {
       if (await this.windowsTaskExists(eventId)) {
-        await this.run('schtasks.exe', ['/Delete', '/TN', WINDOWS_TASK_NAMES[eventId], '/F']);
+        await this.run('schtasks.exe', [
+          '/Delete',
+          '/TN',
+          windowsReminderTaskName(eventId, this.options.packaged),
+          '/F'
+        ]);
       }
       await rm(this.windowsXmlPath(eventId), { force: true });
       return;
@@ -368,7 +427,11 @@ export class PvpReminderManager {
 
   private async windowsTaskExists(eventId: PvpEventId): Promise<boolean> {
     try {
-      await this.run('schtasks.exe', ['/Query', '/TN', WINDOWS_TASK_NAMES[eventId]]);
+      await this.run('schtasks.exe', [
+        '/Query',
+        '/TN',
+        windowsReminderTaskName(eventId, this.options.packaged)
+      ]);
       return true;
     } catch {
       return false;
@@ -380,8 +443,7 @@ export class PvpReminderManager {
   }
 
   private linuxUnitNames(eventId: PvpEventId): { service: string; timer: string } {
-    const prefix = `commonwealth-ga-pvp-${eventId}`;
-    return { service: `${prefix}.service`, timer: `${prefix}.timer` };
+    return linuxReminderUnitNames(eventId, this.options.packaged);
   }
 
   private async readMarker(): Promise<ReminderMarker> {

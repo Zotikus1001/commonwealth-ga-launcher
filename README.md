@@ -48,6 +48,15 @@ Europe (EU).
       </a>
     </td>
   </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <strong>Launcher and Steam integration</strong><br>
+      <sub>Keep Steam playtime tracking and the in-game overlay without modifying game or original Hi-Rez launcher files.</sub><br><br>
+      <a href="images/launcher-steam-integration.png">
+        <img src="images/launcher-steam-integration.png" alt="Launcher settings tab showing interface scaling and safe optional Steam integration" width="100%">
+      </a>
+    </td>
+  </tr>
 </table>
 
 ---

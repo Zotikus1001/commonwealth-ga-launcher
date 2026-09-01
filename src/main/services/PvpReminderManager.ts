@@ -15,11 +15,10 @@ import type { Log } from './Log';
 
 const execFileP = promisify(execFile);
 const MARKER_SCHEMA_VERSION = 1;
-const REMINDER_SCHEDULE_VERSION = 2;
+const REMINDER_SCHEDULE_VERSION = 3;
 const REMINDER_SCHEDULE_MARKER =
   `CommonwealthReminderScheduleVersion=${REMINDER_SCHEDULE_VERSION}`;
 const REMINDER_DELIVERY_GRACE_MS = 15 * 60 * 1_000;
-const WINDOWS_LONDON_UTC_OFFSETS = [1, 0] as const;
 const WINDOWS_TASK_NAMES: Record<PvpEventId, string> = {
   'mercenary-fun': 'Commonwealth GA PvP Merc Fun',
   'challenge-night': 'Commonwealth GA PvP Challenge Night'
@@ -92,20 +91,9 @@ function twoDigits(value: number): string {
 }
 
 function windowsWeeklyBoundary(
-  event: PvpEventDefinition,
-  firstOccurrenceAt: number,
-  londonUtcOffset: (typeof WINDOWS_LONDON_UTC_OFFSETS)[number]
+  occurrenceAt: number
 ): { startBoundary: string; weekday: (typeof WINDOWS_WEEKDAYS)[number] } {
-  const occurrence = new Date(firstOccurrenceAt);
-  const localOccurrence = new Date(
-    Date.UTC(
-      occurrence.getUTCFullYear(),
-      occurrence.getUTCMonth(),
-      occurrence.getUTCDate(),
-      event.hour - londonUtcOffset,
-      event.minute
-    )
-  );
+  const localOccurrence = new Date(occurrenceAt);
   const timezoneOffsetMinutes = -localOccurrence.getTimezoneOffset();
   const timezoneSign = timezoneOffsetMinutes >= 0 ? '+' : '-';
   const absoluteOffsetMinutes = Math.abs(timezoneOffsetMinutes);
@@ -133,15 +121,22 @@ function isReminderDeliveryTime(eventId: PvpEventId, now: number): boolean {
   return startsAt <= now && now - startsAt <= REMINDER_DELIVERY_GRACE_MS;
 }
 
-function isWindowsRecurringSchedule(xml: string, eventId: PvpEventId): boolean {
+function isWindowsRecurringSchedule(
+  xml: string,
+  eventId: PvpEventId,
+  expectedOccurrenceAt: number
+): boolean {
   const weekdayCount =
     xml.match(/<(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s*\/>/g)
       ?.length ?? 0;
+  const boundary = xml.match(/<StartBoundary>([^<]+)<\/StartBoundary>/)?.[1];
   return (
-    (xml.match(/<CalendarTrigger>/g)?.length ?? 0) === WINDOWS_LONDON_UTC_OFFSETS.length &&
-    (xml.match(/<ScheduleByWeek>/g)?.length ?? 0) === WINDOWS_LONDON_UTC_OFFSETS.length &&
+    (xml.match(/<CalendarTrigger>/g)?.length ?? 0) === 1 &&
+    (xml.match(/<ScheduleByWeek>/g)?.length ?? 0) === 1 &&
     xml.includes('<WeeksInterval>1</WeeksInterval>') &&
-    weekdayCount === WINDOWS_LONDON_UTC_OFFSETS.length &&
+    weekdayCount === 1 &&
+    boundary !== undefined &&
+    Date.parse(boundary) === expectedOccurrenceAt &&
     xml.includes('<MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>') &&
     xml.includes('<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>') &&
     xml.includes(`--pvp-event-reminder=${eventId}`)
@@ -172,16 +167,11 @@ export function buildWindowsReminderTask(
   const argumentsValue = [...launchArguments, `--pvp-event-reminder=${event.id}`]
     .map(windowsArgument)
     .join(' ');
-  // Task Scheduler cannot express an IANA timezone. Both possible London UTC offsets recur
-  // weekly. Localized boundaries keep date-crossing weekdays correct in every user timezone,
-  // while their explicit offsets remain stable through the user's own DST changes.
-  const triggers = WINDOWS_LONDON_UTC_OFFSETS.map((londonUtcOffset) => {
-    const { startBoundary, weekday } = windowsWeeklyBoundary(
-      event,
-      reminderAt,
-      londonUtcOffset
-    );
-    return `    <CalendarTrigger>
+  // Task Scheduler cannot bind a weekly trigger to Europe's DST rules. Register the exact next
+  // London occurrence as one weekly trigger; each delivery advances its boundary to the next
+  // occurrence, while the weekly recurrence remains as a fallback if that refresh ever fails.
+  const { startBoundary, weekday } = windowsWeeklyBoundary(reminderAt);
+  const trigger = `    <CalendarTrigger>
       <StartBoundary>${startBoundary}</StartBoundary>
       <Enabled>true</Enabled>
       <ScheduleByWeek>
@@ -191,7 +181,6 @@ export function buildWindowsReminderTask(
         </DaysOfWeek>
       </ScheduleByWeek>
     </CalendarTrigger>`;
-  }).join('\n');
   return `\uFEFF<?xml version="1.0" encoding="UTF-16"?>
 <!-- ${REMINDER_SCHEDULE_MARKER} -->
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -199,7 +188,7 @@ export function buildWindowsReminderTask(
     <Description>${escapeXml(description)}</Description>
   </RegistrationInfo>
   <Triggers>
-${triggers}
+${trigger}
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -342,9 +331,13 @@ export class PvpReminderManager {
     if (!support.supported) return null;
     const marker = await this.readMarker();
     if (!marker.enabled.includes(eventId)) return null;
-    if (!isReminderDeliveryTime(eventId, this.now())) {
+    const deliveryAt = this.now();
+    if (!isReminderDeliveryTime(eventId, deliveryAt)) {
       this.log.info(`PvP reminder trigger ignored outside the event start window: ${eventId}`);
       return null;
+    }
+    if (this.options.platform === 'win32') {
+      await this.ensureRecurringSchedule(eventId);
     }
     return getPvpEvent(eventId);
   }
@@ -511,7 +504,7 @@ export class PvpReminderManager {
     if (await this.hasRecurringSchedule(eventId)) return true;
     try {
       await this.scheduleWeekly(eventId, this.now());
-      this.log.info(`PvP reminder upgraded to a recurring weekly schedule: ${eventId}`);
+      this.log.info(`PvP reminder weekly schedule reconciled: ${eventId}`);
       return true;
     } catch (error) {
       this.log.error(`PvP reminder recurring schedule could not be installed: ${(error as Error).message}`);
@@ -528,7 +521,11 @@ export class PvpReminderManager {
           windowsReminderTaskName(eventId, this.options.packaged),
           '/XML'
         ]);
-        return isWindowsRecurringSchedule(xml, eventId);
+        return isWindowsRecurringSchedule(
+          xml,
+          eventId,
+          getNextPvpReminderEventStart(eventId, this.now())
+        );
       } catch {
         return false;
       }

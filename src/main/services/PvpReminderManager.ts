@@ -15,9 +15,27 @@ import type { Log } from './Log';
 
 const execFileP = promisify(execFile);
 const MARKER_SCHEMA_VERSION = 1;
+const REMINDER_SCHEDULE_VERSION = 2;
+const REMINDER_SCHEDULE_MARKER =
+  `CommonwealthReminderScheduleVersion=${REMINDER_SCHEDULE_VERSION}`;
+const REMINDER_DELIVERY_GRACE_MS = 15 * 60 * 1_000;
+const WINDOWS_LONDON_UTC_OFFSETS = [1, 0] as const;
 const WINDOWS_TASK_NAMES: Record<PvpEventId, string> = {
   'mercenary-fun': 'Commonwealth GA PvP Merc Fun',
   'challenge-night': 'Commonwealth GA PvP Challenge Night'
+};
+const WINDOWS_WEEKDAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday'
+] as const;
+const SYSTEMD_WEEKDAYS: Record<PvpEventDefinition['weekday'], string> = {
+  0: 'Sun',
+  2: 'Tue'
 };
 
 interface ReminderMarker {
@@ -69,12 +87,65 @@ function systemdArgument(value: string): string {
     .replaceAll('%', '%%')}"`;
 }
 
-function utcBoundary(timestamp: number): string {
-  return new Date(timestamp).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+function twoDigits(value: number): string {
+  return String(value).padStart(2, '0');
 }
 
-function systemdCalendar(timestamp: number): string {
-  return `${new Date(timestamp).toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+function windowsWeeklyBoundary(
+  event: PvpEventDefinition,
+  firstOccurrenceAt: number,
+  londonUtcOffset: (typeof WINDOWS_LONDON_UTC_OFFSETS)[number]
+): { startBoundary: string; weekday: (typeof WINDOWS_WEEKDAYS)[number] } {
+  const occurrence = new Date(firstOccurrenceAt);
+  const localOccurrence = new Date(
+    Date.UTC(
+      occurrence.getUTCFullYear(),
+      occurrence.getUTCMonth(),
+      occurrence.getUTCDate(),
+      event.hour - londonUtcOffset,
+      event.minute
+    )
+  );
+  const timezoneOffsetMinutes = -localOccurrence.getTimezoneOffset();
+  const timezoneSign = timezoneOffsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffsetMinutes = Math.abs(timezoneOffsetMinutes);
+  const startBoundary = `${localOccurrence.getFullYear()}-${twoDigits(
+    localOccurrence.getMonth() + 1
+  )}-${twoDigits(localOccurrence.getDate())}T${twoDigits(
+    localOccurrence.getHours()
+  )}:${twoDigits(localOccurrence.getMinutes())}:00${timezoneSign}${twoDigits(
+    Math.floor(absoluteOffsetMinutes / 60)
+  )}:${twoDigits(absoluteOffsetMinutes % 60)}`;
+  return { startBoundary, weekday: WINDOWS_WEEKDAYS[localOccurrence.getDay()] };
+}
+
+function systemdWeeklyCalendar(event: PvpEventDefinition): string {
+  const hour = String(event.hour).padStart(2, '0');
+  const minute = String(event.minute).padStart(2, '0');
+  return `${SYSTEMD_WEEKDAYS[event.weekday]} *-*-* ${hour}:${minute}:00 Europe/London`;
+}
+
+function isReminderDeliveryTime(eventId: PvpEventId, now: number): boolean {
+  const startsAt = getNextPvpReminderEventStart(
+    eventId,
+    now - REMINDER_DELIVERY_GRACE_MS - 1
+  );
+  return startsAt <= now && now - startsAt <= REMINDER_DELIVERY_GRACE_MS;
+}
+
+function isWindowsRecurringSchedule(xml: string, eventId: PvpEventId): boolean {
+  const weekdayCount =
+    xml.match(/<(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s*\/>/g)
+      ?.length ?? 0;
+  return (
+    (xml.match(/<CalendarTrigger>/g)?.length ?? 0) === WINDOWS_LONDON_UTC_OFFSETS.length &&
+    (xml.match(/<ScheduleByWeek>/g)?.length ?? 0) === WINDOWS_LONDON_UTC_OFFSETS.length &&
+    xml.includes('<WeeksInterval>1</WeeksInterval>') &&
+    weekdayCount === WINDOWS_LONDON_UTC_OFFSETS.length &&
+    xml.includes('<MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>') &&
+    xml.includes('<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>') &&
+    xml.includes(`--pvp-event-reminder=${eventId}`)
+  );
 }
 
 export function windowsReminderTaskName(eventId: PvpEventId, packaged: boolean): string {
@@ -101,16 +172,34 @@ export function buildWindowsReminderTask(
   const argumentsValue = [...launchArguments, `--pvp-event-reminder=${event.id}`]
     .map(windowsArgument)
     .join(' ');
+  // Task Scheduler cannot express an IANA timezone. Both possible London UTC offsets recur
+  // weekly. Localized boundaries keep date-crossing weekdays correct in every user timezone,
+  // while their explicit offsets remain stable through the user's own DST changes.
+  const triggers = WINDOWS_LONDON_UTC_OFFSETS.map((londonUtcOffset) => {
+    const { startBoundary, weekday } = windowsWeeklyBoundary(
+      event,
+      reminderAt,
+      londonUtcOffset
+    );
+    return `    <CalendarTrigger>
+      <StartBoundary>${startBoundary}</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByWeek>
+        <WeeksInterval>1</WeeksInterval>
+        <DaysOfWeek>
+          <${weekday} />
+        </DaysOfWeek>
+      </ScheduleByWeek>
+    </CalendarTrigger>`;
+  }).join('\n');
   return `\uFEFF<?xml version="1.0" encoding="UTF-16"?>
+<!-- ${REMINDER_SCHEDULE_MARKER} -->
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>${escapeXml(description)}</Description>
   </RegistrationInfo>
   <Triggers>
-    <TimeTrigger>
-      <StartBoundary>${utcBoundary(reminderAt)}</StartBoundary>
-      <Enabled>true</Enabled>
-    </TimeTrigger>
+${triggers}
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -119,7 +208,7 @@ export function buildWindowsReminderTask(
     </Principal>
   </Principals>
   <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowHardTerminate>true</AllowHardTerminate>
@@ -130,7 +219,7 @@ export function buildWindowsReminderTask(
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
@@ -153,20 +242,24 @@ export function buildLinuxReminderUnits(
   const argumentsValue = [...launchArguments, `--pvp-event-reminder=${event.id}`]
     .map(systemdArgument)
     .join(' ');
+  const systemdRunArguments = ['--user', '--collect', '--', executablePath]
+    .map(systemdArgument)
+    .join(' ');
   return {
     service: `[Unit]
 Description=Commonwealth GA reminder for ${event.name}
 
 [Service]
 Type=oneshot
-ExecStart=${systemdArgument(executablePath)} ${argumentsValue}
+ExecStart=${systemdArgument('systemd-run')} ${systemdRunArguments} ${argumentsValue}
 `,
-    timer: `# ScheduledAt=${new Date(reminderAt).toISOString()}
+    timer: `# ${REMINDER_SCHEDULE_MARKER}
+# FirstOccurrence=${new Date(reminderAt).toISOString()}
 [Unit]
-Description=Commonwealth GA reminder timer for ${event.name}
+Description=Commonwealth GA reminder timer for ${event.name} (${REMINDER_SCHEDULE_MARKER})
 
 [Timer]
-OnCalendar=${systemdCalendar(reminderAt)}
+OnCalendar=${systemdWeeklyCalendar(event)}
 AccuracySec=1s
 Persistent=false
 Unit=${serviceUnitName}
@@ -183,6 +276,7 @@ export class PvpReminderManager {
   private readonly systemdDirectory: string;
   private readonly now: () => number;
   private supportPromise: Promise<ReminderSupport> | null = null;
+  private readonly recurringSchedulePromises = new Map<PvpEventId, Promise<boolean>>();
 
   constructor(
     private readonly options: PvpReminderManagerOptions,
@@ -197,15 +291,16 @@ export class PvpReminderManager {
   async getState(): Promise<PvpReminderState> {
     const support = await this.support();
     const marker = await this.readMarker();
-    const reminders = await Promise.all(
-      PVP_EVENTS.map(async (event) => ({
+    const reminders: PvpReminderState['reminders'] = [];
+    for (const event of PVP_EVENTS) {
+      reminders.push({
         eventId: event.id,
         enabled:
           support.supported && marker.enabled.includes(event.id)
-            ? await this.hasFutureSchedule(event.id)
+            ? await this.ensureRecurringSchedule(event.id)
             : false
-      }))
-    );
+      });
+    }
     return { ...support, reminders };
   }
 
@@ -217,7 +312,7 @@ export class PvpReminderManager {
 
     if (enabled) {
       try {
-        await this.scheduleNext(eventId, this.now());
+        await this.scheduleWeekly(eventId, this.now());
         await this.writeMarker({
           schemaVersion: MARKER_SCHEMA_VERSION,
           enabled: [...new Set([...marker.enabled, eventId])]
@@ -234,7 +329,7 @@ export class PvpReminderManager {
           enabled: marker.enabled.filter((candidate) => candidate !== eventId)
         });
       } catch (error) {
-        if (previouslyEnabled) await this.scheduleNext(eventId, this.now()).catch(() => {});
+        if (previouslyEnabled) await this.scheduleWeekly(eventId, this.now()).catch(() => {});
         throw error;
       }
     }
@@ -247,10 +342,9 @@ export class PvpReminderManager {
     if (!support.supported) return null;
     const marker = await this.readMarker();
     if (!marker.enabled.includes(eventId)) return null;
-    try {
-      await this.scheduleNext(eventId, this.now() + 60_000);
-    } catch (error) {
-      this.log.error(`PvP reminder could not schedule its next occurrence: ${(error as Error).message}`);
+    if (!isReminderDeliveryTime(eventId, this.now())) {
+      this.log.info(`PvP reminder trigger ignored outside the event start window: ${eventId}`);
+      return null;
     }
     return getPvpEvent(eventId);
   }
@@ -281,7 +375,10 @@ export class PvpReminderManager {
         };
       }
       try {
-        await this.run('systemctl', ['--user', 'show-environment']);
+        await Promise.all([
+          this.run('systemctl', ['--user', 'show-environment']),
+          this.run('systemd-run', ['--version'])
+        ]);
         return {
           supported: true,
           detail:
@@ -314,7 +411,7 @@ export class PvpReminderManager {
     return { executablePath: this.options.executablePath, launchArguments: [] };
   }
 
-  private async scheduleNext(eventId: PvpEventId, after: number): Promise<void> {
+  private async scheduleWeekly(eventId: PvpEventId, after: number): Promise<void> {
     const event = getPvpEvent(eventId);
     const reminderAt = getNextPvpReminderEventStart(eventId, after);
     const command = this.launcherCommand();
@@ -398,26 +495,62 @@ export class PvpReminderManager {
     }
   }
 
-  private async hasFutureSchedule(eventId: PvpEventId): Promise<boolean> {
+  private async ensureRecurringSchedule(eventId: PvpEventId): Promise<boolean> {
+    const existing = this.recurringSchedulePromises.get(eventId);
+    if (existing) return existing;
+    const operation = this.ensureRecurringScheduleOnce(eventId).finally(() => {
+      if (this.recurringSchedulePromises.get(eventId) === operation) {
+        this.recurringSchedulePromises.delete(eventId);
+      }
+    });
+    this.recurringSchedulePromises.set(eventId, operation);
+    return operation;
+  }
+
+  private async ensureRecurringScheduleOnce(eventId: PvpEventId): Promise<boolean> {
+    if (await this.hasRecurringSchedule(eventId)) return true;
+    try {
+      await this.scheduleWeekly(eventId, this.now());
+      this.log.info(`PvP reminder upgraded to a recurring weekly schedule: ${eventId}`);
+      return true;
+    } catch (error) {
+      this.log.error(`PvP reminder recurring schedule could not be installed: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  private async hasRecurringSchedule(eventId: PvpEventId): Promise<boolean> {
     if (this.options.platform === 'win32') {
-      const xml = await readFile(this.windowsXmlPath(eventId), { encoding: 'utf-16le' }).catch(
-        () => null
-      );
-      const boundary = xml?.match(/<StartBoundary>([^<]+)<\/StartBoundary>/)?.[1];
-      return Boolean(
-        boundary && Date.parse(boundary) > this.now() && (await this.windowsTaskExists(eventId))
-      );
+      try {
+        const xml = await this.run('schtasks.exe', [
+          '/Query',
+          '/TN',
+          windowsReminderTaskName(eventId, this.options.packaged),
+          '/XML'
+        ]);
+        return isWindowsRecurringSchedule(xml, eventId);
+      } catch {
+        return false;
+      }
     }
     if (this.options.platform === 'linux') {
       const names = this.linuxUnitNames(eventId);
       const source = await readFile(join(this.systemdDirectory, names.timer), {
         encoding: 'utf-8'
       }).catch(() => null);
-      const scheduledAt = source?.match(/^# ScheduledAt=(.+)$/m)?.[1];
-      if (!scheduledAt || Date.parse(scheduledAt) <= this.now()) return false;
+      if (!source?.includes(`# ${REMINDER_SCHEDULE_MARKER}`)) return false;
       try {
-        await this.run('systemctl', ['--user', 'is-active', '--quiet', names.timer]);
-        return true;
+        const loaded = await this.run('systemctl', [
+          '--user',
+          'show',
+          names.timer,
+          '--property=Description',
+          '--property=ActiveState'
+        ]);
+        return (
+          loaded.includes(REMINDER_SCHEDULE_MARKER) &&
+          /^ActiveState=active$/m.test(loaded)
+        );
       } catch {
         return false;
       }
@@ -480,11 +613,12 @@ export class PvpReminderManager {
     }
   }
 
-  private async run(command: string, args: string[]): Promise<void> {
-    await execFileP(command, args, {
+  private async run(command: string, args: string[]): Promise<string> {
+    const { stdout } = await execFileP(command, args, {
       encoding: 'utf-8',
       timeout: 15_000,
       windowsHide: true
     });
+    return stdout;
   }
 }

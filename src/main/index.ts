@@ -311,11 +311,16 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
       },
       log
     );
+    const reminderReconciliation = pvpReminderManager.getState().catch((error) => {
+      log.error(`PvP reminder schedules could not be reconciled: ${(error as Error).message}`);
+    });
     if (launchPvpReminder) {
+      await reminderReconciliation;
       if (!(await handlePvpReminder(launchPvpReminder, log))) app.quit();
       return;
     }
     if (pendingPvpReminder) {
+      await reminderReconciliation;
       const eventId = pendingPvpReminder;
       pendingPvpReminder = null;
       void handlePvpReminder(eventId, log);

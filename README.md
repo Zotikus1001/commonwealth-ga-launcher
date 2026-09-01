@@ -15,6 +15,11 @@ Europe (EU).
   <sub>Server health, community events, recent updates, resources, server choice, and Play in one view.</sub>
 </p>
 
+<details>
+<summary><strong>View screenshots of the other launcher pages</strong></summary>
+
+<br>
+
 <table>
   <tr>
     <td width="50%" valign="top">
@@ -59,6 +64,8 @@ Europe (EU).
   </tr>
 </table>
 
+</details>
+
 ---
 
 ## Download and Install
@@ -90,7 +97,7 @@ The launcher updates itself automatically.
 
 ## Features
 
-- Automatic updates and an in-launcher changelog
+- Automatic updates
 - Easy game setup and one-click launching
 - Optional Steam integration that starts the Commonwealth launcher instead of the Hi-Rez launcher
   from Steam, enabling Steam playtime tracking and the in-game overlay without modifying or

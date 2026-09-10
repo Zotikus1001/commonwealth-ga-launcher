@@ -46,6 +46,7 @@ const api: LauncherApi = {
   refresh: () => ipcRenderer.invoke(IPC.refresh),
   refreshPatchStatuses: () => ipcRenderer.invoke(IPC.refreshPatchStatuses),
   checkLauncherUpdates: () => ipcRenderer.invoke(IPC.checkLauncherUpdates),
+  downloadLauncherUpdate: (version: string) => ipcRenderer.invoke(IPC.downloadLauncherUpdate, version),
   listLinuxRuntimeOptions: () => ipcRenderer.invoke(IPC.listLinuxRuntimeOptions),
   createWinePrefix: () => ipcRenderer.invoke(IPC.createWinePrefix),
   openDiscord: () => ipcRenderer.invoke(IPC.openDiscord),
@@ -66,6 +67,8 @@ const api: LauncherApi = {
   acknowledgeSteamLaunchIntegrationOffer: () =>
     ipcRenderer.invoke(IPC.acknowledgeSteamLaunchIntegrationOffer),
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
+  getLauncherInstallDirectory: () => ipcRenderer.invoke(IPC.getLauncherInstallDirectory),
+  openLauncherInstallDirectory: () => ipcRenderer.invoke(IPC.openLauncherInstallDirectory),
   copyChatCommand: (command: string) => ipcRenderer.invoke(IPC.copyChatCommand, command),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),
   reportRendererError: (report: RendererErrorReport) =>

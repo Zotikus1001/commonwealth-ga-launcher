@@ -2508,6 +2508,14 @@
   margin: 0;
 }
 
+.installDirectory {
+  overflow-wrap: anywhere;
+  user-select: text;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .diagnosticGrid > div {
   min-width: 0;
   padding: 10px 12px;

@@ -77,7 +77,7 @@ once. Reach the login screen, close the game, then reopen this launcher.
 
 **[Download the latest Windows installer](../../releases/latest/download/Commonwealth-GA-Launcher-Windows-x64-Setup.exe)**
 
-1. Run the installer.
+1. Run the installer and choose where to install the launcher.
 2. Open the launcher.
 3. Select your game installation, or let the launcher find it.
 4. Press **Play**.
@@ -86,18 +86,24 @@ once. Reach the login screen, close the game, then reopen this launcher.
 
 **[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Allow the AppImage to run, open it, and follow the setup instructions.
+Allow the AppImage to run and open it. On first launch, choose a folder to keep the launcher
+or keep its current location. Choosing another folder copies the AppImage there and restarts
+the launcher; use that copy for future launches. Then follow the game setup instructions.
 
 The launcher supports installed Wine runners and Proton through UMU. Linux users can also wrap
 the launch with tools such as Gamescope, `taskset`, and custom environment options.
 
-The launcher updates itself automatically.
+On both platforms, the launcher asks before downloading an update. Choose **Update now** to
+download it and restart, or **Ask again later** to continue and be reminded next launch.
+Updates stay in the launcher folder. Find it anytime under **Settings → Diagnostics →
+Open launcher install folder**.
 
 ---
 
 ## Features
 
-- Automatic updates
+- Update notifications with a choice to update now or later
+- Choose where to keep the launcher and open its installation folder from Diagnostics
 - Easy game setup and one-click launching
 - Optional Steam integration that starts the Commonwealth launcher instead of the Hi-Rez launcher
   from Steam, enabling Steam playtime tracking and the in-game overlay without modifying or
@@ -108,7 +114,7 @@ The launcher updates itself automatically.
   optional system reminders on Windows and Linux
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
-- Up to five optional profiles for quickly switching game settings, with one clearly marked active choice, exact before/after comparisons, and save protection
+- Up to five optional profiles for quickly switching game settings, with one clearly marked active choice, exact before/after comparisons, and save protection that ignores launcher console changes
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions

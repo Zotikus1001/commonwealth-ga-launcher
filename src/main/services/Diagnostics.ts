@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import type { LauncherState, Settings } from '@shared/types';
+import { launcherInstallDirectory } from './LauncherLocation';
 
 /** Plain-text diagnostics report for the clipboard. Private connection values are always redacted. */
 export function buildDiagnosticsReport(state: LauncherState, settings: Settings, logTail: string[]): string {
@@ -20,6 +21,7 @@ export function buildDiagnosticsReport(state: LauncherState, settings: Settings,
     '=== Commonwealth GA Launcher diagnostics ===',
     `generated: ${new Date().toISOString()}`,
     `launcher: ${app.getVersion()} (${process.platform} ${process.arch}, packaged=${app.isPackaged})`,
+    `launcher folder: ${launcherInstallDirectory()}`,
     '',
     '--- state ---',
     `phase: ${state.phase}`,

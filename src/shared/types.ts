@@ -258,6 +258,7 @@ export type LauncherUpdateStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'installing'
   | 'up-to-date'
@@ -442,6 +443,7 @@ export interface LauncherApi {
   refresh(): Promise<void>;
   refreshPatchStatuses(): Promise<void>;
   checkLauncherUpdates(): Promise<void>;
+  downloadLauncherUpdate(version: string): Promise<void>;
   listLinuxRuntimeOptions(): Promise<LinuxRuntimeOptions>;
   createWinePrefix(): Promise<ActionResult>;
   openDiscord(): Promise<ActionResult>;
@@ -461,6 +463,8 @@ export interface LauncherApi {
   shouldOfferSteamLaunchIntegration(): Promise<boolean>;
   acknowledgeSteamLaunchIntegrationOffer(): Promise<void>;
   openLauncherLogs(): Promise<ActionResult>;
+  getLauncherInstallDirectory(): Promise<string>;
+  openLauncherInstallDirectory(): Promise<ActionResult>;
   copyChatCommand(command: string): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;
   reportRendererError(report: RendererErrorReport): Promise<void>;

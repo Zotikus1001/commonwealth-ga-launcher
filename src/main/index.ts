@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Log } from './services/Log';
 import { LauncherUpdater } from './services/LauncherUpdater';
+import { chooseLinuxLauncherLocation } from './services/LauncherLocation';
 import { configureDevelopmentProfile } from './services/DevelopmentProfile';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { getPvpEvent, isPvpEventId, type PvpEventId } from '@shared/pvpEvents';
@@ -299,6 +300,7 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
   void app.whenReady().then(async () => {
     const log = new Log(app.getPath('userData'));
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
+    if (!launchPvpReminder && await chooseLinuxLauncherLocation(log)) return;
 
     pvpReminderManager = new PvpReminderManager(
       {

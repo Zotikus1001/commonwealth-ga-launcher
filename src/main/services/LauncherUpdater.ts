@@ -1,9 +1,10 @@
 import { app, net } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import { autoUpdater, type NsisUpdater } from 'electron-updater';
 import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import type { LauncherUpdateStatus, UpdateProgress } from '@shared/types';
 import type { Log } from './Log';
+import { launcherInstallDirectory } from './LauncherLocation';
 import {
   comparePublishedReleases,
   latestStableRelease,
@@ -112,11 +113,14 @@ export class LauncherUpdater {
     events: LauncherUpdateEvents = NO_UPDATE_EVENTS
   ) {
     this.events = events;
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.autoRunAppAfterInstall = true;
     autoUpdater.allowPrerelease = false;
     autoUpdater.allowDowngrade = true;
+    if (app.isPackaged && process.platform === 'win32') {
+      (autoUpdater as NsisUpdater).installDirectory = launcherInstallDirectory();
+    }
     autoUpdater.logger = {
       info: (message) => this.log.info(`electron-updater: ${String(message)}`),
       warn: (message) => this.log.warn(`electron-updater: ${String(message)}`),
@@ -125,8 +129,8 @@ export class LauncherUpdater {
     };
 
     autoUpdater.on('update-available', (info) => {
-      this.log.info(`self-update: ${info.version} available, downloading`);
-      this.setStatus('downloading', info.version);
+      this.log.info(`self-update: ${info.version} available, awaiting user approval`);
+      this.setStatus('available', info.version);
     });
     autoUpdater.on('update-not-available', () => this.setStatus('up-to-date'));
     autoUpdater.on('download-progress', (progress) => {
@@ -138,6 +142,7 @@ export class LauncherUpdater {
       });
     });
     autoUpdater.on('update-downloaded', (info) => {
+      if (this.status !== 'downloading' || this.statusVersion !== info.version) return;
       this.setProgress(null);
       this.log.info(`self-update: ${info.version} downloaded, installing now`);
       this.setStatus('installing', info.version);
@@ -175,6 +180,22 @@ export class LauncherUpdater {
       error: this.statusError,
       progress: this.progress
     };
+  }
+
+  async downloadUpdate(version: string): Promise<void> {
+    if (!app.isPackaged || this.status !== 'available' || this.statusVersion !== version) {
+      throw new Error('This update is no longer available. Check for launcher updates again.');
+    }
+    this.setStatus('downloading', version);
+    try {
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      this.setProgress(null);
+      const message = (error as Error).message;
+      this.log.warn(`self-update download failed: ${message}`);
+      this.setStatus('error', version, message);
+      throw error;
+    }
   }
 
   private setProgress(progress: UpdateProgress | null): void {

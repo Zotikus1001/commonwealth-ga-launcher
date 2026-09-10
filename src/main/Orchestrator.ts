@@ -602,6 +602,10 @@ export class Orchestrator {
     await this.launcherUpdater.ensureCurrent();
   }
 
+  async downloadLauncherUpdate(version: string): Promise<void> {
+    await this.launcherUpdater.downloadUpdate(version);
+  }
+
   async refreshPatchStatuses(): Promise<void> {
     if (this.patchStatusRefreshInFlight) return this.patchStatusRefreshInFlight;
     const refresh = this.runPatchStatusRefresh();

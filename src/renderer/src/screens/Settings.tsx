@@ -76,6 +76,7 @@ interface SettingsProps {
   state: LauncherState;
   initialTab?: SettingsTab;
   onBack: () => void;
+  onRequestUpdate: () => void;
 }
 
 type PendingNavigation =
@@ -122,7 +123,7 @@ const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: 
 };
 
 const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
-  { state, initialTab = 'game', onBack },
+  { state, initialTab = 'game', onBack, onRequestUpdate },
   ref
 ): JSX.Element {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -1406,7 +1407,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'diagnostics' && <DiagnosticsTab state={state} settings={draft} />}
 
-        {tab === 'about' && <AboutTab state={state} />}
+        {tab === 'about' && <AboutTab state={state} onRequestUpdate={onRequestUpdate} />}
 
         {tab !== 'diagnostics' &&
           tab !== 'patches' &&
@@ -3227,14 +3228,20 @@ export function InfoTab(): JSX.Element {
   );
 }
 
-function AboutTab({ state }: { state: LauncherState }): JSX.Element {
+function AboutTab({ state, onRequestUpdate }: {
+  state: LauncherState;
+  onRequestUpdate: () => void;
+}): JSX.Element {
   const updateBusy =
     state.launcherUpdate === 'checking' ||
     state.launcherUpdate === 'downloading' ||
     state.launcherUpdate === 'installing';
   const development = state.launcherUpdate === 'disabled';
+  const updateAvailable = state.launcherUpdate === 'available';
   const updateStatus =
-    state.launcherUpdate === 'up-to-date'
+    updateAvailable
+      ? { text: `Version ${state.launcherUpdateVersion} is available.`, tone: styles.aboutWarn }
+      : state.launcherUpdate === 'up-to-date'
       ? { text: 'Launcher is up to date.', tone: styles.aboutOk }
       : state.launcherUpdate === 'checking'
         ? { text: 'Checking both stable release channels…', tone: styles.aboutDim }
@@ -3269,7 +3276,7 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <div>
           <div className={styles.aboutTitle}>Commonwealth GA Launcher</div>
           <p className={styles.aboutTagline}>
-            Private server access, game patches, and automatic updates.
+            Private server access, game patches, and launcher updates.
           </p>
         </div>
       </div>
@@ -3300,9 +3307,12 @@ function AboutTab({ state }: { state: LauncherState }): JSX.Element {
         <button
           className={styles.aboutUpdateButton}
           disabled={checkDisabled}
-          onClick={() => void window.api.checkLauncherUpdates()}
+          onClick={() => {
+            if (updateAvailable) onRequestUpdate();
+            else void window.api.checkLauncherUpdates();
+          }}
         >
-          {updateBusy ? 'Checking…' : 'Check for launcher updates'}
+          {updateAvailable ? 'Update launcher…' : updateBusy ? 'Please wait…' : 'Check for launcher updates'}
         </button>
       </div>
     </section>
@@ -3317,12 +3327,16 @@ function DiagnosticsTab({
   settings: SettingsModel;
 }): JSX.Element {
   const [lines, setLines] = useState<string[]>([]);
+  const [installDirectory, setInstallDirectory] = useState('');
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetResult, setResetResult] = useState<ActionResult | null>(null);
 
   useEffect(() => {
+    void window.api.getLauncherInstallDirectory().then(setInstallDirectory).catch((error) => {
+      setActionResult({ ok: false, message: `Could not find launcher folder: ${String(error)}` });
+    });
     void window.api.getLogTail().then(setLines);
     const unsubscribe = window.api.onLogLine((line) =>
       setLines((prev) => [...prev.slice(-499), line])
@@ -3434,6 +3448,14 @@ function DiagnosticsTab({
           </>
         )}
       </dl>
+
+      <div className="panel-title">Launcher Installation</div>
+      <p className={styles.installDirectory}>{installDirectory || 'Finding launcher folder…'}</p>
+      <div className={styles.inlineButtons}>
+        <button onClick={() => void window.api.openLauncherInstallDirectory().then(setActionResult)}>
+          Open launcher install folder
+        </button>
+      </div>
 
       <div className="panel-title">Launcher Log</div>
       <pre className={styles.logView}>{lines.join('\n')}</pre>

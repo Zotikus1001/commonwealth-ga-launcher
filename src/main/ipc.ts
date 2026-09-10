@@ -16,6 +16,7 @@ import type { LauncherChangelogStore } from './services/LauncherChangelogStore';
 import type { SteamLaunchIntegration } from './services/SteamLaunchIntegration';
 import { createWinePrefix, listLinuxRuntimeOptions } from './services/LinuxRuntime';
 import { buildDiagnosticsReport } from './services/Diagnostics';
+import { launcherInstallDirectory } from './services/LauncherLocation';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import { hasRequiredGameConfigFiles, validateGameExe } from './services/InstallLocator';
@@ -284,6 +285,10 @@ export function registerIpc(
   ipcMain.handle(IPC.refresh, () => orchestrator.refresh());
   ipcMain.handle(IPC.refreshPatchStatuses, () => orchestrator.refreshPatchStatuses());
   ipcMain.handle(IPC.checkLauncherUpdates, () => orchestrator.checkLauncherUpdates());
+  ipcMain.handle(IPC.downloadLauncherUpdate, (_event, version: unknown) => {
+    if (typeof version !== 'string' || version.length > 128) throw new Error('Invalid update version.');
+    return orchestrator.downloadLauncherUpdate(version);
+  });
   ipcMain.handle(IPC.listLinuxRuntimeOptions, () =>
     listLinuxRuntimeOptions(config.get(), log)
   );
@@ -427,6 +432,18 @@ export function registerIpc(
     return error
       ? { ok: false, message: `Could not open logs folder: ${error}` }
       : { ok: true, message: 'Logs folder opened.' };
+  });
+
+  ipcMain.handle(IPC.getLauncherInstallDirectory, () => launcherInstallDirectory());
+  ipcMain.handle(IPC.openLauncherInstallDirectory, async () => {
+    try {
+      const error = await shell.openPath(launcherInstallDirectory());
+      return error
+        ? { ok: false, message: `Could not open launcher folder: ${error}` }
+        : { ok: true, message: 'Launcher installation folder opened.' };
+    } catch (error) {
+      return { ok: false, message: `Could not open launcher folder: ${(error as Error).message}` };
+    }
   });
 
   ipcMain.handle(IPC.copyChatCommand, (_event, command: unknown) => {

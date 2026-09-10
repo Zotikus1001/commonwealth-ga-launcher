@@ -4,6 +4,7 @@ import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import Play from './screens/Play';
 import Settings, { type SettingsHandle, type SettingsTab } from './screens/Settings';
 import { LauncherChangelogDialog } from './components/LauncherChangelogDialog';
+import { LauncherUpdateDialog } from './components/LauncherUpdateDialog';
 import styles from './App.module.css';
 
 const manualUpdateRepository = LAUNCHER_CONFIG.updateRepositories[0];
@@ -32,6 +33,8 @@ function launcherUpdateLabel(state: LauncherState): {
       return { text: 'Up to date', tone: 'ok', title: 'Launcher is up to date' };
     case 'checking':
       return { text: 'Checking updates…', tone: 'dim', title: 'Checking for launcher updates' };
+    case 'available':
+      return { text: 'Update available', tone: 'warn', title: 'Open About to update the launcher' };
     case 'downloading':
       return {
         text: state.launcherUpdateVersion
@@ -179,6 +182,7 @@ export default function App(): JSX.Element {
   >(null);
   const [steamLaunchOfferOpen, setSteamLaunchOfferOpen] = useState(false);
   const [gameFirstRunOpen, setGameFirstRunOpen] = useState(false);
+  const [deferredUpdateVersion, setDeferredUpdateVersion] = useState<string | null>(null);
   const [changelogStatusChecked, setChangelogStatusChecked] = useState(false);
   const gameFirstRunShown = useRef(false);
   const steamLaunchOfferChecked = useRef(false);
@@ -251,7 +255,12 @@ export default function App(): JSX.Element {
     return <div className={styles.boot}>COMMONWEALTH GA</div>;
   }
   const launcherUpdate = launcherUpdateLabel(state);
-  const updateDownloading = state.launcherUpdate === 'downloading';
+  const offeredUpdateVersion =
+    state.launcherUpdate === 'available' &&
+    state.launcherUpdateVersion !== deferredUpdateVersion &&
+    changelogStatusChecked && !changelogOpenMode && !steamLaunchOfferOpen &&
+    !gameFirstRunOpen && !state.launchCoolingDown
+      ? state.launcherUpdateVersion : null;
   const closeChangelog = (): void => {
     setChangelogOpenMode(null);
     void window.api.acknowledgeLauncherChangelog().catch(() => {});
@@ -295,8 +304,6 @@ export default function App(): JSX.Element {
             </span>
           </div>
           <button
-            disabled={updateDownloading}
-            title={updateDownloading ? 'Settings are unavailable while the launcher update downloads.' : undefined}
             onClick={() => {
               if (view === 'play') openSettings('game');
               else settingsRef.current?.requestBack();
@@ -315,12 +322,13 @@ export default function App(): JSX.Element {
             onOpenInfo={() => openSettings('info')}
           />
         ) : (
-          <fieldset className={styles.settingsGate} disabled={updateDownloading}>
+          <fieldset className={styles.settingsGate}>
             <Settings
               ref={settingsRef}
               state={state}
               initialTab={settingsTab}
               onBack={() => setView('play')}
+              onRequestUpdate={() => setDeferredUpdateVersion(null)}
             />
           </fieldset>
         )}
@@ -338,6 +346,13 @@ export default function App(): JSX.Element {
       {gameFirstRunOpen && (
         <GameFirstRunDialog
           onClose={() => setGameFirstRunOpen(false)}
+        />
+      )}
+      {offeredUpdateVersion && (
+        <LauncherUpdateDialog
+          key={offeredUpdateVersion}
+          version={offeredUpdateVersion}
+          onLater={() => setDeferredUpdateVersion(offeredUpdateVersion)}
         />
       )}
     </div>

@@ -40,7 +40,8 @@ module.exports = {
     artifactName: launcherConfig.windowsInstallerName
   },
   nsis: {
-    oneClick: true,
+    oneClick: false,
+    allowToChangeInstallationDirectory: true,
     perMachine: false,
     differentialPackage: false,
     deleteAppDataOnUninstall: true,

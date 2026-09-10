@@ -1088,6 +1088,9 @@ export function canonicalizeProfileIniForComparison(
   }
   const canonicalLines: string[] = [];
   for (const block of splitIniSectionBlocks(text)) {
+    // Unreal records source INI timestamps here when it reloads defaults, including
+    // DefaultInput.ini after a console-key change. These are not player settings.
+    if (block.name === 'iniversion') continue;
     const body = block.name === null ? block.lines : block.lines.slice(1);
     const ownedDirectives = block.name === null ? undefined : patterns.get(block.name);
     const meaningfulLines = body.flatMap((line) => {

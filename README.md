@@ -119,7 +119,8 @@ Open launcher install folder**.
   optional system reminders on Windows and Linux
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
-- Up to five optional profiles for quickly switching game settings, with one clearly marked active choice, exact before/after comparisons, and save protection that ignores launcher console changes
+- Up to five optional profiles for quickly switching game settings, with one clearly marked active choice,
+  exact before/after comparisons, and prompts to save changed settings
 - One-click performance and stability patches
 - An optional Game Client Patch with:
     - Smoother scope transitions

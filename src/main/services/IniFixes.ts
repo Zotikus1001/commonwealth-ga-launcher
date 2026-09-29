@@ -722,6 +722,19 @@ function targetDirectivePattern(target: IniPatchTarget): RegExp {
 
 const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarget[]>> = {
   'tgengine.ini': [
+    // WinDrv caches Windows accessibility shortcut/confirmation state here. These
+    // entries can disappear between runs without any change to the player's settings.
+    {
+      sectionName: 'windrv.accessibility',
+      keys: [
+        'FilterKeysConfirmation',
+        'FilterKeysHotkey',
+        'StickyKeysConfirmation',
+        'StickyKeysHotkey',
+        'ToggleKeysConfirmation',
+        'ToggleKeysHotkey'
+      ]
+    },
     { sectionName: 'engine.player', keys: NET_SPEED_KEYS },
     { sectionName: 'texturestreaming', keys: ['PoolSize'] },
     { sectionName: 'engine.isvhacks', keys: ['bInitializeShadersOnDemand'] },
@@ -744,7 +757,7 @@ const PROFILE_COMPARISON_TARGETS: Readonly<Record<string, readonly IniPatchTarge
   'defaultinput.ini': DEVELOPER_CONSOLE_TARGETS
 };
 
-/** Removes launcher-owned directives and non-setting formatting before profile comparison. */
+/** Removes launcher-owned directives, runtime bookkeeping and formatting before comparison. */
 export function canonicalizeProfileIniForComparison(
   fileName: string,
   contents: Buffer
@@ -766,7 +779,7 @@ export function canonicalizeProfileIniForComparison(
     // DefaultInput.ini after a console-key change. These are not player settings.
     if (block.name === 'iniversion') continue;
     const body = block.name === null ? block.lines : block.lines.slice(1);
-    const ownedDirectives = block.name === null ? undefined : patterns.get(block.name);
+    const ignoredDirectives = block.name === null ? undefined : patterns.get(block.name);
     const meaningfulLines = body.flatMap((line) => {
       const ending = trailingLineEnding(line);
       const content = ending ? line.slice(0, -ending.length) : line;
@@ -774,7 +787,7 @@ export function canonicalizeProfileIniForComparison(
       if (
         trimmed === '' ||
         /^[;#]/.test(trimmed) ||
-        ownedDirectives?.some((pattern) => pattern.test(content))
+        ignoredDirectives?.some((pattern) => pattern.test(content))
       ) {
         return [];
       }

@@ -75,16 +75,6 @@ export function registerIpc(
   };
 
   ipcMain.handle(IPC.updateSettings, async (_e, patch: DeepPartial<Settings>) => {
-    if (
-      typeof patch === 'object' &&
-      patch !== null &&
-      typeof patch.developer === 'object' &&
-      patch.developer !== null &&
-      !Array.isArray(patch.developer) &&
-      patch.developer.useDxvk === true
-    ) {
-      throw new Error('DXVK/Vulkan is disabled in this launcher version.');
-    }
     const previous = config.get();
     const updated = await config.update(patch);
     getWindow()?.webContents.setZoomFactor(updated.uiScale);
@@ -104,11 +94,6 @@ export function registerIpc(
       'enabled' in patch.developer;
     if (!uiScaleOnly) {
       const gamePathChanged = previous.gameExePath !== updated.gameExePath;
-      const dxvkEnabledChanged = previous.developer.useDxvk !== updated.developer.useDxvk;
-      const dxvkVersionChanged =
-        previous.developer.dxvkVersion !== updated.developer.dxvkVersion;
-      const dxvkNeedsReconcile =
-        dxvkEnabledChanged || (dxvkVersionChanged && updated.developer.useDxvk);
       const localClientDllChanged =
         previous.developer.useLocalClientDll !== updated.developer.useLocalClientDll;
       const gameClientPatchChanged =
@@ -130,29 +115,6 @@ export function registerIpc(
           throw error;
         }
       }
-      if (dxvkNeedsReconcile) {
-        try {
-          await orchestrator.settingsChanged(updated.developer.useDxvk);
-        } catch (error) {
-          try {
-            await config.update({
-              developer: {
-                useDxvk: previous.developer.useDxvk,
-                dxvkVersion: previous.developer.dxvkVersion
-              }
-            });
-          } catch (rollbackError) {
-            throw new Error(
-              `${(error as Error).message}; could not restore the previous DXVK/Vulkan setting: ` +
-                (rollbackError as Error).message
-            );
-          }
-          throw error;
-        }
-      }
-      if (dxvkVersionChanged && !updated.developer.useDxvk) {
-        void orchestrator.settingsChanged();
-      }
       if (gameClientPatchChanged) {
         await commitGameClientPatchChange(previous.patches.gameClientPatch, updated);
       }
@@ -161,8 +123,6 @@ export function registerIpc(
       }
       if (
         !localClientDllChanged &&
-        !dxvkNeedsReconcile &&
-        !dxvkVersionChanged &&
         !gameClientPatchChanged &&
         !developerModeOnly
       ) {

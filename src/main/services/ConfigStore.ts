@@ -28,14 +28,13 @@ import {
   validateLinuxCommandTemplate
 } from '@shared/linuxCommandTemplate';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
-import { DEFAULT_DXVK_VERSION, isDxvkVersion } from '@shared/dxvkVersions';
 import {
   DEFAULT_DEVELOPER_CONSOLE_KEY,
   isDeveloperConsoleKey
 } from '@shared/developerConsoleKeys';
 import type { Log } from './Log';
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 21;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 22;
 
 export class UnsupportedSettingsVersionError extends Error {}
 
@@ -175,15 +174,7 @@ export function migrateStoredSettings(
         break;
       }
       case 9: {
-        const developer = isPlainObject(settings.developer) ? settings.developer : {};
-        settings = {
-          ...settings,
-          schemaVersion: 10,
-          developer: {
-            ...developer,
-            useDxvk: false
-          }
-        };
+        settings = { ...settings, schemaVersion: 10 };
         version = 10;
         migrated = true;
         break;
@@ -313,29 +304,13 @@ export function migrateStoredSettings(
         break;
       }
       case 18: {
-        const developer = isPlainObject(settings.developer) ? settings.developer : {};
-        settings = {
-          ...settings,
-          schemaVersion: 19,
-          developer: {
-            ...developer,
-            dxvkVersion: DEFAULT_DXVK_VERSION
-          }
-        };
+        settings = { ...settings, schemaVersion: 19 };
         version = 19;
         migrated = true;
         break;
       }
       case 19: {
-        const developer = isPlainObject(settings.developer) ? settings.developer : {};
-        settings = {
-          ...settings,
-          schemaVersion: 20,
-          developer: {
-            ...developer,
-            useDxvk: false
-          }
-        };
+        settings = { ...settings, schemaVersion: 20 };
         version = 20;
         migrated = true;
         break;
@@ -352,6 +327,15 @@ export function migrateStoredSettings(
           }
         };
         version = 21;
+        migrated = true;
+        break;
+      }
+      case 21: {
+        const developer = isPlainObject(settings.developer) ? { ...settings.developer } : {};
+        delete developer.useDxvk;
+        delete developer.dxvkVersion;
+        settings = { ...settings, schemaVersion: 22, developer };
+        version = 22;
         migrated = true;
         break;
       }
@@ -414,8 +398,6 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
       windowed: true,
       resolutionWidth: 1280,
       resolutionHeight: 720,
-      useDxvk: false,
-      dxvkVersion: DEFAULT_DXVK_VERSION,
       gameConsoleEnabled: false,
       gameConsoleKey: DEFAULT_DEVELOPER_CONSOLE_KEY,
       useLocalClientDll: false
@@ -529,8 +511,6 @@ function sanitizeStoredDeveloper(value: unknown, fallback: Settings['developer']
     resolutionHeight: isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)
       ? (value.resolutionHeight as number)
       : fallback.resolutionHeight,
-    useDxvk: false,
-    dxvkVersion: isDxvkVersion(value.dxvkVersion) ? value.dxvkVersion : fallback.dxvkVersion,
     gameConsoleEnabled:
       typeof value.gameConsoleEnabled === 'boolean'
         ? value.gameConsoleEnabled
@@ -550,15 +530,12 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
   if (
     typeof value.enabled !== 'boolean' ||
     typeof value.windowed !== 'boolean' ||
-    typeof value.useDxvk !== 'boolean' ||
-    !isDxvkVersion(value.dxvkVersion) ||
     typeof value.gameConsoleEnabled !== 'boolean' ||
     !isDeveloperConsoleKey(value.gameConsoleKey) ||
     typeof value.useLocalClientDll !== 'boolean'
   ) {
     throw new Error('Developer mode state is invalid.');
   }
-  if (value.useDxvk) throw new Error('DXVK/Vulkan is disabled in this launcher version.');
   if (!isDeveloperResolution(value.resolutionWidth, value.resolutionHeight)) {
     throw new Error('Developer launch resolution is invalid.');
   }
@@ -567,8 +544,6 @@ function validateUpdatedDeveloper(value: unknown): Settings['developer'] {
     windowed: value.windowed,
     resolutionWidth: value.resolutionWidth as number,
     resolutionHeight: value.resolutionHeight as number,
-    useDxvk: false,
-    dxvkVersion: value.dxvkVersion,
     gameConsoleEnabled: value.gameConsoleEnabled,
     gameConsoleKey: value.gameConsoleKey,
     useLocalClientDll: value.enabled && value.useLocalClientDll

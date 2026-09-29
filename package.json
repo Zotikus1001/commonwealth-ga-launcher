@@ -26,8 +26,7 @@
     "dist:linux": "npm run build && node scripts/package-linux.cjs"
   },
   "dependencies": {
-    "electron-updater": "6.8.5",
-    "tar": "7.5.19"
+    "electron-updater": "6.8.5"
   },
   "devDependencies": {
     "@types/node": "^20.17.6",

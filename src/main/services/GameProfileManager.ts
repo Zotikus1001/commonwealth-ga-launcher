@@ -81,17 +81,13 @@ function sha256(contents: Buffer): string {
   return createHash('sha256').update(contents).digest('hex');
 }
 
-function comparisonManifest(
-  files: readonly StoredProfileFile[],
-  ignoreDxvkRenderer: boolean
-): ProfileComparisonEntry[] {
+function comparisonManifest(files: readonly StoredProfileFile[]): ProfileComparisonEntry[] {
   return files
     .map((file) => {
       const contents = decodeBase64(file.contents)!;
       const canonicalContents = canonicalizeProfileIniForComparison(
         file.name,
-        contents,
-        ignoreDxvkRenderer
+        contents
       );
       return {
         name: file.name.toLowerCase(),
@@ -607,8 +603,7 @@ export class GameProfileManager {
   }
 
   async inspectSelectedChanges(
-    install: GameInstall,
-    ignoreDxvkRenderer = false
+    install: GameInstall
   ): Promise<ProfilePlayPrompt | null> {
     await this.load();
     if (
@@ -618,30 +613,25 @@ export class GameProfileManager {
     ) {
       return null;
     }
-    return this.inspectProfileChanges(this.index.selectedProfileId, install, ignoreDxvkRenderer);
+    return this.inspectProfileChanges(this.index.selectedProfileId, install);
   }
 
   async inspectAppliedChanges(
-    install: GameInstall,
-    ignoreDxvkRenderer = false
+    install: GameInstall
   ): Promise<ProfilePlayPrompt | null> {
     await this.load();
     if (!this.index.enabled || !this.index.appliedProfileId) return null;
-    return this.inspectProfileChanges(this.index.appliedProfileId, install, ignoreDxvkRenderer);
+    return this.inspectProfileChanges(this.index.appliedProfileId, install);
   }
 
   private async inspectProfileChanges(
     profileId: string,
-    install: GameInstall,
-    ignoreDxvkRenderer: boolean
+    install: GameInstall
   ): Promise<ProfilePlayPrompt | null> {
     const profile = await this.requireProfile(profileId);
 
-    const currentManifest = comparisonManifest(
-      await this.captureFiles(install),
-      ignoreDxvkRenderer
-    );
-    const savedManifest = comparisonManifest(profile.files, ignoreDxvkRenderer);
+    const currentManifest = comparisonManifest(await this.captureFiles(install));
+    const savedManifest = comparisonManifest(profile.files);
     const changes = profileIniChanges(currentManifest, savedManifest);
     if (changes.length === 0) return null;
 

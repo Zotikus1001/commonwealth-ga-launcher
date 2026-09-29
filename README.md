@@ -130,6 +130,7 @@ Open launcher install folder**.
 - Useful game, graphics, and launch options in one place
 - Performance tips, account help, and copyable in-game commands
 - Direct Discord access and built-in diagnostics
+- Developer tools for in-game console access and local client patch testing
 - Windows and Linux support through Wine or Proton, including Gamescope and custom launch commands
 
 ---
@@ -166,9 +167,6 @@ developer-owned while Local DLL Override is enabled. With the override off, pres
 the saved managed-patch choice by replacing or removing the client DLL.
 
 Developer Mode can also enable the full in-game console with a selectable activation key.
-
-The former experimental DXVK/Vulkan option remains visible but disabled. Existing
-launcher-managed DXVK installations are removed automatically.
 
 Public launcher settings are stored in `launcher.config.yml`.
 

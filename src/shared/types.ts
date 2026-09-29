@@ -1,7 +1,6 @@
 // Shared contracts between main / preload / renderer. Types only — no runtime imports of
 // Electron or Node here (this file is compiled into all three targets).
 import type { LoginMap } from './loginMaps';
-import type { DxvkVersion } from './dxvkVersions';
 import type { DeveloperConsoleKey } from './developerConsoleKeys';
 import type { UiScale } from './uiScale';
 
@@ -161,25 +160,6 @@ export interface DlcStatus {
 
 export type LinuxRunnerType = 'wine' | 'proton';
 
-export type DxvkRendererSetting = 'directx-9' | 'directx-10' | 'unknown';
-
-export type DxvkStatus =
-  | 'unsupported'
-  | 'native'
-  | 'preparing'
-  | 'active'
-  | 'external'
-  | 'needs-restore'
-  | 'error';
-
-export interface DxvkState {
-  status: DxvkStatus;
-  version: string;
-  rendererSetting: DxvkRendererSetting;
-  detail: string;
-  canRestore: boolean;
-}
-
 export type LinuxRuntimeStatus =
   | 'ready'
   | 'wine-runner-missing'
@@ -236,10 +216,6 @@ export interface Settings {
     windowed: boolean;
     resolutionWidth: number;
     resolutionHeight: number;
-    /** Retired Windows option retained only for settings migration and recovery state. */
-    useDxvk: boolean;
-    /** Pinned DXVK build used only to recover old managed installations. */
-    dxvkVersion: DxvkVersion;
     gameConsoleEnabled: boolean;
     gameConsoleKey: DeveloperConsoleKey;
     /** Keeps a manually installed client DLL and bypasses launcher-managed patch downloads. */
@@ -319,7 +295,6 @@ export interface LauncherState {
   linuxRuntimeStatus: LinuxRuntimeStatus | null;
   resolvedLinuxPrefix: string;
   gameModeAvailable: boolean | null;
-  dxvk: DxvkState;
   /** True only during the five-second window after a Play launch attempt. */
   launchCoolingDown: boolean;
   /** Game children started by this launcher that have not exited yet. */

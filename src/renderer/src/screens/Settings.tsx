@@ -17,7 +17,6 @@ import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
-import { DXVK_VERSION_OPTIONS } from '@shared/dxvkVersions';
 import {
   DEVELOPER_CONSOLE_KEY_OPTIONS,
   isDeveloperConsoleKey
@@ -2148,88 +2147,6 @@ function ServersTab({
   );
 }
 
-function DxvkVulkanPanel({
-  state,
-  settings
-}: {
-  state: LauncherState;
-  settings: SettingsModel;
-}): JSX.Element {
-  const rendererLabel =
-    state.dxvk.rendererSetting === 'directx-10'
-      ? 'DirectX 10'
-      : state.dxvk.rendererSetting === 'directx-9'
-        ? 'DirectX 9'
-        : 'Not Detected';
-  const detail = state.dxvk.detail;
-  const statusLabel: Record<LauncherState['dxvk']['status'], string> = {
-    unsupported: 'Windows Only',
-    native: 'Disabled',
-    preparing: 'Removing DXVK/Vulkan',
-    active: 'Removal Pending',
-    external: 'Existing Graphics Wrapper',
-    'needs-restore': 'Recovery Required',
-    error: 'Inspection Failed'
-  };
-
-  return (
-    <>
-      <div className="panel-title">Graphics Renderer</div>
-      <div
-        className={`${styles.dxvkPanel} ${
-          state.dxvk.status === 'active' ||
-          state.dxvk.status === 'needs-restore' ||
-          state.dxvk.status === 'error'
-            ? styles.dxvkProblem
-            : ''
-        }`}
-      >
-        <div className={styles.featureToggle}>
-          <input
-            id="developer-dxvk-vulkan"
-            type="checkbox"
-            checked={false}
-            disabled
-            readOnly
-          />
-          <label htmlFor="developer-dxvk-vulkan">
-            <span className={styles.featureName}>DXVK/Vulkan Disabled</span>
-            <span className={styles.featureDetail}>
-              This experimental feature is no longer available. Existing launcher-managed files
-              are removed automatically.
-            </span>
-          </label>
-        </div>
-        <div className={styles.dxvkReadout}>
-          <label className={styles.dxvkVersionField} htmlFor="developer-dxvk-version">
-            <span>DXVK Version</span>
-            <select
-              id="developer-dxvk-version"
-              value={settings.developer.dxvkVersion}
-              disabled
-            >
-              {DXVK_VERSION_OPTIONS.map((version) => (
-                <option key={version} value={version}>
-                  {version}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <span>Game Setting</span>
-            <strong>{rendererLabel}</strong>
-          </div>
-          <div>
-            <span>Graphics Files</span>
-            <strong>{statusLabel[state.dxvk.status]}</strong>
-          </div>
-        </div>
-        <p className={styles.dxvkDetail}>{detail}</p>
-      </div>
-    </>
-  );
-}
-
 export function GameClientDllStatusPanel({
   dll,
   localMode
@@ -2441,10 +2358,6 @@ function DeveloperTab({
               </select>
             </label>
           </div>
-
-          {state.platform === 'win32' && (
-            <DxvkVulkanPanel state={state} settings={settings} />
-          )}
 
           <div className="panel-title">Local Client Patch Testing</div>
           <div className={styles.featureToggle}>

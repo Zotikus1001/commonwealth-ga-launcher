@@ -21,14 +21,6 @@ const CONFIG_KEYS = new Set([
   'server_history_count',
   'windows_installer_name',
   'linux_appimage_name',
-  'dxvk_version',
-  'dxvk_archive_url',
-  'dxvk_archive_sha256',
-  'dxvk_d3d9_sha256',
-  'dxvk_alternative_version',
-  'dxvk_alternative_archive_url',
-  'dxvk_alternative_archive_sha256',
-  'dxvk_alternative_d3d9_sha256',
   'client_patch_repository',
   'client_patch_asset_name',
   'surfside_atoll_dlc_url',
@@ -196,41 +188,6 @@ function assertSha256(value, key) {
   if (!/^[a-f0-9]{64}$/.test(value)) {
     throw new Error(`${key} must be a lowercase SHA-256 digest`);
   }
-}
-
-function parseDxvkDefinition(raw, keys) {
-  const version = raw[keys.version];
-  if (!/^\d+\.\d+\.\d+$/.test(version)) {
-    throw new Error(`${keys.version} must be a semantic version`);
-  }
-  let archiveUrl;
-  try {
-    archiveUrl = new URL(raw[keys.archiveUrl]);
-  } catch {
-    throw new Error(`${keys.archiveUrl} must be a valid URL`);
-  }
-  const expectedPath = `/doitsujin/dxvk/releases/download/v${version}/dxvk-${version}.tar.gz`;
-  if (
-    archiveUrl.protocol !== 'https:' ||
-    archiveUrl.hostname !== 'github.com' ||
-    archiveUrl.pathname !== expectedPath ||
-    archiveUrl.search ||
-    archiveUrl.hash ||
-    archiveUrl.username ||
-    archiveUrl.password
-  ) {
-    throw new Error(`${keys.archiveUrl} must point to the configured official DXVK GitHub release`);
-  }
-  assertSha256(raw[keys.archiveSha256], keys.archiveSha256);
-  assertSha256(raw[keys.d3d9Sha256], keys.d3d9Sha256);
-  return {
-    version,
-    archiveUrl: archiveUrl.toString(),
-    archiveSha256: raw[keys.archiveSha256],
-    dllSha256: {
-      'd3d9.dll': raw[keys.d3d9Sha256]
-    }
-  };
 }
 
 function parseByteSize(value, key, maximum) {
@@ -416,22 +373,6 @@ function loadLauncherConfig(options = {}) {
 
   assertFileName(raw.windows_installer_name, '.exe', 'windows_installer_name');
   assertFileName(raw.linux_appimage_name, '.AppImage', 'linux_appimage_name');
-  const dxvk = parseDxvkDefinition(raw, {
-    version: 'dxvk_version',
-    archiveUrl: 'dxvk_archive_url',
-    archiveSha256: 'dxvk_archive_sha256',
-    d3d9Sha256: 'dxvk_d3d9_sha256'
-  });
-  const alternativeDxvk = parseDxvkDefinition(raw, {
-    version: 'dxvk_alternative_version',
-    archiveUrl: 'dxvk_alternative_archive_url',
-    archiveSha256: 'dxvk_alternative_archive_sha256',
-    d3d9Sha256: 'dxvk_alternative_d3d9_sha256'
-  });
-  if (dxvk.version === alternativeDxvk.version) {
-    throw new Error('DXVK versions must be unique');
-  }
-
   const clientPatchRepository = parseRepository(
     raw.client_patch_repository,
     'client_patch_repository'
@@ -694,10 +635,6 @@ function loadLauncherConfig(options = {}) {
     serverHistoryCount,
     windowsInstallerName: raw.windows_installer_name,
     linuxAppImageName: raw.linux_appimage_name,
-    dxvk: {
-      defaultVersion: dxvk.version,
-      versions: [dxvk, alternativeDxvk]
-    },
     clientPatch: {
       repository: clientPatchRepository,
       assetName: raw.client_patch_asset_name

@@ -23,7 +23,7 @@
     "pretest": "npm run generate:config",
     "test": "vitest run --passWithNoTests",
     "dist:win": "npm run build && electron-builder --win --config electron-builder.config.cjs",
-    "dist:linux": "npm run build && electron-builder --linux --config electron-builder.config.cjs"
+    "dist:linux": "npm run build && node scripts/package-linux.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.5",

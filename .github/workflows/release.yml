@@ -136,11 +136,20 @@ jobs:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
         run: |
           node scripts/generate-launcher-config.cjs --validate-environment
-      - name: Package ${{ matrix.target }} release
-        run: npx electron-builder --${{ matrix.target }} --config electron-builder.config.cjs --publish never
+      - name: Package Windows release
+        if: matrix.target == 'win'
+        run: npx electron-builder --win --config electron-builder.config.cjs --publish never
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
+      - name: Install AppImage update tools
+        if: matrix.target == 'linux'
+        run: sudo apt-get update && sudo apt-get install --yes binutils zsync
+      - name: Package Linux release with AppImageUpdate support
+        if: matrix.target == 'linux'
+        run: node scripts/package-linux.cjs
+        env:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
       - name: Collect Windows release files
         if: matrix.target == 'win'
@@ -158,6 +167,7 @@ jobs:
           name: launcher-linux
           path: |
             dist/${{ needs.version.outputs.linux_appimage_name }}
+            dist/${{ needs.version.outputs.linux_appimage_name }}.zsync
             dist/latest-linux.yml
           if-no-files-found: error
 
@@ -185,6 +195,7 @@ jobs:
             $env:WINDOWS_INSTALLER,
             'latest.yml',
             $env:LINUX_APPIMAGE,
+            "$env:LINUX_APPIMAGE.zsync",
             'latest-linux.yml'
           )
           $actual = @(
@@ -236,6 +247,7 @@ jobs:
             "release-assets/$env:WINDOWS_INSTALLER",
             'release-assets/latest.yml',
             "release-assets/$env:LINUX_APPIMAGE",
+            "release-assets/$env:LINUX_APPIMAGE.zsync",
             'release-assets/latest-linux.yml'
           )
           gh release upload $tag @files --repo $env:GITHUB_REPOSITORY --clobber
@@ -263,6 +275,7 @@ jobs:
             $env:WINDOWS_INSTALLER,
             'latest.yml',
             $env:LINUX_APPIMAGE,
+            "$env:LINUX_APPIMAGE.zsync",
             'latest-linux.yml'
           )
           $actual = @($release.assets | ForEach-Object { $_.name })

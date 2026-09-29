@@ -93,6 +93,10 @@ the launcher; use that copy for future launches. Then follow the game setup inst
 The launcher supports installed Wine runners and Proton through UMU. Linux users can also wrap
 the launch with tools such as Gamescope, `taskset`, and custom environment options.
 
+Linux releases also support AppImageUpdate and compatible update managers. Close the
+launcher before updating it with an external tool. For an older AppImage without this
+support, update once through the launcher or download the latest AppImage first.
+
 On both platforms, the launcher asks before downloading an update. Choose **Update now** to
 download it and restart, or **Ask again later** to continue and be reminded next launch.
 Updates stay in the launcher folder. Find it anytime under **Settings → Diagnostics →
@@ -103,6 +107,7 @@ Open launcher install folder**.
 ## Features
 
 - Update notifications with a choice to update now or later
+- Linux updates through AppImageUpdate and compatible update managers
 - Choose where to keep the launcher and open its installation folder from Diagnostics
 - Easy game setup and one-click launching
 - Optional Steam integration that starts the Commonwealth launcher instead of the Hi-Rez launcher
@@ -148,6 +153,13 @@ Create local packages with `npm run dist:win` or `npm run dist:linux`. Build out
 `out/`; installers and AppImages are written to `dist/`. Local development uses the generated
 `out/` files, keeps its settings separate from installed builds, and does not check online release
 channels.
+
+Build Linux packages on Linux x64 with `binutils` and `zsync` installed (on Ubuntu:
+`sudo apt-get install binutils zsync`). `npm run dist:linux` embeds the update feed and
+produces the matching `.AppImage.zsync` file. Release builds use their publishing
+repository; local builds use the first update repository in `launcher.config.yml`.
+External update managers follow that repository's latest stable release, while the
+launcher's built-in updater continues to check both configured repositories.
 
 Developer Mode can validate and use a local 32-bit x86 client patch DLL. Local DLLs remain
 developer-owned while Local DLL Override is enabled. With the override off, pressing Play restores

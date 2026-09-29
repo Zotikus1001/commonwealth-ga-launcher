@@ -145,12 +145,15 @@ jobs:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
       - name: Install AppImage update tools
         if: matrix.target == 'linux'
-        run: sudo apt-get update && sudo apt-get install --yes binutils zsync
+        run: sudo apt-get update && sudo apt-get install --yes binutils zsync appstream
       - name: Package Linux release with AppImageUpdate support
         if: matrix.target == 'linux'
         run: node scripts/package-linux.cjs
         env:
           GA_SERVER_HOST: ${{ secrets.GA_SERVER_HOST }}
+      - name: Validate AppStream metadata
+        if: matrix.target == 'linux'
+        run: appstreamcli validate --no-net dist/linux-unpacked/usr/share/metainfo/*.metainfo.xml
       - name: Collect Windows release files
         if: matrix.target == 'win'
         uses: actions/upload-artifact@v6

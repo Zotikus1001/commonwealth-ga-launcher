@@ -29,6 +29,7 @@ module.exports = {
     { from: 'build/icon.png', to: 'icon.png' },
     { from: 'LICENSE', to: 'LICENSE' }
   ],
+  afterPack: require('./scripts/write-appstream-metadata.cjs'),
   toolsets: {
     appimage: '1.0.3'
   },

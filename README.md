@@ -164,3 +164,9 @@ Run the **Release launcher** workflow from the stable branch to publish both pla
 workflow calculates and publishes the next launcher version automatically.
 
 </details>
+
+## License
+
+The launcher source code is licensed under the [MIT License](LICENSE).
+Third-party components retain their own licenses. This license does not grant
+rights to Global Agenda, its game files, DLC, trademarks, or third-party artwork.

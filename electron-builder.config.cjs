@@ -25,7 +25,10 @@ module.exports = {
     buildResources: 'build'
   },
   files: ['out/**', '!out/**/*.map'],
-  extraResources: [{ from: 'build/icon.png', to: 'icon.png' }],
+  extraResources: [
+    { from: 'build/icon.png', to: 'icon.png' },
+    { from: 'LICENSE', to: 'LICENSE' }
+  ],
   toolsets: {
     appimage: '1.0.3'
   },

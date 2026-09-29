@@ -42,6 +42,7 @@ export const IPC = {
   acknowledgeSteamLaunchIntegrationOffer: 'launcher:acknowledge-steam-launch-integration-offer',
   openLauncherLogs: 'launcher:open-launcher-logs',
   getLauncherInstallDirectory: 'launcher:get-install-directory',
+  chooseLauncherInstallDirectory: 'launcher:choose-install-directory',
   openLauncherInstallDirectory: 'launcher:open-install-directory',
   copyChatCommand: 'launcher:copy-chat-command',
   copyDiagnostics: 'launcher:copy-diagnostics',

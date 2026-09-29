@@ -439,6 +439,7 @@ export interface LauncherApi {
   acknowledgeSteamLaunchIntegrationOffer(): Promise<void>;
   openLauncherLogs(): Promise<ActionResult>;
   getLauncherInstallDirectory(): Promise<string>;
+  chooseLauncherInstallDirectory(): Promise<ActionResult>;
   openLauncherInstallDirectory(): Promise<ActionResult>;
   copyChatCommand(command: string): Promise<ActionResult>;
   copyDiagnostics(): Promise<ActionResult>;

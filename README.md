@@ -86,9 +86,9 @@ once. Reach the login screen, close the game, then reopen this launcher.
 
 **[Download the latest Linux AppImage](../../releases/latest/download/Commonwealth-GA-Launcher-Linux-x64.AppImage)**
 
-Allow the AppImage to run and open it. On first launch, choose a folder to keep the launcher
-or keep its current location. Choosing another folder copies the AppImage there and restarts
-the launcher; use that copy for future launches. Then follow the game setup instructions.
+Allow the AppImage to run and open it, then follow the game setup instructions.
+To keep the launcher in another folder, open **Settings → Launcher → Choose launcher folder**.
+It copies the AppImage there and restarts; use that copy for future launches.
 
 The launcher supports installed Wine runners and Proton through UMU. Linux users can also wrap
 the launch with tools such as Gamescope, `taskset`, and custom environment options.
@@ -108,7 +108,8 @@ Open launcher install folder**.
 
 - Update notifications with a choice to update now or later
 - Linux updates through AppImageUpdate and compatible update managers
-- Choose where to keep the launcher and open its installation folder from Diagnostics
+- Choose where to keep the launcher during Windows installation or from Linux Settings,
+  and open its folder from Diagnostics
 - Easy game setup and one-click launching
 - Optional Steam integration that starts the Commonwealth launcher instead of the Hi-Rez launcher
   from Steam, enabling Steam playtime tracking and the in-game overlay without modifying or

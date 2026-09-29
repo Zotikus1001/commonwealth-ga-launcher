@@ -68,6 +68,7 @@ const api: LauncherApi = {
     ipcRenderer.invoke(IPC.acknowledgeSteamLaunchIntegrationOffer),
   openLauncherLogs: () => ipcRenderer.invoke(IPC.openLauncherLogs),
   getLauncherInstallDirectory: () => ipcRenderer.invoke(IPC.getLauncherInstallDirectory),
+  chooseLauncherInstallDirectory: () => ipcRenderer.invoke(IPC.chooseLauncherInstallDirectory),
   openLauncherInstallDirectory: () => ipcRenderer.invoke(IPC.openLauncherInstallDirectory),
   copyChatCommand: (command: string) => ipcRenderer.invoke(IPC.copyChatCommand, command),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),

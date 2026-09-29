@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, type BrowserWindow } from 'electron';
 import type { ChildProcess } from 'child_process';
 import { performance } from 'perf_hooks';
 import {
@@ -32,6 +32,7 @@ import {
 import { GameLauncher } from './services/GameLauncher';
 import { probeServer, type ServerProbeStatus } from './services/ServerProbe';
 import { LauncherUpdater } from './services/LauncherUpdater';
+import { chooseLinuxLauncherLocation } from './services/LauncherLocation';
 import { fetchAgendaStatsStatus } from './services/AgendaStats';
 import { fetchServerCommits } from './services/ServerCommits';
 import {
@@ -111,6 +112,7 @@ export class Orchestrator {
   private dlcsPreparedGameExePath = '';
   private linuxRuntime: LinuxRuntimeInspection | null = null;
   private readonly gameLauncher: GameLauncher;
+  private changingLauncherLocation = false;
   private readonly gpuMemoryDetector: GpuMemoryDetector;
   private readonly clientPatchManager: ClientPatchManager;
   private readonly gameProfileManager: GameProfileManager;
@@ -599,6 +601,7 @@ export class Orchestrator {
   }
 
   async downloadLauncherUpdate(version: string): Promise<void> {
+    if (this.changingLauncherLocation) throw new Error('Finish choosing the launcher folder before updating.');
     await this.launcherUpdater.downloadUpdate(version);
   }
 
@@ -1786,6 +1789,27 @@ export class Orchestrator {
       this.patch({ phase: 'ready', statusLine: 'Ready.' });
       throw error;
     } finally {
+      this.busy = false;
+      if (this.refreshPending) void this.refresh();
+    }
+  }
+
+  async chooseLauncherInstallDirectory(parent: BrowserWindow): Promise<ActionResult> {
+    const updateBusy = ['checking', 'downloading', 'installing'].includes(this.state.launcherUpdate);
+    if (this.busy || this.state.launchCoolingDown || updateBusy) {
+      return { ok: false, message: 'The launcher is busy. Try again shortly.' };
+    }
+    this.busy = true;
+    this.changingLauncherLocation = true;
+    try {
+      if ((await this.refreshTrackedGameProcesses()) > 0) {
+        return { ok: false, message: 'Close the game before changing the launcher folder.' };
+      }
+      return await chooseLinuxLauncherLocation(this.log, parent);
+    } catch (error) {
+      return { ok: false, message: `Could not change the launcher folder: ${(error as Error).message}` };
+    } finally {
+      this.changingLauncherLocation = false;
       this.busy = false;
       if (this.refreshPending) void this.refresh();
     }

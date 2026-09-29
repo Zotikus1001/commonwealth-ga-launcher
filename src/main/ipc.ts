@@ -395,6 +395,11 @@ export function registerIpc(
   });
 
   ipcMain.handle(IPC.getLauncherInstallDirectory, () => launcherInstallDirectory());
+  ipcMain.handle(IPC.chooseLauncherInstallDirectory, () => {
+    const window = getWindow();
+    if (!window) return { ok: false, message: 'Open the launcher window before choosing a folder.' };
+    return orchestrator.chooseLauncherInstallDirectory(window);
+  });
   ipcMain.handle(IPC.openLauncherInstallDirectory, async () => {
     try {
       const error = await shell.openPath(launcherInstallDirectory());

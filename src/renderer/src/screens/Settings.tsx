@@ -92,6 +92,58 @@ const EMPTY_LINUX_RUNTIME_OPTIONS: LinuxRuntimeOptions = {
   steamPrefixPath: ''
 };
 
+export function LauncherLocationSetting({
+  state,
+  hasUnsavedSettings
+}: {
+  state: LauncherState;
+  hasUnsavedSettings: boolean;
+}): JSX.Element {
+  const [directory, setDirectory] = useState('');
+  const [working, setWorking] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void window.api.getLauncherInstallDirectory().then((value) => {
+      if (!cancelled) setDirectory(value);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const choose = async (): Promise<void> => {
+    if (working) return;
+    setWorking(true);
+    setResult(null);
+    try {
+      setResult(await window.api.chooseLauncherInstallDirectory());
+    } catch (error) {
+      setResult({ ok: false, message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setWorking(false);
+    }
+  };
+  const busy = working || hasUnsavedSettings || state.activeGameInstances > 0 ||
+    state.launchCoolingDown || state.phase === 'checking' || state.phase === 'launching' ||
+    ['checking', 'downloading', 'installing'].includes(state.launcherUpdate);
+
+  return (
+    <>
+      <div className="panel-title">Launcher Folder</div>
+      <p className={styles.hint}>
+        Choose where to keep the launcher. It will copy itself there and restart.
+      </p>
+      {directory && <p className={styles.installDirectory}>{directory}</p>}
+      <div className={styles.inlineButtons}>
+        <button type="button" disabled={busy} onClick={() => void choose()}>
+          {working ? 'Choosing folder…' : 'Choose launcher folder'}
+        </button>
+      </div>
+      {hasUnsavedSettings && <p className={styles.hint}>Save or discard your settings changes first.</p>}
+      {result && <p role="status" className={result.ok ? styles.hint : styles.invalid}>{result.message}</p>}
+    </>
+  );
+}
+
 function steamLaunchErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/close steam/i.test(message)) {
@@ -1249,6 +1301,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
 
         {tab === 'launcher' && (
           <section className={styles.section}>
+            {isLinux && <LauncherLocationSetting state={state} hasUnsavedSettings={dirty || saving} />}
             <div className="panel-title">Launcher Interface</div>
             <div className={styles.launcherScaleSetting}>
               <div className={styles.launcherScaleCopy}>

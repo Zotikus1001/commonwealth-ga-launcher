@@ -1,12 +1,12 @@
 const LONDON_TIME_ZONE = 'Europe/London';
 const PVP_LIVE_LEAD_MS = 15 * 60 * 1_000;
 
-export type PvpEventId = 'mercenary-fun' | 'challenge-night';
+export type PvpEventId = 'mercenary-fun' | 'challenge-night' | 'friday-raids';
 
 export interface PvpEventDefinition {
   id: PvpEventId;
   name: string;
-  weekday: 0 | 6;
+  weekday: 0 | 5 | 6;
   hour: number;
   minute: number;
   summary: string;
@@ -25,10 +25,18 @@ export const PVP_EVENTS: readonly PvpEventDefinition[] = [
     id: 'challenge-night',
     name: 'PvP Challenge Night',
     weekday: 6,
-    hour: 18,
+    hour: 17,
     minute: 0,
     summary:
       'A more competitive night: join voice chat to coordinate teamwork for Challenge matches, with Mercenary PvP when enough players attend.'
+  },
+  {
+    id: 'friday-raids',
+    name: 'PvE Friday Raids',
+    weekday: 5,
+    hour: 18,
+    minute: 0,
+    summary: 'Team up with the community for PvE raids.'
   }
 ] as const;
 

@@ -21,7 +21,8 @@ const REMINDER_SCHEDULE_MARKER =
 const REMINDER_DELIVERY_GRACE_MS = 15 * 60 * 1_000;
 const WINDOWS_TASK_NAMES: Record<PvpEventId, string> = {
   'mercenary-fun': 'Commonwealth GA PvP Merc Fun',
-  'challenge-night': 'Commonwealth GA PvP Challenge Night'
+  'challenge-night': 'Commonwealth GA PvP Challenge Night',
+  'friday-raids': 'Commonwealth GA PvE Friday Raids'
 };
 const WINDOWS_WEEKDAYS = [
   'Sunday',
@@ -34,6 +35,7 @@ const WINDOWS_WEEKDAYS = [
 ] as const;
 const SYSTEMD_WEEKDAYS: Record<PvpEventDefinition['weekday'], string> = {
   0: 'Sun',
+  5: 'Fri',
   6: 'Sat'
 };
 

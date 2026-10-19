@@ -116,9 +116,9 @@ Open launcher install folder**.
   replacing any game files or original Hi-Rez launcher files
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
-- Weekly Commonwealth PvP events with a local-time countdown, details, PvP Day summaries, and
+- Weekly Commonwealth PvP and PvE events with a local-time countdown, details, PvP Day summaries, and
   optional system reminders on Windows and Linux that follow event schedule changes;
-  PvP Challenge Night runs Saturdays at 6 pm London time
+  PvE Friday Raids runs Fridays at 6 pm and PvP Challenge Night runs Saturdays at 5 pm, London time
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
 - Up to five optional profiles for quickly switching game settings, with one clearly marked active choice,

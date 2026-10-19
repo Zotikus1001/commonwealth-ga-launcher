@@ -135,7 +135,7 @@ function PvpEventDetailsDialog({
           </p>
           <h2 id="pvp-event-dialog-title">Commonwealth Community Events</h2>
           <p id="pvp-event-dialog-description">
-            Two community sessions run every week. Every time below is converted automatically to
+            Every time below is converted automatically to
             your current system time zone.
           </p>
         </div>

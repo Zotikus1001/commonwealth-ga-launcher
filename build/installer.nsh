@@ -54,6 +54,8 @@ Var pid
     Pop $R0
     nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Challenge Night" /F'
     Pop $R0
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvE Friday Raids" /F'
+    Pop $R0
 
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
@@ -75,6 +77,8 @@ Var pid
     nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Merc Fun" /F'
     Pop $R0
     nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvP Challenge Night" /F'
+    Pop $R0
+    nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvE Friday Raids" /F'
     Pop $R0
   ${endIf}
 !macroend

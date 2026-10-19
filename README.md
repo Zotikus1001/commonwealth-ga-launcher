@@ -116,7 +116,7 @@ Open launcher install folder**.
   replacing any game files or original Hi-Rez launcher files
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
-- Weekly Commonwealth PvP and PvE events with a local-time countdown, details, PvP Day summaries, and
+- The next three Commonwealth PvP and PvE events at a glance, with local times, live status, details, PvP Day summaries, and
   optional system reminders on Windows and Linux that follow event schedule changes automatically
 - Current community events without waiting for a launcher update, with saved schedules available offline
 - Compact, non-blocking notifications for launcher feedback

@@ -3,13 +3,19 @@ import {
   formatPvpEventDate,
   formatPvpEventSchedule,
   getPvpCountdownParts,
-  getPvpEventStatus,
+  getPvpEventSpotlight,
   PVP_EVENTS,
   setServerEvents,
   type PvpEventStatus
 } from '@shared/pvpEvents';
 import type { PvpReminderState } from '@shared/types';
 import styles from './PvpEventSpotlight.module.css';
+
+function countdownUnits(parts: ReturnType<typeof getPvpCountdownParts>): [string, number][] {
+  if (parts.days) return [['DAYS', parts.days], ['HOURS', parts.hours]];
+  if (parts.hours) return [['HOURS', parts.hours], ['MIN', parts.minutes]];
+  return [['MIN', parts.minutes], ['SEC', parts.seconds]];
+}
 
 function describeCountdown(parts: {
   days: number;
@@ -229,7 +235,8 @@ export function PvpEventSpotlight(): JSX.Element {
     return () => window.clearInterval(timer);
   }, []);
 
-  const status = useMemo(() => eventsLoaded && PVP_EVENTS.length ? getPvpEventStatus(now) : null, [now, eventsLoaded]);
+  const events = useMemo(() => eventsLoaded ? getPvpEventSpotlight(now) : [], [now, eventsLoaded]);
+  const [status, ...following] = events;
   if (!status) return <></>;
   const live = status.mode === 'live';
   const countdown = live ? null : getPvpCountdownParts(status.startsAt, now);
@@ -244,9 +251,10 @@ export function PvpEventSpotlight(): JSX.Element {
           className={styles.spotlightButton}
           aria-haspopup="dialog"
           aria-label={
-            live
+            (live
               ? `${status.event.name} is live. Join the fun now. Open event details.`
-              : `${status.event.name} starts in ${timing}, ${detail}. Open event details.`
+              : `${status.event.name} starts in ${timing}, ${detail}. Open event details.`)
+            + following.map((item) => ` Following: ${item.event.name}, ${formatPvpEventDate(item.startsAt)}.`).join('')
           }
           onClick={() => setDetailsOpen(true)}
         >
@@ -258,23 +266,16 @@ export function PvpEventSpotlight(): JSX.Element {
           </span>
 
           <span className={styles.eventCopy}>
-            <small>{live ? 'Weekly community event is live' : 'Next weekly community event'}</small>
-            <strong>{status.event.name}</strong>
-            <span>{detail}</span>
+            <small>{live ? 'Community event is live' : 'Next event'}</small>
+            <strong title={status.event.name}>{status.event.name}</strong>
+            <span title={detail}>{detail}</span>
           </span>
 
           {countdown ? (
             <span className={styles.timingBlock} aria-hidden="true">
               <small>STARTS IN</small>
               <span className={styles.countdownGrid}>
-                {(
-                  [
-                    ['DAYS', countdown.days],
-                    ['HOURS', countdown.hours],
-                    ['MIN', countdown.minutes],
-                    ['SEC', countdown.seconds]
-                  ] as const
-                ).map(([label, value]) => (
+                {countdownUnits(countdown).map(([label, value]) => (
                   <span className={styles.countdownUnit} key={label}>
                     <strong>{String(value).padStart(2, '0')}</strong>
                     <span>{label}</span>
@@ -287,10 +288,25 @@ export function PvpEventSpotlight(): JSX.Element {
               <small>STATUS</small>
               <span className={styles.liveCallout}>
                 <strong className={styles.liveReadout}>LIVE</strong>
-                <strong className={styles.liveJoinNow}>JOIN NOW</strong>
               </span>
             </span>
           )}
+
+          <span className={styles.followingEvents}>
+            {following.map((item, index) => (
+              <span className={styles.followingEvent} key={item.event.id}>
+                <span className={styles.followingIndex} aria-hidden="true">0{index + 2}</span>
+                <span className={styles.followingCopy}>
+                  <strong title={item.event.name}>{item.event.name}</strong>
+                  <span title={formatPvpEventDate(item.startsAt)}>{formatPvpEventDate(item.startsAt)}</span>
+                </span>
+                <span className={styles.followingCountdown} aria-hidden="true">
+                  {countdownUnits(getPvpCountdownParts(item.startsAt, now))
+                    .map(([label, value]) => `${String(value).padStart(2, '0')}${label[0]}`).join(' ')}
+                </span>
+              </span>
+            ))}
+          </span>
 
           <span className={styles.detailsCue} aria-hidden="true">
             DETAILS <b>→</b>

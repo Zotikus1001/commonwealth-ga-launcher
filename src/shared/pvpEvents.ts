@@ -187,6 +187,21 @@ export function isPvpEventId(value: unknown): value is PvpEventId {
   return PVP_EVENTS.some((event) => event.id === value);
 }
 
+export function getPvpEventSpotlight(now = Date.now()): PvpEventStatus[] {
+  if (!Number.isFinite(now)) throw new Error('Current time must be a finite timestamp');
+  if (!PVP_EVENTS.length) return [];
+  const featured = getPvpEventStatus(now);
+  const following: PvpEventStatus[] = PVP_EVENTS
+    .filter((event) => event.id !== featured.event.id)
+    .map((event) => ({
+      mode: 'countdown' as const,
+      event,
+      startsAt: getNextPvpEventStart(event.id, now)
+    }))
+    .sort((left, right) => left.startsAt - right.startsAt);
+  return [featured, ...following.slice(0, 2)];
+}
+
 export function getPvpEvent(eventId: PvpEventId): PvpEventDefinition {
   const event = PVP_EVENTS.find((candidate) => candidate.id === eventId);
   if (!event) throw new Error(`Unknown PvP event: ${eventId}`);

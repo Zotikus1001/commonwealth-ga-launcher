@@ -48,9 +48,9 @@ section.spotlight {
   display: grid;
   width: 100%;
   min-height: 82px;
-  grid-template-columns: 62px minmax(190px, 1fr) minmax(248px, auto) 92px;
+  grid-template-columns: 62px minmax(150px, 1fr) 100px minmax(220px, 1.1fr) 70px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 10px 16px 10px 11px;
   border: 0;
   background: transparent;
@@ -110,7 +110,7 @@ section.spotlight {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding-left: 14px;
+  padding-left: 0;
 }
 
 .eventCopy small {
@@ -122,7 +122,7 @@ section.spotlight {
   overflow: hidden;
   color: #edf1f7;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 650;
   letter-spacing: 0.055em;
   line-height: 1.15;
@@ -141,10 +141,10 @@ section.spotlight {
 
 .timingBlock {
   display: flex;
-  min-width: 248px;
+  min-width: 0;
   flex-direction: column;
   align-items: stretch;
-  padding: 5px 12px 5px 18px;
+  padding: 5px 0;
 }
 
 .timingBlock small {
@@ -154,7 +154,7 @@ section.spotlight {
 
 .countdownGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(43px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   margin-top: 3px;
 }
@@ -206,17 +206,55 @@ section.spotlight {
   margin-top: 2px;
 }
 
-.liveJoinNow {
+.followingEvents {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
   padding-left: 12px;
-  border-left: 1px solid rgba(70, 192, 109, 0.38);
-  color: #84e4a4;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1;
+  border-left: 1px solid rgba(240, 166, 60, 0.3);
+}
+
+.followingEvents:empty { border: 0; }
+
+.followingEvent {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.followingEvent + .followingEvent {
+  padding-top: 5px;
+  border-top: 1px solid rgba(240, 166, 60, 0.25);
+}
+
+.spotlightLive .followingEvents,
+.spotlightLive .followingEvent + .followingEvent {
+  border-color: rgba(70, 192, 109, 0.3);
+}
+
+.followingIndex,
+.followingCountdown {
+  color: var(--amber);
+  font: 9px var(--font-mono);
   white-space: nowrap;
 }
+
+.followingIndex { opacity: 0.65; }
+
+.followingCopy { display: grid; min-width: 0; }
+.followingCopy strong,
+.followingCopy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.followingCopy strong {
+  font: 600 12px var(--font-display);
+  text-transform: uppercase;
+}
+.followingCopy > span { color: var(--text-dim); font-size: 9px; }
 
 .detailsCue {
   color: var(--amber);
@@ -609,44 +647,38 @@ section.spotlight {
 
 @media (max-width: 900px) {
   .spotlightButton {
-    grid-template-columns: 54px minmax(160px, 1fr) minmax(218px, auto) 76px;
-    gap: 10px;
+    grid-template-columns: 50px minmax(130px, 1fr) 82px minmax(190px, 1.1fr) 62px;
+    gap: 9px;
   }
 
-  .timingBlock {
-    min-width: 238px;
-    padding-right: 7px;
-    padding-left: 16px;
-  }
+  .signalBox { width: 48px; font-size: 9px; }
+  .eventCopy strong { font-size: 16px; }
+  .followingEvents { padding-left: 9px; }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 780px) {
   .spotlightButton {
-    grid-template-columns: 50px minmax(120px, 1fr) minmax(210px, auto) 68px;
+    grid-template-columns: minmax(100px, 1fr) 68px minmax(160px, 1.2fr) 18px;
     min-height: 74px;
-    gap: 10px;
+    gap: 8px;
   }
 
-  .signalBox {
-    width: 46px;
-  }
+  .signalColumn { display: none; }
+  .detailsCue { font-size: 0; }
+  .followingCountdown { display: none; }
+  .followingEvent { grid-template-columns: 14px minmax(0, 1fr); }
 
   .eventCopy strong {
     font-size: 15px;
   }
 
-  .eventCopy > span {
-    display: none;
-  }
-
-  .timingBlock {
-    min-width: 210px;
-    padding-left: 12px;
-  }
-
   .countdownUnit strong {
     font-size: 15px;
   }
+
+}
+
+@media (max-width: 680px) {
 
   .scheduleGrid {
     grid-template-columns: minmax(0, 1fr);

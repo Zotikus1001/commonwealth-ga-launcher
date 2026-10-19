@@ -6,7 +6,7 @@ export type PvpEventId = 'mercenary-fun' | 'challenge-night';
 export interface PvpEventDefinition {
   id: PvpEventId;
   name: string;
-  weekday: 0 | 2;
+  weekday: 0 | 6;
   hour: number;
   minute: number;
   summary: string;
@@ -24,9 +24,9 @@ export const PVP_EVENTS: readonly PvpEventDefinition[] = [
   {
     id: 'challenge-night',
     name: 'PvP Challenge Night',
-    weekday: 2,
+    weekday: 6,
     hour: 18,
-    minute: 30,
+    minute: 0,
     summary:
       'A more competitive night: join voice chat to coordinate teamwork for Challenge matches, with Mercenary PvP when enough players attend.'
   }

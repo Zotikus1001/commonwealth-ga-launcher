@@ -15,7 +15,7 @@ import type { Log } from './Log';
 
 const execFileP = promisify(execFile);
 const MARKER_SCHEMA_VERSION = 1;
-const REMINDER_SCHEDULE_VERSION = 3;
+const REMINDER_SCHEDULE_VERSION = 4;
 const REMINDER_SCHEDULE_MARKER =
   `CommonwealthReminderScheduleVersion=${REMINDER_SCHEDULE_VERSION}`;
 const REMINDER_DELIVERY_GRACE_MS = 15 * 60 * 1_000;
@@ -34,7 +34,7 @@ const WINDOWS_WEEKDAYS = [
 ] as const;
 const SYSTEMD_WEEKDAYS: Record<PvpEventDefinition['weekday'], string> = {
   0: 'Sun',
-  2: 'Tue'
+  6: 'Sat'
 };
 
 interface ReminderMarker {
@@ -536,6 +536,12 @@ export class PvpReminderManager {
         encoding: 'utf-8'
       }).catch(() => null);
       if (!source?.includes(`# ${REMINDER_SCHEDULE_MARKER}`)) return false;
+      // A valid scheduler format can still contain an event's previous day or time.
+      const calendars = source.match(/^OnCalendar=.+$/gm) ?? [];
+      if (
+        calendars.length !== 1 ||
+        calendars[0].trimEnd() !== `OnCalendar=${systemdWeeklyCalendar(getPvpEvent(eventId))}`
+      ) return false;
       try {
         const loaded = await this.run('systemctl', [
           '--user',

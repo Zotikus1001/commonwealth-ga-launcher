@@ -117,7 +117,8 @@ Open launcher install folder**.
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
 - Weekly Commonwealth PvP events with a local-time countdown, details, PvP Day summaries, and
-  optional system reminders on Windows and Linux
+  optional system reminders on Windows and Linux that follow event schedule changes;
+  PvP Challenge Night runs Saturdays at 6 pm London time
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
 - Up to five optional profiles for quickly switching game settings, with one clearly marked active choice,

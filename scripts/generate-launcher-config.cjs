@@ -1,7 +1,6 @@
 const { mkdirSync, readFileSync, writeFileSync } = require('fs');
 const { dirname, resolve } = require('path');
 const { loadLauncherConfig } = require('./launcher-config.cjs');
-const { parseServerEvents } = require('../src/shared/serverEventsParser.cjs');
 
 const validateEnvironment = process.argv.includes('--validate-environment');
 const config = loadLauncherConfig({ resolveEnvironment: validateEnvironment });
@@ -12,6 +11,8 @@ if (validateEnvironment) {
 } else if (process.argv.includes('--json')) {
   process.stdout.write(`${JSON.stringify(config)}\n`);
 } else {
+  // CI reads --json before npm install; only bundle generation needs the YAML dependency.
+  const { parseServerEvents } = require('../src/shared/serverEventsParser.cjs');
   const output = resolve(__dirname, '..', 'src', 'shared', 'generatedLauncherConfig.ts');
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(

@@ -1,5 +1,5 @@
 import type { SteamLaunchIntegrationStatus } from '@shared/types';
-import { isPvpEventId, type PvpEventId } from '@shared/pvpEvents';
+import { isSafeEventId, type PvpEventId } from '@shared/pvpEvents';
 
 const PVP_REMINDER_ARGUMENT = '--pvp-event-reminder=';
 
@@ -9,7 +9,7 @@ export function pvpReminderFromArguments(argumentsList: readonly string[]): PvpE
   const argument = argumentsList.find((candidate) => candidate.startsWith(PVP_REMINDER_ARGUMENT));
   if (!argument) return null;
   const eventId = argument.slice(PVP_REMINDER_ARGUMENT.length);
-  return isPvpEventId(eventId) ? eventId : null;
+  return isSafeEventId(eventId) ? eventId : null;
 }
 
 export function launcherArgumentsWithoutPvpReminder(

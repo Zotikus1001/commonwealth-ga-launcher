@@ -117,8 +117,8 @@ Open launcher install folder**.
 - Live server status and selection, with Commonwealth updates, player count, Agenda Stats, and
   GA CARDS access
 - Weekly Commonwealth PvP and PvE events with a local-time countdown, details, PvP Day summaries, and
-  optional system reminders on Windows and Linux that follow event schedule changes;
-  PvE Friday Raids runs Fridays at 6 pm and PvP Challenge Night runs Saturdays at 5 pm, London time
+  optional system reminders on Windows and Linux that follow event schedule changes automatically
+- Current community events without waiting for a launcher update, with saved schedules available offline
 - Compact, non-blocking notifications for launcher feedback
 - Built-in interface recovery if the launcher UI stops unexpectedly
 - Up to five optional profiles for quickly switching game settings, with one clearly marked active choice,
@@ -172,6 +172,9 @@ the saved managed-patch choice by replacing or removing the client DLL.
 Developer Mode can also enable the full in-game console with a selectable activation key.
 
 Public launcher settings are stored in `launcher.config.yml`.
+Weekly events are maintained in [`server-events.yaml`](server-events.yaml); its comments show how to
+edit them. Publish changes to the configured feed repository's `master` branch to update supporting
+launchers at their next startup. See [event feed behavior](docs/events/feed.md) for caching and reminder details.
 
 Run the **Release launcher** workflow from the stable branch to publish both platforms. The
 workflow calculates and publishes the next launcher version automatically.

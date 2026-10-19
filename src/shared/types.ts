@@ -427,6 +427,7 @@ export interface LauncherApi {
   openGaCards(): Promise<ActionResult>;
   openPvpReports(): Promise<ActionResult>;
   getPvpReminderState(): Promise<PvpReminderState>;
+  getServerEvents(): Promise<readonly import('./pvpEvents').PvpEventDefinition[]>;
   setPvpEventReminder(
     eventId: import('./pvpEvents').PvpEventId,
     enabled: boolean

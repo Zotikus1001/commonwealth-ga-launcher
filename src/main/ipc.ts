@@ -330,6 +330,7 @@ export function registerIpc(
     }
   });
 
+  ipcMain.handle(IPC.getServerEvents, () => pvpReminders?.getEvents() ?? []);
   ipcMain.handle(IPC.getPvpReminderState, () =>
     pvpReminders
       ? pvpReminders.getState()
@@ -339,7 +340,8 @@ export function registerIpc(
           reminders: []
         }
   );
-  ipcMain.handle(IPC.setPvpEventReminder, (_event, eventId: unknown, enabled: unknown) => {
+  ipcMain.handle(IPC.setPvpEventReminder, async (_event, eventId: unknown, enabled: unknown) => {
+    await pvpReminders?.getEvents();
     if (!isPvpEventId(eventId)) throw new Error('Invalid PvP event identifier.');
     if (typeof enabled !== 'boolean') throw new Error('Invalid PvP reminder state.');
     if (!pvpReminders) throw new Error('System reminders are unavailable in this launcher session.');

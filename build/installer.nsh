@@ -42,6 +42,12 @@ Var pid
   ${endif}
 !macroend
 
+!macro removeDynamicEventReminders
+  ; Only the launcher's exact hashed event names are owned; development schedules are separate.
+  nsExec::ExecToLog `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -WindowStyle Hidden -Command "Get-ScheduledTask -TaskPath '\' -ErrorAction SilentlyContinue | Where-Object { $$_.TaskName -cmatch '^Commonwealth GA Event event-[a-f0-9]{64}$$' } | Unregister-ScheduledTask -Confirm:$$false"`
+  Pop $R0
+!macroend
+
 !macro customInstall
   ; Auto-updates preserve settings for schema migration; manual installs reset all known app-data names.
   ${ifNot} ${isUpdated}
@@ -56,6 +62,7 @@ Var pid
     Pop $R0
     nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvE Friday Raids" /F'
     Pop $R0
+    !insertmacro removeDynamicEventReminders
 
     RMDir /r "$APPDATA\${APP_FILENAME}"
     !ifdef APP_PRODUCT_FILENAME
@@ -80,5 +87,6 @@ Var pid
     Pop $R0
     nsExec::ExecToLog '"$SYSDIR\schtasks.exe" /Delete /TN "Commonwealth GA PvE Friday Raids" /F'
     Pop $R0
+    !insertmacro removeDynamicEventReminders
   ${endIf}
 !macroend

@@ -6,4 +6,5 @@ out/
 dist/
 windows-launcher-menu.bat
 src/shared/generatedLauncherConfig.ts
+src/shared/generatedServerEvents.ts
 *.tsbuildinfo

@@ -5,7 +5,8 @@ import { Log } from './services/Log';
 import { LauncherUpdater } from './services/LauncherUpdater';
 import { configureDevelopmentProfile } from './services/DevelopmentProfile';
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
-import { getPvpEvent, isPvpEventId, type PvpEventId } from '@shared/pvpEvents';
+import { getPvpEvent, isSafeEventId, setServerEvents, type PvpEventId } from '@shared/pvpEvents';
+import { ServerEvents } from './services/ServerEvents';
 import { PvpReminderManager } from './services/PvpReminderManager';
 import {
   launcherArgumentsWithoutPvpReminder,
@@ -282,7 +283,7 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
       typeof additionalData === 'object' && additionalData !== null
         ? (additionalData as Record<string, unknown>)['pvpReminder']
         : null;
-    const eventId = isPvpEventId(additionalReminder)
+    const eventId = isSafeEventId(additionalReminder)
       ? additionalReminder
       : pvpReminderFromArguments(argv);
     if (eventId) {
@@ -300,6 +301,7 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
     const log = new Log(app.getPath('userData'));
     log.info(`launcher ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
 
+    const eventsReady = new ServerEvents(app.getPath('userData'), log).load().then(setServerEvents);
     pvpReminderManager = new PvpReminderManager(
       {
         platform: process.platform,
@@ -307,7 +309,8 @@ if (!app.requestSingleInstanceLock(launchPvpReminder ? { pvpReminder: launchPvpR
         executablePath: process.execPath,
         developmentAppPath: app.isPackaged ? undefined : app.getAppPath(),
         appImagePath: process.env['APPIMAGE']?.trim() || undefined,
-        userDataDir: app.getPath('userData')
+        userDataDir: app.getPath('userData'),
+        eventsReady
       },
       log
     );

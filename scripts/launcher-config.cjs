@@ -10,6 +10,7 @@ const CONFIG_KEYS = new Set([
   'agenda_stats_status_url',
   'ga_cards_url',
   'pvp_reports_url',
+  'server_events_url',
   'discord_invite_url',
   'discord_support_thread_url',
   'steam_store_url',
@@ -620,6 +621,13 @@ function loadLauncherConfig(options = {}) {
     agendaStatsStatusUrl: agendaStatsStatusUrl.toString(),
     gaCardsUrl: gaCardsUrl.toString(),
     pvpReportsUrl: pvpReportsUrl.toString(),
+    serverEventsUrl: (() => {
+      const url = new URL(raw.server_events_url);
+      if (url.protocol !== 'https:' || url.username || url.password || url.hash) {
+        throw new Error('server_events_url must be an HTTPS URL without credentials or fragment');
+      }
+      return url.toString();
+    })(),
     discordInviteUrl: raw.discord_invite_url,
     discordSupportThreadUrl: discordSupportThreadUrl.toString(),
     steamStoreUrl: raw.steam_store_url,

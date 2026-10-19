@@ -5,6 +5,7 @@ import {
   getPvpCountdownParts,
   getPvpEventStatus,
   PVP_EVENTS,
+  setServerEvents,
   type PvpEventStatus
 } from '@shared/pvpEvents';
 import type { PvpReminderState } from '@shared/types';
@@ -209,13 +210,27 @@ function PvpEventDetailsDialog({
 export function PvpEventSpotlight(): JSX.Element {
   const [now, setNow] = useState(() => Date.now());
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void window.api.getServerEvents().then((events) => {
+      if (!active) return;
+      setServerEvents(events);
+      setEventsLoaded(true);
+    }).catch(() => {
+      // Keep the event strip hidden if the authoritative schedule cannot be read.
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const status = useMemo(() => getPvpEventStatus(now), [now]);
+  const status = useMemo(() => eventsLoaded && PVP_EVENTS.length ? getPvpEventStatus(now) : null, [now, eventsLoaded]);
+  if (!status) return <></>;
   const live = status.mode === 'live';
   const countdown = live ? null : getPvpCountdownParts(status.startsAt, now);
   const timing = countdown ? describeCountdown(countdown) : 'LIVE';

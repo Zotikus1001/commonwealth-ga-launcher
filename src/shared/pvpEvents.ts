@@ -1,44 +1,29 @@
+import { BUNDLED_SERVER_EVENTS } from './generatedServerEvents';
+
 const LONDON_TIME_ZONE = 'Europe/London';
 const PVP_LIVE_LEAD_MS = 15 * 60 * 1_000;
 
-export type PvpEventId = 'mercenary-fun' | 'challenge-night' | 'friday-raids';
+export type PvpEventId = string;
 
 export interface PvpEventDefinition {
   id: PvpEventId;
   name: string;
-  weekday: 0 | 5 | 6;
+  weekday: number;
   hour: number;
   minute: number;
   summary: string;
 }
 
-export const PVP_EVENTS: readonly PvpEventDefinition[] = [
-  {
-    id: 'mercenary-fun',
-    name: 'PvP Merc Fun',
-    weekday: 0,
-    hour: 18,
-    minute: 0,
-    summary: 'Casual Mercenary PvP for relaxed matches and community fun.'
-  },
-  {
-    id: 'challenge-night',
-    name: 'PvP Challenge Night',
-    weekday: 6,
-    hour: 17,
-    minute: 0,
-    summary:
-      'A more competitive night: join voice chat to coordinate teamwork for Challenge matches, with Mercenary PvP when enough players attend.'
-  },
-  {
-    id: 'friday-raids',
-    name: 'PvE Friday Raids',
-    weekday: 5,
-    hour: 18,
-    minute: 0,
-    summary: 'Team up with the community for PvE raids.'
-  }
-] as const;
+export let PVP_EVENTS: readonly PvpEventDefinition[] = BUNDLED_SERVER_EVENTS;
+
+export function setServerEvents(events: readonly PvpEventDefinition[]): void {
+  PVP_EVENTS = events;
+}
+
+// Accept removed identities in headless invocations so they can be cleaned up without opening UI.
+export function isSafeEventId(value: unknown): value is PvpEventId {
+  return typeof value === 'string' && /^(?:mercenary-fun|challenge-night|friday-raids|event-[a-f0-9]{64})$/.test(value);
+}
 
 interface LondonCalendar {
   year: number;
@@ -172,18 +157,24 @@ export function getPvpEventStatus(now = Date.now()): PvpEventStatus {
   if (!Number.isFinite(now)) throw new Error('Current time must be a finite timestamp');
 
   const today = londonCalendar(now);
-  const todaysEvent = PVP_EVENTS.find((event) => event.weekday === calendarWeekday(today));
-  if (todaysEvent) {
-    const startsAt = eventStart(todaysEvent, today);
-    const liveUntil = londonWallClockToTimestamp(addCalendarDays(today, 1), 0, 0);
-    if (now >= startsAt - PVP_LIVE_LEAD_MS && now < liveUntil) {
-      return { mode: 'live', event: todaysEvent, startsAt, liveUntil };
-    }
+  // Tomorrow's early events can enter the live lead window before local midnight.
+  const liveEvents = [today, addCalendarDays(today, 1)].flatMap((calendar) =>
+    PVP_EVENTS.filter((event) => event.weekday === calendarWeekday(calendar)).map((event) => ({
+      event,
+      startsAt: eventStart(event, calendar),
+      liveUntil: londonWallClockToTimestamp(addCalendarDays(calendar, 1), 0, 0)
+    }))
+  ).filter(({ startsAt, liveUntil }) => now >= startsAt - PVP_LIVE_LEAD_MS && now < liveUntil)
+    .sort((left, right) => right.startsAt - left.startsAt);
+  if (liveEvents[0]) {
+    return { mode: 'live', ...liveEvents[0] };
   }
 
   for (let daysAhead = 0; daysAhead <= 7; daysAhead += 1) {
     const calendar = addCalendarDays(today, daysAhead);
-    const event = PVP_EVENTS.find((candidate) => candidate.weekday === calendarWeekday(calendar));
+    const event = PVP_EVENTS.filter((candidate) => candidate.weekday === calendarWeekday(calendar))
+      .sort((left, right) => eventStart(left, calendar) - eventStart(right, calendar))
+      .find((candidate) => eventStart(candidate, calendar) > now);
     if (!event) continue;
     const startsAt = eventStart(event, calendar);
     if (startsAt > now) return { mode: 'countdown', event, startsAt };

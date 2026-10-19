@@ -6,6 +6,8 @@ import { promisify } from 'util';
 import {
   getNextPvpReminderEventStart,
   getPvpEvent,
+  isPvpEventId,
+  isSafeEventId,
   PVP_EVENTS,
   type PvpEventDefinition,
   type PvpEventId
@@ -35,6 +37,10 @@ const WINDOWS_WEEKDAYS = [
 ] as const;
 const SYSTEMD_WEEKDAYS: Record<PvpEventDefinition['weekday'], string> = {
   0: 'Sun',
+  1: 'Mon',
+  2: 'Tue',
+  3: 'Wed',
+  4: 'Thu',
   5: 'Fri',
   6: 'Sat'
 };
@@ -58,6 +64,7 @@ export interface PvpReminderManagerOptions {
   userDataDir: string;
   homeDirectory?: string;
   now?: () => number;
+  eventsReady?: Promise<void>;
 }
 
 function escapeXml(value: string): string {
@@ -115,6 +122,11 @@ function systemdWeeklyCalendar(event: PvpEventDefinition): string {
   return `${SYSTEMD_WEEKDAYS[event.weekday]} *-*-* ${hour}:${minute}:00 Europe/London`;
 }
 
+function linuxTimerDescription(event: PvpEventDefinition): string {
+  // Include the schedule so a failed daemon-reload cannot make old loaded timers look current.
+  return `Commonwealth GA reminder timer (${REMINDER_SCHEDULE_MARKER}; ${systemdWeeklyCalendar(event)})`;
+}
+
 function isReminderDeliveryTime(eventId: PvpEventId, now: number): boolean {
   const startsAt = getNextPvpReminderEventStart(
     eventId,
@@ -146,7 +158,8 @@ function isWindowsRecurringSchedule(
 }
 
 export function windowsReminderTaskName(eventId: PvpEventId, packaged: boolean): string {
-  const name = WINDOWS_TASK_NAMES[eventId];
+  if (!isSafeEventId(eventId)) throw new Error('Invalid event identifier');
+  const name = WINDOWS_TASK_NAMES[eventId] ?? `Commonwealth GA Event ${eventId}`;
   return packaged ? name : name.replace('Commonwealth GA ', 'Commonwealth GA Development ');
 }
 
@@ -154,6 +167,7 @@ export function linuxReminderUnitNames(
   eventId: PvpEventId,
   packaged: boolean
 ): { service: string; timer: string } {
+  if (!isSafeEventId(eventId)) throw new Error('Invalid event identifier');
   const scope = packaged ? '' : 'development-';
   const prefix = `commonwealth-ga-${scope}pvp-${eventId}`;
   return { service: `${prefix}.service`, timer: `${prefix}.timer` };
@@ -238,7 +252,7 @@ export function buildLinuxReminderUnits(
     .join(' ');
   return {
     service: `[Unit]
-Description=Commonwealth GA reminder for ${event.name}
+Description=Commonwealth GA event reminder
 
 [Service]
 Type=oneshot
@@ -247,7 +261,7 @@ ExecStart=${systemdArgument('systemd-run')} ${systemdRunArguments} ${argumentsVa
     timer: `# ${REMINDER_SCHEDULE_MARKER}
 # FirstOccurrence=${new Date(reminderAt).toISOString()}
 [Unit]
-Description=Commonwealth GA reminder timer for ${event.name} (${REMINDER_SCHEDULE_MARKER})
+Description=${linuxTimerDescription(event)}
 
 [Timer]
 OnCalendar=${systemdWeeklyCalendar(event)}
@@ -268,6 +282,8 @@ export class PvpReminderManager {
   private readonly now: () => number;
   private supportPromise: Promise<ReminderSupport> | null = null;
   private readonly recurringSchedulePromises = new Map<PvpEventId, Promise<boolean>>();
+  private queue: Promise<unknown> = Promise.resolve();
+  private statePromise?: Promise<PvpReminderState>;
 
   constructor(
     private readonly options: PvpReminderManagerOptions,
@@ -280,8 +296,43 @@ export class PvpReminderManager {
   }
 
   async getState(): Promise<PvpReminderState> {
+    await this.options.eventsReady;
+    if (!this.statePromise) {
+      this.statePromise = this.serialize(() => this.readState()).finally(() => {
+        this.statePromise = undefined;
+      });
+    }
+    return this.statePromise;
+  }
+
+  async getEvents(): Promise<readonly PvpEventDefinition[]> {
+    await this.options.eventsReady;
+    return PVP_EVENTS;
+  }
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(operation);
+    this.queue = next.catch(() => {});
+    return next;
+  }
+
+  private async readState(): Promise<PvpReminderState> {
     const support = await this.support();
     const marker = await this.readMarker();
+    if (support.supported) {
+      for (const eventId of [...marker.enabled]) {
+        if (isPvpEventId(eventId)) continue;
+        try {
+          await this.removeSchedule(eventId);
+          const updated = { ...marker, enabled: marker.enabled.filter(id => id !== eventId) };
+          await this.writeMarker(updated);
+          marker.enabled = updated.enabled;
+        } catch (error) {
+          // Retain the identity until removal succeeds so the next startup retries cleanup.
+          this.log.error(`Removed event reminder cleanup failed: ${(error as Error).message}`);
+        }
+      }
+    }
     const reminders: PvpReminderState['reminders'] = [];
     for (const event of PVP_EVENTS) {
       reminders.push({
@@ -296,6 +347,12 @@ export class PvpReminderManager {
   }
 
   async setEnabled(eventId: PvpEventId, enabled: boolean): Promise<PvpReminderState> {
+    await this.options.eventsReady;
+    return this.serialize(() => this.changeEnabled(eventId, enabled));
+  }
+
+  private async changeEnabled(eventId: PvpEventId, enabled: boolean): Promise<PvpReminderState> {
+    if (!isPvpEventId(eventId)) throw new Error('Unknown event');
     const support = await this.support();
     if (!support.supported) throw new Error(support.detail);
     const marker = await this.readMarker();
@@ -309,7 +366,7 @@ export class PvpReminderManager {
           enabled: [...new Set([...marker.enabled, eventId])]
         });
       } catch (error) {
-        await this.removeSchedule(eventId).catch(() => {});
+        if (!previouslyEnabled) await this.removeSchedule(eventId).catch(() => {});
         throw error;
       }
     } else {
@@ -325,10 +382,16 @@ export class PvpReminderManager {
       }
     }
 
-    return this.getState();
+    return this.readState();
   }
 
   async consumeTriggeredReminder(eventId: PvpEventId): Promise<PvpEventDefinition | null> {
+    await this.options.eventsReady;
+    return this.serialize(() => this.consumeReminder(eventId));
+  }
+
+  private async consumeReminder(eventId: PvpEventId): Promise<PvpEventDefinition | null> {
+    if (!isPvpEventId(eventId)) return null;
     const support = await this.support();
     if (!support.supported) return null;
     const marker = await this.readMarker();
@@ -481,6 +544,14 @@ export class PvpReminderManager {
         });
       if (timerExists) {
         await this.run('systemctl', ['--user', 'disable', '--now', names.timer]);
+      } else {
+        // An earlier partial cleanup may have removed the file while leaving the timer loaded.
+        const loaded = await this.run('systemctl', [
+          '--user', 'show', names.timer, '--property=LoadState', '--property=ActiveState'
+        ]);
+        if (!/^LoadState=not-found$/m.test(loaded) || !/^ActiveState=inactive$/m.test(loaded)) {
+          await this.run('systemctl', ['--user', 'disable', '--now', names.timer]);
+        }
       }
       await Promise.all([
         rm(timerPath, { force: true }),
@@ -553,7 +624,7 @@ export class PvpReminderManager {
           '--property=ActiveState'
         ]);
         return (
-          loaded.includes(REMINDER_SCHEDULE_MARKER) &&
+          loaded.split(/\r?\n/).includes(`Description=${linuxTimerDescription(getPvpEvent(eventId))}`) &&
           /^ActiveState=active$/m.test(loaded)
         );
       } catch {
@@ -571,7 +642,10 @@ export class PvpReminderManager {
         windowsReminderTaskName(eventId, this.options.packaged)
       ]);
       return true;
-    } catch {
+    } catch (error) {
+      // A failed single-task query may mean access was denied, not that the task is absent.
+      const tasks = await this.run('schtasks.exe', ['/Query', '/FO', 'CSV', '/NH']);
+      if (tasks.includes(`"\\${windowsReminderTaskName(eventId, this.options.packaged)}"`)) throw error;
       return false;
     }
   }
@@ -596,7 +670,7 @@ export class PvpReminderManager {
         throw new Error('unsupported reminder state');
       }
       const enabled = (raw as { enabled: unknown[] }).enabled.filter(
-        (value): value is PvpEventId => PVP_EVENTS.some((event) => event.id === value)
+        (value): value is PvpEventId => isSafeEventId(value)
       );
       return { schemaVersion: MARKER_SCHEMA_VERSION, enabled: [...new Set(enabled)] };
     } catch (error) {

@@ -1,0 +1,25 @@
+# Changes published to master automatically update events and reminders when the launcher starts.
+# Add events like this example; delete an event's block to remove it:
+# - name: "My Event"
+#   day: "Friday"
+#   time: "18:00"
+#   description: "What players will do."
+# Use full day names and London time: "17:00" = 5 pm, "18:00" = 6 pm.
+# Keep the quotes and indentation. Avoid Sunday 01:00–01:59 (clock changes).
+# Keep names unique and unchanged: day/time edits automatically reschedule enabled reminders.
+# Renaming/removing an event removes its old reminder; new events start with reminders off.
+
+- name: "PvE Friday Raids"
+  day: "Friday"
+  time: "18:00"
+  description: "Team up with the community for PvE raids."
+
+- name: "PvP Challenge Night"
+  day: "Saturday"
+  time: "17:00"
+  description: "A more competitive night: join voice chat to coordinate teamwork for Challenge matches, with Mercenary PvP when enough players attend."
+
+- name: "PvP Merc Fun"
+  day: "Sunday"
+  time: "18:00"
+  description: "Casual Mercenary PvP for relaxed matches and community fun."

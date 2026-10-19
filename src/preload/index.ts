@@ -55,6 +55,7 @@ const api: LauncherApi = {
   openGaCards: () => ipcRenderer.invoke(IPC.openGaCards),
   openPvpReports: () => ipcRenderer.invoke(IPC.openPvpReports),
   getPvpReminderState: () => ipcRenderer.invoke(IPC.getPvpReminderState),
+  getServerEvents: () => ipcRenderer.invoke(IPC.getServerEvents),
   setPvpEventReminder: (eventId, enabled) =>
     ipcRenderer.invoke(IPC.setPvpEventReminder, eventId, enabled),
   openSteamStore: () => ipcRenderer.invoke(IPC.openSteamStore),

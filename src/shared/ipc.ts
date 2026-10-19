@@ -33,6 +33,7 @@ export const IPC = {
   openGaCards: 'launcher:open-ga-cards',
   openPvpReports: 'launcher:open-pvp-reports',
   getPvpReminderState: 'launcher:get-pvp-reminder-state',
+  getServerEvents: 'launcher:get-server-events',
   setPvpEventReminder: 'launcher:set-pvp-event-reminder',
   openSteamStore: 'launcher:open-steam-store',
   openSteamInstall: 'launcher:open-steam-install',

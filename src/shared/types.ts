@@ -114,6 +114,9 @@ export interface PatchSettings {
   gameClientPatch: boolean;
   highFpsMovementStability: boolean;
   adaptiveClientPerformance: boolean;
+  renderCommandSignal: boolean;
+  footPlacementOff: boolean;
+  combatTextShadowsOff: boolean;
 }
 
 export type DlcId = 'surfside-atoll-pvp-maps' | 'carbon-capture' | 'pve-factory-3-4';
@@ -250,7 +253,10 @@ export interface UpdateProgress {
 
 export type ClientPatchId =
   | 'high-fps-movement-stability'
-  | 'adaptive-client-performance';
+  | 'adaptive-client-performance'
+  | 'render-command-signal'
+  | 'foot-placement-off'
+  | 'combat-text-shadows-off';
 
 export interface ClientPatchStatus {
   id: ClientPatchId;

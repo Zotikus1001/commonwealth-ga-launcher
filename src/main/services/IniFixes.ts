@@ -4,6 +4,13 @@ import { basename, join } from 'path';
 import { isLoginMap, LOGIN_MAP_OPTIONS, type LoginMap } from '@shared/loginMaps';
 import { isFpsLimit } from '@shared/fpsLimit';
 import {
+  CLIENT_DLL_PATCH_DEFAULTS,
+  CLIENT_DLL_PATCH_SECTION,
+  CLIENT_DLL_PATCH_SETTING_KEYS,
+  isClientDllPatchId,
+  type ClientDllPatchId
+} from '@shared/clientPatches';
+import {
   isDeveloperConsoleKey,
   type DeveloperConsoleKey
 } from '@shared/developerConsoleKeys';
@@ -48,7 +55,8 @@ type IniPatchOptions =
   | { kind: 'fps-smoothing'; enabled: boolean }
   | { kind: 'fps-limit'; limit: number }
   | { kind: 'developer-console'; key: DeveloperConsoleKey }
-  | { kind: 'adaptive-performance'; texturePoolMb: number };
+  | { kind: 'adaptive-performance'; texturePoolMb: number }
+  | { kind: 'client-dll-patch'; id: ClientDllPatchId; enabled: boolean };
 
 interface IniFileEdit {
   path: string;
@@ -648,8 +656,23 @@ function verifyGameEngineFrameRate(
 export function unavailableClientPatches(): ClientPatchStatus[] {
   return [
     { id: 'high-fps-movement-stability', applied: null },
-    { id: 'adaptive-client-performance', applied: null }
+    { id: 'adaptive-client-performance', applied: null },
+    { id: 'render-command-signal', applied: null },
+    { id: 'foot-placement-off', applied: null },
+    { id: 'combat-text-shadows-off', applied: null }
   ];
+}
+
+/** Mirrors the DLL: "1" is on, "0" is off, and a missing or other value keeps the patch's default. */
+function isClientDllPatchEnabled(text: string, id: ClientDllPatchId): boolean {
+  const value = effectiveSectionValues(
+    text,
+    CLIENT_DLL_PATCH_SECTION,
+    CLIENT_DLL_PATCH_SETTING_KEYS[id]
+  ).at(-1);
+  if (value === '1') return true;
+  if (value === '0') return false;
+  return CLIENT_DLL_PATCH_DEFAULTS[id];
 }
 
 export async function inspectClientPatches(
@@ -660,6 +683,20 @@ export async function inspectClientPatches(
   const configDir = install.configDir;
   let networkApplied = true;
   let performanceApplied = true;
+  const dllPatchApplied: Record<ClientDllPatchId, boolean> = {
+    'render-command-signal': false,
+    'foot-placement-off': false,
+    'combat-text-shadows-off': false
+  };
+  try {
+    // The DLL reads only the active TgEngine.ini.
+    const text = await readFile(join(configDir, 'TgEngine.ini'), { encoding: 'utf-8' });
+    for (const id of Object.keys(dllPatchApplied) as ClientDllPatchId[]) {
+      dllPatchApplied[id] = isClientDllPatchEnabled(text, id);
+    }
+  } catch {
+    // Unreadable config: report the DLL patches as not applied, like the INI patches below.
+  }
   for (const [path, required] of [
     [join(configDir, 'TgEngine.ini'), true],
     [join(configDir, 'DefaultEngine.ini'), false]
@@ -684,7 +721,10 @@ export async function inspectClientPatches(
 
   return [
     { id: 'high-fps-movement-stability', applied: networkApplied },
-    { id: 'adaptive-client-performance', applied: performanceApplied }
+    { id: 'adaptive-client-performance', applied: performanceApplied },
+    { id: 'render-command-signal', applied: dllPatchApplied['render-command-signal'] },
+    { id: 'foot-placement-off', applied: dllPatchApplied['foot-placement-off'] },
+    { id: 'combat-text-shadows-off', applied: dllPatchApplied['combat-text-shadows-off'] }
   ];
 }
 
@@ -1293,6 +1333,16 @@ async function patchIniFile(
     apply(patchSectionValue(patchedText, 'Engine.Console', 'ConsoleKey', options.key));
     apply(patchConsoleToggleBinding(patchedText, options.key));
   }
+  if (options.kind === 'client-dll-patch') {
+    apply(
+      patchSectionValue(
+        patchedText,
+        CLIENT_DLL_PATCH_SECTION,
+        CLIENT_DLL_PATCH_SETTING_KEYS[options.id],
+        options.enabled ? '1' : '0'
+      )
+    );
+  }
   if (options.kind === 'adaptive-performance') {
     apply(patchSectionValue(patchedText, 'TextureStreaming', 'PoolSize', String(options.texturePoolMb)));
     apply(
@@ -1356,6 +1406,14 @@ async function patchIniFile(
     }
     if (options.kind === 'adaptive-performance') {
       verifyAdaptivePerformance(text, fileName, options.texturePoolMb);
+    }
+    if (options.kind === 'client-dll-patch') {
+      const key = CLIENT_DLL_PATCH_SETTING_KEYS[options.id];
+      const values = effectiveSectionValues(text, CLIENT_DLL_PATCH_SECTION, key);
+      const expected = options.enabled ? '1' : '0';
+      if (values.length === 0 || values.some((value) => value !== expected)) {
+        throw new Error(`${fileName} did not retain ${key}=${expected}`);
+      }
     }
   };
 
@@ -1458,6 +1516,35 @@ function mergeRepairResults(results: IniRepairResult[]): IniRepairResult {
   };
 }
 
+/**
+ * Writes a DLL patch's on/off line. Unlike the INI patches, removal is an explicit "0" rather than a
+ * restore: a missing line means on to the DLL.
+ */
+async function setClientDllPatch(
+  install: GameInstall,
+  id: ClientDllPatchId,
+  enabled: boolean,
+  log: Log,
+  backupDirectory: string
+): Promise<IniRepairResult> {
+  const result = await applyIniEdits(
+    [
+      {
+        path: join(install.configDir, 'TgEngine.ini'),
+        required: true,
+        options: { kind: 'client-dll-patch', id, enabled }
+      }
+    ],
+    log,
+    backupDirectory
+  );
+  log.info(
+    `client patch: ${id} ${enabled ? 'enabled' : 'disabled'} in ${result.checkedFiles.length} ` +
+      `file(s); ${result.changedFiles.length} changed`
+  );
+  return result;
+}
+
 export async function applyClientPatch(
   install: GameInstall,
   id: ClientPatchId,
@@ -1465,6 +1552,7 @@ export async function applyClientPatch(
   backupDirectory: string,
   texturePoolMb = FALLBACK_TEXTURE_POOL_MB
 ): Promise<IniRepairResult> {
+  if (isClientDllPatchId(id)) return setClientDllPatch(install, id, true, log, backupDirectory);
   if (
     id === 'adaptive-client-performance' &&
     (!Number.isInteger(texturePoolMb) ||
@@ -1547,6 +1635,7 @@ export async function removeClientPatch(
   log: Log,
   backupDirectory: string
 ): Promise<IniRepairResult> {
+  if (isClientDllPatchId(id)) return setClientDllPatch(install, id, false, log, backupDirectory);
   clientPatchTargets(id);
   const result: IniRepairResult = { checkedFiles: [], changedFiles: [], backupFiles: [] };
   for (const [path, required] of [
@@ -1824,6 +1913,15 @@ export async function ensureClientConfiguration(
         texturePoolMb
       )
     : { checkedFiles: [], changedFiles: [], backupFiles: [] };
+  // DLL patches are written both ways on every launch so the game always matches the preference.
+  const dllPatchResults: IniRepairResult[] = [];
+  for (const [id, enabled] of [
+    ['render-command-signal', patches.renderCommandSignal],
+    ['foot-placement-off', patches.footPlacementOff],
+    ['combat-text-shadows-off', patches.combatTextShadowsOff]
+  ] as const) {
+    dllPatchResults.push(await setClientDllPatch(install, id, enabled, log, backupDirectory));
+  }
   const gameSettingsResult = await ensureGameIniSettings(
     install,
     loginMap,
@@ -1842,6 +1940,7 @@ export async function ensureClientConfiguration(
   const result = mergeRepairResults([
     networkResult,
     performanceResult,
+    ...dllPatchResults,
     gameSettingsResult,
     developerConsoleResult
   ]);

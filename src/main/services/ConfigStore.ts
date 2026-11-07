@@ -364,7 +364,10 @@ export function defaultSettings(defaultServerName = DEFAULT_BUILT_IN_SERVER_NAME
     patches: {
       gameClientPatch: true,
       highFpsMovementStability: true,
-      adaptiveClientPerformance: true
+      adaptiveClientPerformance: true,
+      renderCommandSignal: true,
+      footPlacementOff: true,
+      combatTextShadowsOff: false
     },
     dlcs: {
       surfsideAtollPvpMaps: true,
@@ -564,7 +567,19 @@ function sanitizeStoredPatches(value: unknown, fallback: Settings['patches']): S
     adaptiveClientPerformance:
       typeof value.adaptiveClientPerformance === 'boolean'
         ? value.adaptiveClientPerformance
-        : fallback.adaptiveClientPerformance
+        : fallback.adaptiveClientPerformance,
+    renderCommandSignal:
+      typeof value.renderCommandSignal === 'boolean'
+        ? value.renderCommandSignal
+        : fallback.renderCommandSignal,
+    footPlacementOff:
+      typeof value.footPlacementOff === 'boolean'
+        ? value.footPlacementOff
+        : fallback.footPlacementOff,
+    combatTextShadowsOff:
+      typeof value.combatTextShadowsOff === 'boolean'
+        ? value.combatTextShadowsOff
+        : fallback.combatTextShadowsOff
   };
 }
 
@@ -573,14 +588,20 @@ function validateUpdatedPatches(value: unknown): Settings['patches'] {
     !isPlainObject(value) ||
     typeof value.gameClientPatch !== 'boolean' ||
     typeof value.highFpsMovementStability !== 'boolean' ||
-    typeof value.adaptiveClientPerformance !== 'boolean'
+    typeof value.adaptiveClientPerformance !== 'boolean' ||
+    typeof value.renderCommandSignal !== 'boolean' ||
+    typeof value.footPlacementOff !== 'boolean' ||
+    typeof value.combatTextShadowsOff !== 'boolean'
   ) {
     throw new Error('Game patch settings are invalid.');
   }
   return {
     gameClientPatch: value.gameClientPatch,
     highFpsMovementStability: value.highFpsMovementStability,
-    adaptiveClientPerformance: value.adaptiveClientPerformance
+    adaptiveClientPerformance: value.adaptiveClientPerformance,
+    renderCommandSignal: value.renderCommandSignal,
+    footPlacementOff: value.footPlacementOff,
+    combatTextShadowsOff: value.combatTextShadowsOff
   };
 }
 

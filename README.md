@@ -129,6 +129,8 @@ Open launcher install folder**.
     - Fixed aim drift while flying across all classes, especially with sniper rifles
     - An FOV Slider in the in-game Video Settings
     - A Combat Text Scaling Slider for high-resolution displays
+    - Optional performance fixes for big fights (render thread wake-ups, foot placement,
+      damage number outlines), each with its own checkbox
 - Optional PvP and PvE map packs with simple install, remove, and matchmaking controls
 - Useful game, graphics, and launch options in one place
 - Performance tips, account help, and copyable in-game commands

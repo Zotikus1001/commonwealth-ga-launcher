@@ -3084,9 +3084,13 @@ export function InfoTab(): JSX.Element {
           </p>
           <div className={styles.infoRecommendation}>
             <span>Try this first</span>
-            <strong>Disable “High Character Detail” in the in-game graphics settings.</strong>
+            <strong>
+              Turn on the Game Client Patch and keep its Performance options enabled.
+            </strong>
             <small>
-              If stuttering remains, lower the other graphics options until frame pacing improves.
+              They can raise FPS by up to 75% in big fights. If stuttering remains, disable “High
+              Character Detail” in the in-game graphics settings, then lower other options until
+              frame pacing improves.
             </small>
           </div>
         </article>

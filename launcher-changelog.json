@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "version": "0.1.26",
+      "changes": [
+        "Added **Performance options** to the **Game Client Patch** card: three checkboxes for new client fixes, applied on your next launch.",
+        "**Render Thread Wake-up Fix** (on by default): stops waking the render thread for every draw command. Roughly **20–35% higher FPS** in big fights.",
+        "**Skip Foot Placement** (on by default): skips per-character foot IK ground traces. Roughly **25–35% higher FPS** with many robots on screen.",
+        "**Lighter Damage Numbers** (off by default): skips the black outline under damage numbers for up to about **8% higher FPS** in heavy damage-over-time fights."
+      ]
+    },
+    {
       "version": "0.1.25",
       "releasedOn": "2026-08-31",
       "changes": [

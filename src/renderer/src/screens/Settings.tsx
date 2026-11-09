@@ -14,6 +14,11 @@ import {
   type SteamLaunchIntegrationStatus
 } from '@shared/types';
 import { isLoginMap, LOGIN_MAP_OPTIONS } from '@shared/loginMaps';
+import {
+  CLIENT_PATCH_PREFERENCE_KEYS,
+  isClientDllPatchId,
+  type ClientDllPatchId
+} from '@shared/clientPatches';
 import { isFpsLimit, MAX_FPS_LIMIT, MIN_FPS_LIMIT } from '@shared/fpsLimit';
 import { isUiScale, UI_SCALE_OPTIONS } from '@shared/uiScale';
 import { validateExtraGameArguments } from '@shared/gameLaunchArguments';
@@ -152,7 +157,15 @@ function steamLaunchErrorMessage(error: unknown): string {
   return message.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '');
 }
 
-const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: JSX.Element }> = {
+type IniClientPatchId = Exclude<ClientPatchStatus['id'], ClientDllPatchId>;
+
+function isIniClientPatch(
+  patch: ClientPatchStatus
+): patch is ClientPatchStatus & { id: IniClientPatchId } {
+  return !isClientDllPatchId(patch.id);
+}
+
+const PATCH_COPY: Record<IniClientPatchId, { title: string; description: JSX.Element }> = {
   'high-fps-movement-stability': {
     title: 'High-FPS Movement Stability',
     description: (
@@ -172,6 +185,40 @@ const PATCH_COPY: Record<ClientPatchStatus['id'], { title: string; description: 
     )
   }
 };
+
+/** Optional fixes inside the Game Client Patch DLL, shown as checkboxes on its card. */
+const DLL_PATCH_COPY: Record<ClientDllPatchId, { title: string; description: JSX.Element }> = {
+  'render-command-signal': {
+    title: 'Render Thread Wake-up Fix',
+    description: (
+      <>
+        Stops waking the render thread for <strong>every single draw command</strong>. Roughly{' '}
+        <strong>20–35% higher FPS</strong> in big fights.
+      </>
+    )
+  },
+  'foot-placement-off': {
+    title: 'Skip Foot Placement',
+    description: (
+      <>
+        Skips per-character <strong>foot IK ground traces</strong>; feet follow the animation instead
+        of adapting to slopes. Roughly <strong>25–35% higher FPS</strong> with many robots on screen.
+      </>
+    )
+  },
+  'combat-text-shadows-off': {
+    title: 'Lighter Damage Numbers',
+    description: (
+      <>
+        Skips the two black <strong>shadow passes under every damage number</strong>. Up to about{' '}
+        <strong>8% higher FPS</strong> when many damage-over-time numbers are on screen. Off by
+        default: without the outline, numbers are harder to read over bright backgrounds.
+      </>
+    )
+  }
+};
+
+const DLL_PATCH_IDS = Object.keys(DLL_PATCH_COPY) as ClientDllPatchId[];
 
 const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
   { state, initialTab = 'game', onBack, onRequestUpdate },
@@ -1269,10 +1316,7 @@ const Settings = forwardRef<SettingsHandle, SettingsProps>(function Settings(
             gameClientPatchError={gameClientPatchError}
             onGameClientPatchChange={(enabled) => void saveGameClientPatch(enabled)}
             onPatchPreferenceChange={(id, enabled) => {
-              const preferenceKey =
-                id === 'high-fps-movement-stability'
-                  ? 'highFpsMovementStability'
-                  : 'adaptiveClientPerformance';
+              const preferenceKey = CLIENT_PATCH_PREFERENCE_KEYS[id];
               setDraft((current) =>
                 current
                   ? {
@@ -2624,6 +2668,37 @@ function PatchesTab({
                 </li>
               </ul>
             </div>
+            <div className={styles.patchFixDetails}>
+              <div className={styles.patchFixHeader}>
+                <span>Performance options</span>
+                <span>Applied on next launch</span>
+              </div>
+              {DLL_PATCH_IDS.map((id) => {
+                const copy = DLL_PATCH_COPY[id];
+                const checked = settings.patches[CLIENT_PATCH_PREFERENCE_KEYS[id]];
+                return (
+                  <div key={id} className={`${styles.featureToggle} ${styles.patchOptionToggle}`}>
+                    <input
+                      id={`patch-option-${id}`}
+                      type="checkbox"
+                      checked={checked}
+                      disabled={gameClientPatchBusy}
+                      onChange={(event) => void changePatch(id, event.target.checked)}
+                    />
+                    <label htmlFor={`patch-option-${id}`}>
+                      <span className={styles.featureName}>
+                        {copy.title}
+                        {changing?.id === id ? ' …' : ''}
+                      </span>
+                      <span className={styles.featureDetail}>{copy.description}</span>
+                      {resultError?.id === id && (
+                        <span className={styles.patchResultError}>{resultError.message}</span>
+                      )}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
             {gameClientPatchError && (
               <p className={styles.patchResultError}>
                 {`Could not change Game Client Patch: ${gameClientPatchError}`}
@@ -2633,12 +2708,9 @@ function PatchesTab({
           <PatchEnabledCheck enabled={gameClientPatch.enabled} />
         </article>
 
-        {state.clientPatches.map((patch) => {
+        {state.clientPatches.filter(isIniClientPatch).map((patch) => {
           const copy = PATCH_COPY[patch.id];
-          const preferenceKey =
-            patch.id === 'high-fps-movement-stability'
-              ? 'highFpsMovementStability'
-              : 'adaptiveClientPerformance';
+          const preferenceKey = CLIENT_PATCH_PREFERENCE_KEYS[patch.id];
           const preferred = settings.patches[preferenceKey];
           const patchChanging = changing?.id === patch.id;
           const presentation = iniPatchCardPresentation(preferred, patch.applied);
@@ -3012,9 +3084,13 @@ export function InfoTab(): JSX.Element {
           </p>
           <div className={styles.infoRecommendation}>
             <span>Try this first</span>
-            <strong>Disable “High Character Detail” in the in-game graphics settings.</strong>
+            <strong>
+              Turn on the Game Client Patch and keep its Performance options enabled.
+            </strong>
             <small>
-              If stuttering remains, lower the other graphics options until frame pacing improves.
+              They can raise FPS by up to 75% in big fights. If stuttering remains, disable “High
+              Character Detail” in the in-game graphics settings, then lower other options until
+              frame pacing improves.
             </small>
           </div>
         </article>

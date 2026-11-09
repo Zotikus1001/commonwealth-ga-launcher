@@ -21,6 +21,7 @@ import {
 import { LAUNCHER_CONFIG } from '@shared/generatedLauncherConfig';
 import { DEFAULT_SERVER_ID } from '@shared/serverProfiles';
 import { DEFAULT_GAME_PROFILES_ENABLED } from '@shared/gameProfiles';
+import { CLIENT_PATCH_PREFERENCE_KEYS } from '@shared/clientPatches';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
 import {
@@ -1200,18 +1201,10 @@ export class Orchestrator {
         return { ok: false, message: 'Wait for the current game launch to finish.' };
       }
       const settings = this.config.get();
-      const preferenceKey =
-        id === 'high-fps-movement-stability'
-          ? 'highFpsMovementStability'
-          : 'adaptiveClientPerformance';
+      const preferenceKey = CLIENT_PATCH_PREFERENCE_KEYS[id];
       previousEnabled = settings.patches[preferenceKey];
       if (previousEnabled !== enabled) {
-        await this.config.update({
-          patches:
-            preferenceKey === 'highFpsMovementStability'
-              ? { highFpsMovementStability: enabled }
-              : { adaptiveClientPerformance: enabled }
-        });
+        await this.config.update({ patches: { [preferenceKey]: enabled } });
         preferenceChanged = true;
       }
 
@@ -1296,10 +1289,7 @@ export class Orchestrator {
       if (preferenceChanged && previousEnabled !== null) {
         try {
           await this.config.update({
-            patches:
-              id === 'high-fps-movement-stability'
-                ? { highFpsMovementStability: previousEnabled }
-                : { adaptiveClientPerformance: previousEnabled }
+            patches: { [CLIENT_PATCH_PREFERENCE_KEYS[id]]: previousEnabled }
           });
         } catch (rollbackError) {
           message += `; could not restore the previous patch preference: ${(rollbackError as Error).message}`;

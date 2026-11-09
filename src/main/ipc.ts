@@ -9,6 +9,7 @@ import {
   type Settings
 } from '@shared/types';
 import { IPC } from '@shared/ipc';
+import { isClientPatchId } from '@shared/clientPatches';
 import type { Orchestrator } from './Orchestrator';
 import type { ConfigStore } from './services/ConfigStore';
 import type { Log } from './services/Log';
@@ -197,16 +198,12 @@ export function registerIpc(
     return orchestrator.play(true, decision);
   });
   ipcMain.handle(IPC.applyClientPatch, (_event, id: unknown) => {
-    if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
-      throw new Error('Unknown client patch.');
-    }
+    if (!isClientPatchId(id)) throw new Error('Unknown client patch.');
     return orchestrator.applyClientPatch(id);
   });
 
   ipcMain.handle(IPC.removeClientPatch, (_event, id: unknown) => {
-    if (id !== 'high-fps-movement-stability' && id !== 'adaptive-client-performance') {
-      throw new Error('Unknown client patch.');
-    }
+    if (!isClientPatchId(id)) throw new Error('Unknown client patch.');
     return orchestrator.removeClientPatch(id);
   });
   ipcMain.handle(IPC.createGameProfile, (_event, name: unknown) => {
